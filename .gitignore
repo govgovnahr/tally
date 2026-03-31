@@ -11,5 +11,12 @@ __pycache__/
 node_modules/
 dist/
 
+# Build artifacts
+server/static/
+server/dist/
+server/build/
+server/*.spec
+*.spec
+
 # OS
 .DS_Store

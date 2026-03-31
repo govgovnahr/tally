@@ -33,7 +33,7 @@ Full-stack single-page budgeting app. No test suite exists.
 ### Frontend — `client/src/`
 - **React 19 + Vite**, no router — single page
 - `App.jsx` owns a `refreshKey` integer; incrementing it triggers `useEffect` refetches in both `SummaryBar` and `ExpenseList`. Pass `onRefresh` down to trigger this.
-- `api.js` exports a single Axios instance pointed at `http://localhost:3001`
+- `api.js` uses `VITE_API_URL` env var for the base URL — empty string in production (relative to origin), `http://localhost:3001` in dev (via `client/.env.development`)
 - Each component has a co-located `.css` file; global design tokens live in `index.css` as CSS custom properties
 
 ### Expense Types
@@ -42,6 +42,19 @@ Fixed list defined in multiple places — keep them in sync if adding types:
 - `client/src/components/ExpenseList.jsx` → `EXPENSE_TYPES` + `TYPE_COLORS`
 - `client/src/components/SummaryBar.jsx` → `TYPE_CONFIG` (color + icon per type)
 - `client/src/components/AddExpenseForm.jsx` → `EXPENSE_TYPES`
+
+### Database
+`budget.db` is stored in `~/.budget_app/budget.db` (user's home directory), not in the project. This ensures data persists across app updates and is not bundled into the executable.
+
+## Building for Distribution
+
+```bash
+./build.sh
+```
+
+This script: builds the React frontend → copies `client/dist/` to `server/static/` → runs PyInstaller to produce `server/dist/BudgetTracker/`. Share the entire `BudgetTracker/` folder; users double-click the binary and the app opens in their browser automatically.
+
+In the bundled build, `server.py` detects `sys.frozen` and switches from `reload=True` uvicorn to a plain `uvicorn.run(app, ...)` with a browser auto-open timer.
 
 ### API Endpoints
 | Method | Path | Notes |

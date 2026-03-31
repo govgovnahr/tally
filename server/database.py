@@ -1,8 +1,11 @@
 import sqlite3
 import uuid
+import os
 from datetime import datetime, date
 
-DB_PATH = "budget.db"
+_data_dir = os.path.join(os.path.expanduser("~"), ".budget_app")
+os.makedirs(_data_dir, exist_ok=True)
+DB_PATH = os.path.join(_data_dir, "budget.db")
 
 
 def get_connection():
