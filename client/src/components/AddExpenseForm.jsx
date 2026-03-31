@@ -8,6 +8,7 @@ const today = () => new Date().toISOString().split('T')[0]
 
 export default function AddExpenseForm({ onClose, onAdded }) {
   const [form, setForm] = useState({ name: '', amount: '', type: 'Food', date: today() })
+  const [isRecurring, setIsRecurring] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -30,6 +31,7 @@ export default function AddExpenseForm({ onClose, onAdded }) {
         amount: parseFloat(form.amount),
         type: form.type,
         date: form.date,
+        is_recurring: isRecurring ? 1 : 0,
       })
       onAdded(res.data)
       onClose()
@@ -84,6 +86,16 @@ export default function AddExpenseForm({ onClose, onAdded }) {
               value={form.date}
               onChange={handleChange}
             />
+          </div>
+          <div className="form-group form-group-check">
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={e => setIsRecurring(e.target.checked)}
+              />
+              <span>Recurring monthly expense</span>
+            </label>
           </div>
           {error && <p className="form-error">{error}</p>}
           <div className="form-actions">

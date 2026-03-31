@@ -88,7 +88,10 @@ export default function ExpenseList({ refreshKey, onRefresh }) {
           <tbody>
             {expenses.map(e => (
               <tr key={e.id}>
-                <td>{e.name}</td>
+                <td>
+                  {e.name}
+                  {e.is_recurring === 1 && <span className="recurring-badge" title="Recurring monthly expense"> 🔁</span>}
+                </td>
                 <td>
                   <span
                     className="type-badge"

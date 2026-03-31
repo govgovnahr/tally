@@ -6,8 +6,9 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from database import init_db
-from routers.expenses_router import router
+from database import init_db, apply_recurring_expenses
+from routers.expenses_router import router as expenses_router
+from routers.budgets_router import router as budgets_router
 
 app = FastAPI()
 
@@ -19,15 +20,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
+app.include_router(expenses_router)
+app.include_router(budgets_router)
 
 
 @app.on_event("startup")
 def startup():
     init_db()
+    apply_recurring_expenses()
 
 
-# Determine if running as a PyInstaller bundle
 def _is_bundled():
     return getattr(sys, "frozen", False)
 
@@ -37,7 +39,6 @@ def _static_dir():
     return os.path.join(base, "static")
 
 
-# Serve the React build (only mount if the static dir exists)
 _static = _static_dir()
 if os.path.isdir(_static):
     app.mount("/", StaticFiles(directory=_static, html=True), name="static")
@@ -49,7 +50,6 @@ def _open_browser():
 
 if __name__ == "__main__":
     if _is_bundled():
-        # Give the server a moment to start, then open the browser
         threading.Timer(1.5, _open_browser).start()
         uvicorn.run(app, host="0.0.0.0", port=3001)
     else:

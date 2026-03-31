@@ -41,13 +41,14 @@ def add_expense(new_expense: NewExpense):
         type=new_expense.type,
         date=new_expense.date,
         created_at=datetime.now().isoformat(),
+        is_recurring=new_expense.is_recurring,
     )
 
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO expenses (id, name, amount, type, date, created_at) VALUES (?,?,?,?,?,?)",
-        (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at),
+        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring) VALUES (?,?,?,?,?,?,?)",
+        (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at, expense.is_recurring),
     )
     conn.commit()
     conn.close()
@@ -55,12 +56,18 @@ def add_expense(new_expense: NewExpense):
 
 
 @router.get("/expenses/summary")
-def get_summary():
+def get_summary(month: Optional[str] = None):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses GROUP BY type ORDER BY total DESC"
-    )
+    if month:
+        cursor.execute(
+            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE strftime('%Y-%m', date) = ? GROUP BY type ORDER BY total DESC",
+            (month,),
+        )
+    else:
+        cursor.execute(
+            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses GROUP BY type ORDER BY total DESC"
+        )
     rows = cursor.fetchall()
     conn.close()
     return [{"type": row["type"], "total": round(row["total"], 2), "count": row["count"]} for row in rows]
