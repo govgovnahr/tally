@@ -1,0 +1,68 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build frontend
+        run: |
+          cd client
+          npm install
+          npm run build
+
+      - name: Copy frontend build to server/static
+        run: python -c "import shutil; shutil.copytree('client/dist', 'server/static')"
+
+      - name: Install Python dependencies
+        run: pip install -r server/requirements.txt
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd server
+          pyinstaller \
+            --onedir \
+            --name BudgetTracker \
+            --add-data "static:static" \
+            --add-data "routers:routers" \
+            --hidden-import "routers.expenses_router" \
+            --noconfirm \
+            server.py
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd server
+          pyinstaller `
+            --onedir `
+            --name BudgetTracker `
+            --add-data "static;static" `
+            --add-data "routers;routers" `
+            --hidden-import "routers.expenses_router" `
+            --noconfirm `
+            server.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BudgetTracker-${{ runner.os }}
+          path: server/dist/BudgetTracker/
