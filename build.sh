@@ -19,6 +19,8 @@ pyinstaller \
   --add-data "static:static" \
   --add-data "routers:routers" \
   --hidden-import "routers.expenses_router" \
+  --collect-all "uvicorn" \
+  --collect-all "fastapi" \
   --noconfirm \
   server.py
 cd ..
