@@ -25,7 +25,11 @@ pyinstaller \
   server.py
 cd ..
 
+echo "==> Adding launcher script..."
+cp "launchers/Launch BudgetTracker.command" "server/dist/BudgetTracker/Launch BudgetTracker.command"
+chmod +x "server/dist/BudgetTracker/Launch BudgetTracker.command"
+
 echo ""
 echo "Done! Distributable is at: server/dist/BudgetTracker/"
-echo "On macOS/Linux: run server/dist/BudgetTracker/BudgetTracker"
+echo "Friends should double-click 'Launch BudgetTracker.command' to open the app."
 echo "Share the entire BudgetTracker/ folder with friends."
