@@ -73,6 +73,30 @@ def get_summary(month: Optional[str] = None):
     return [{"type": row["type"], "total": round(row["total"], 2), "count": row["count"]} for row in rows]
 
 
+@router.put("/expenses/{expense_id}")
+def update_expense(expense_id: str, updated: NewExpense):
+    if updated.type not in EXPENSE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {EXPENSE_TYPES}")
+    if updated.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM expenses WHERE id = ?", (expense_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    cursor.execute(
+        "UPDATE expenses SET name=?, amount=?, type=?, date=?, is_recurring=? WHERE id=?",
+        (updated.name.strip(), round(updated.amount, 2), updated.type, updated.date, updated.is_recurring, expense_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"id": expense_id, "name": updated.name.strip(), "amount": round(updated.amount, 2),
+            "type": updated.type, "date": updated.date, "is_recurring": updated.is_recurring}
+
+
 @router.delete("/expenses/{expense_id}")
 def delete_expense(expense_id: str):
     conn = get_connection()

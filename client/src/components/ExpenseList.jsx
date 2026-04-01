@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react'
+import Box from '@mui/material/Box'
+import Paper from '@mui/material/Paper'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Tabs from '@mui/material/Tabs'
+import Tab from '@mui/material/Tab'
+import Chip from '@mui/material/Chip'
+import Table from '@mui/material/Table'
+import TableHead from '@mui/material/TableHead'
+import TableBody from '@mui/material/TableBody'
+import TableRow from '@mui/material/TableRow'
+import TableCell from '@mui/material/TableCell'
+import TableContainer from '@mui/material/TableContainer'
+import Stack from '@mui/material/Stack'
+import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import RepeatIcon from '@mui/icons-material/Repeat'
 import api from '../api.js'
 import AddExpenseForm from './AddExpenseForm.jsx'
-import './ExpenseList.css'
-
-const EXPENSE_TYPES = ['Food', 'Transport', 'Housing', 'Entertainment', 'Health', 'Other']
-
-const TYPE_COLORS = {
-  Food:          '#e8a87c',
-  Transport:     '#82b4e0',
-  Housing:       '#c49ee8',
-  Entertainment: '#f0c040',
-  Health:        '#80cbc4',
-  Other:         '#a0a0a0',
-}
+import { TYPE_NAMES, TYPE_MAP } from '../expenseTypes.js'
 
 function formatDate(dateStr) {
   const [year, month, day] = dateStr.split('-')
@@ -25,6 +33,7 @@ export default function ExpenseList({ refreshKey, onRefresh }) {
   const [expenses, setExpenses] = useState([])
   const [activeType, setActiveType] = useState('All')
   const [showForm, setShowForm] = useState(false)
+  const [editingExpense, setEditingExpense] = useState(null)
 
   useEffect(() => {
     const params = activeType !== 'All' ? { type: activeType } : {}
@@ -46,75 +55,168 @@ export default function ExpenseList({ refreshKey, onRefresh }) {
     onRefresh()
   }
 
-  const tabs = ['All', ...EXPENSE_TYPES]
+  const tabs = ['All', ...TYPE_NAMES]
 
   return (
-    <div className="expense-section">
-      <div className="expense-header">
-        <h2 className="expense-title">Expenses</h2>
-        <button className="btn-primary add-btn" onClick={() => setShowForm(true)}>
-          + Add Expense
-        </button>
-      </div>
+    <Paper
+      elevation={0}
+      sx={{
+        bgcolor: 'background.paper',
+        border: '1px solid rgba(240, 234, 214, 0.12)',
+        borderRadius: 2,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ px: 3, pt: 3, pb: 2 }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+          Expenses
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={() => setShowForm(true)}
+          sx={{ fontWeight: 600 }}
+        >
+          Add Expense
+        </Button>
+      </Stack>
 
-      <div className="type-tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab}
-            className={`type-tab ${activeType === tab ? 'active' : ''}`}
-            style={activeType === tab && tab !== 'All' ? { borderBottomColor: TYPE_COLORS[tab], color: TYPE_COLORS[tab] } : {}}
-            onClick={() => setActiveType(tab)}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      {/* Type filter tabs */}
+      <Box sx={{ borderBottom: '1px solid rgba(240, 234, 214, 0.12)', px: 1 }}>
+        <Tabs
+          value={activeType}
+          onChange={(_, val) => setActiveType(val)}
+          variant="scrollable"
+          scrollButtons="auto"
+          TabIndicatorProps={{ style: { height: 2 } }}
+          sx={{
+            minHeight: 40,
+            '& .MuiTab-root': {
+              minHeight: 40,
+              py: 0,
+              fontSize: '0.85rem',
+              color: 'text.secondary',
+            },
+          }}
+        >
+          {tabs.map(tab => (
+            <Tab
+              key={tab}
+              label={tab}
+              value={tab}
+              sx={
+                activeType === tab && tab !== 'All'
+                  ? { color: `${TYPE_MAP[tab]?.color} !important` }
+                  : activeType === tab
+                  ? { color: 'primary.main !important' }
+                  : {}
+              }
+            />
+          ))}
+        </Tabs>
+      </Box>
 
+      {/* Content */}
       {expenses.length === 0 ? (
-        <div className="expense-empty">
-          <span>No expenses {activeType !== 'All' ? `in ${activeType}` : 'yet'}</span>
-        </div>
+        <Box sx={{ py: 6, textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            No expenses {activeType !== 'All' ? `in ${activeType}` : 'yet'}
+          </Typography>
+        </Box>
       ) : (
-        <table className="expense-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Date</th>
-              <th className="col-amount">Amount</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map(e => (
-              <tr key={e.id}>
-                <td>
-                  {e.name}
-                  {e.is_recurring === 1 && <span className="recurring-badge" title="Recurring monthly expense"> 🔁</span>}
-                </td>
-                <td>
-                  <span
-                    className="type-badge"
-                    style={{ color: TYPE_COLORS[e.type] || '#a0a0a0', borderColor: TYPE_COLORS[e.type] || '#a0a0a0' }}
-                  >
-                    {e.type}
-                  </span>
-                </td>
-                <td className="col-date">{formatDate(e.date)}</td>
-                <td className="col-amount">${e.amount.toFixed(2)}</td>
-                <td className="col-delete">
-                  <button
-                    className="delete-btn"
-                    onClick={() => handleDelete(e.id)}
-                    title="Delete expense"
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                  Name
+                </TableCell>
+                <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                  Type
+                </TableCell>
+                <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                  Date
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}
+                >
+                  Amount
+                </TableCell>
+                <TableCell sx={{ borderColor: 'rgba(240,234,214,0.08)', width: 80 }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {expenses.map(e => (
+                <TableRow
+                  key={e.id}
+                  sx={{
+                    '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' },
+                    '& td': { borderColor: 'rgba(240,234,214,0.08)' },
+                  }}
+                >
+                  <TableCell sx={{ color: 'text.primary' }}>
+                    <Stack direction="row" alignItems="center" gap={0.75}>
+                      {e.name}
+                      {e.is_recurring === 1 && (
+                        <RepeatIcon
+                          sx={{ fontSize: 14, color: 'text.secondary', opacity: 0.7 }}
+                          titleAccess="Recurring monthly expense"
+                        />
+                      )}
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={e.type}
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        color: TYPE_MAP[e.type]?.color || '#a0a0a0',
+                        borderColor: TYPE_MAP[e.type]?.color || '#a0a0a0',
+                        fontSize: '0.75rem',
+                        height: 22,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                    {formatDate(e.date)}
+                  </TableCell>
+                  <TableCell align="right" sx={{ color: 'text.primary', fontWeight: 500 }}>
+                    ${e.amount.toFixed(2)}
+                  </TableCell>
+                  <TableCell align="center">
+                    <Stack direction="row" justifyContent="center">
+                      <IconButton
+                        size="small"
+                        onClick={() => setEditingExpense(e)}
+                        title="Edit expense"
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+                      >
+                        <EditOutlinedIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(e.id)}
+                        title="Delete expense"
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
       {showForm && (
@@ -123,6 +225,13 @@ export default function ExpenseList({ refreshKey, onRefresh }) {
           onAdded={handleAdded}
         />
       )}
-    </div>
+      {editingExpense && (
+        <AddExpenseForm
+          expense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onAdded={handleAdded}
+        />
+      )}
+    </Paper>
   )
 }

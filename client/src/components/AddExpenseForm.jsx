@@ -1,14 +1,32 @@
 import { useState } from 'react'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import TextField from '@mui/material/TextField'
+import FormControl from '@mui/material/FormControl'
+import InputLabel from '@mui/material/InputLabel'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Checkbox from '@mui/material/Checkbox'
+import Button from '@mui/material/Button'
+import Alert from '@mui/material/Alert'
+import Stack from '@mui/material/Stack'
 import api from '../api.js'
-import './AddExpenseForm.css'
-
-const EXPENSE_TYPES = ['Food', 'Transport', 'Housing', 'Entertainment', 'Health', 'Other']
+import { TYPE_NAMES } from '../expenseTypes.js'
 
 const today = () => new Date().toISOString().split('T')[0]
 
-export default function AddExpenseForm({ onClose, onAdded }) {
-  const [form, setForm] = useState({ name: '', amount: '', type: 'Food', date: today() })
-  const [isRecurring, setIsRecurring] = useState(false)
+export default function AddExpenseForm({ onClose, onAdded, expense }) {
+  const isEditing = Boolean(expense)
+  const [form, setForm] = useState({
+    name: expense?.name ?? '',
+    amount: expense?.amount ?? '',
+    type: expense?.type ?? TYPE_NAMES[0],
+    date: expense?.date ?? today(),
+  })
+  const [isRecurring, setIsRecurring] = useState(expense?.is_recurring === 1)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -26,86 +44,124 @@ export default function AddExpenseForm({ onClose, onAdded }) {
 
     setLoading(true)
     try {
-      const res = await api.post('/expenses', {
+      const payload = {
         name: form.name.trim(),
         amount: parseFloat(form.amount),
         type: form.type,
         date: form.date,
         is_recurring: isRecurring ? 1 : 0,
-      })
+      }
+      const res = isEditing
+        ? await api.put(`/expenses/${expense.id}`, payload)
+        : await api.post('/expenses', payload)
       onAdded(res.data)
       onClose()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to add expense.')
+      setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} expense.`)
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <h2 className="modal-title">Add Expense</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Name</label>
-            <input
+    <Dialog
+      open
+      onClose={onClose}
+      fullWidth
+      maxWidth="xs"
+      PaperProps={{
+        sx: {
+          bgcolor: 'background.paper',
+          border: '1px solid rgba(240, 234, 214, 0.12)',
+        },
+      }}
+    >
+      <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
+        {isEditing ? 'Edit Expense' : 'Add Expense'}
+      </DialogTitle>
+      <form onSubmit={handleSubmit}>
+        <DialogContent sx={{ pt: 1 }}>
+          <Stack spacing={2.5}>
+            <TextField
               name="name"
-              type="text"
+              label="Name"
               placeholder="e.g. Groceries"
               value={form.name}
               onChange={handleChange}
               autoFocus
+              fullWidth
+              size="small"
+              variant="outlined"
             />
-          </div>
-          <div className="form-group">
-            <label>Amount ($)</label>
-            <input
+            <TextField
               name="amount"
+              label="Amount ($)"
               type="number"
-              min="0.01"
-              step="0.01"
+              inputProps={{ min: '0.01', step: '0.01' }}
               placeholder="0.00"
               value={form.amount}
               onChange={handleChange}
+              fullWidth
+              size="small"
+              variant="outlined"
             />
-          </div>
-          <div className="form-group">
-            <label>Type</label>
-            <select name="type" value={form.type} onChange={handleChange}>
-              {EXPENSE_TYPES.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Date</label>
-            <input
+            <FormControl fullWidth size="small" variant="outlined">
+              <InputLabel>Type</InputLabel>
+              <Select
+                name="type"
+                value={form.type}
+                onChange={handleChange}
+                label="Type"
+              >
+                {TYPE_NAMES.map(t => (
+                  <MenuItem key={t} value={t}>{t}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
               name="date"
+              label="Date"
               type="date"
               value={form.date}
               onChange={handleChange}
+              fullWidth
+              size="small"
+              variant="outlined"
+              InputLabelProps={{ shrink: true }}
             />
-          </div>
-          <div className="form-group form-group-check">
-            <label className="check-label">
-              <input
-                type="checkbox"
-                checked={isRecurring}
-                onChange={e => setIsRecurring(e.target.checked)}
-              />
-              <span>Recurring monthly expense</span>
-            </label>
-          </div>
-          {error && <p className="form-error">{error}</p>}
-          <div className="form-actions">
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Adding…' : 'Add Expense'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isRecurring}
+                  onChange={e => setIsRecurring(e.target.checked)}
+                  color="primary"
+                  size="small"
+                />
+              }
+              label="Recurring monthly expense"
+              sx={{ color: 'text.secondary' }}
+            />
+            {error && (
+              <Alert severity="error" sx={{ py: 0.5 }}>
+                {error}
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button variant="text" color="inherit" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            disabled={loading}
+          >
+            {loading ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Expense')}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -6,83 +6,77 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Stack from '@mui/material/Stack'
 import Alert from '@mui/material/Alert'
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import api from '../api.js'
 import { EXPENSE_TYPES } from '../expenseTypes.js'
 
-export default function BudgetSetup({ onComplete }) {
+export default function BudgetEdit({ onSaved }) {
   const [limits, setLimits] = useState(
     Object.fromEntries(EXPENSE_TYPES.map(t => [t.type, '']))
   )
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get('/budgets').then(res => {
+      const map = Object.fromEntries(res.data.map(b => [b.type, b.monthly_limit > 0 ? String(b.monthly_limit) : '']))
+      setLimits(prev => ({ ...prev, ...map }))
+    }).finally(() => setLoading(false))
+  }, [])
 
   function handleChange(type, value) {
     setLimits(prev => ({ ...prev, [type]: value }))
     setError('')
+    setSaved(false)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     const budgets = EXPENSE_TYPES
-      .filter(t => limits[t.type] !== '' && Number(limits[t.type]) > 0)
+      .filter(t => limits[t.type] !== '' && Number(limits[t.type]) >= 0)
       .map(t => ({ type: t.type, monthly_limit: parseFloat(limits[t.type]) }))
 
-    if (budgets.length === 0) {
-      return setError('Enter at least one budget limit to get started.')
-    }
+    if (budgets.length === 0) return setError('Enter at least one budget limit.')
 
-    setLoading(true)
+    setSaving(true)
     try {
       await api.post('/budgets', budgets)
-      onComplete()
+      setSaved(true)
+      onSaved()
     } catch {
-      setError('Failed to save budgets. Please try again.')
+      setError('Failed to save. Please try again.')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
-  }
-
-  async function handleSkip() {
-    // Save a placeholder so we don't show setup again
-    await api.post('/budgets', [{ type: 'Other', monthly_limit: 0 }])
-    onComplete()
   }
 
   return (
-    <Box
+    <Paper
+      elevation={0}
       sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-        px: 2,
-        py: 4,
+        bgcolor: 'background.paper',
+        border: '1px solid rgba(240, 234, 214, 0.12)',
+        borderRadius: 2,
+        p: { xs: 3, sm: 4 },
       }}
     >
-      <Paper
-        elevation={0}
-        sx={{
-          bgcolor: 'background.paper',
-          border: '1px solid rgba(240, 234, 214, 0.12)',
-          borderRadius: 2,
-          p: { xs: 3, sm: 4 },
-          width: '100%',
-          maxWidth: 480,
-        }}
-      >
-        {/* Header */}
-        <Stack alignItems="center" spacing={1.5} mb={3}>
-          <AccountBalanceWalletIcon sx={{ fontSize: 48, color: 'primary.main' }} />
-          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', textAlign: 'center' }}>
-            Welcome to Budget Tracker
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-            Set your monthly spending goals to get started. You can update these anytime.
-          </Typography>
-        </Stack>
+      {/* Header */}
+      <Box mb={3}>
+        <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
+          Monthly Budget Goals
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Set a spending limit for each category. Leave blank to track without a limit.
+        </Typography>
+      </Box>
 
+      {loading ? (
+        <Typography variant="body2" color="text.secondary">
+          Loading...
+        </Typography>
+      ) : (
         <form onSubmit={handleSubmit}>
           <Stack spacing={1.5} mb={3}>
             {EXPENSE_TYPES.map(({ type, Icon, color }) => (
@@ -101,7 +95,7 @@ export default function BudgetSetup({ onComplete }) {
                 </Typography>
                 <TextField
                   type="number"
-                  placeholder="0.00"
+                  placeholder="No limit"
                   value={limits[type]}
                   onChange={e => handleChange(type, e.target.value)}
                   size="small"
@@ -114,7 +108,7 @@ export default function BudgetSetup({ onComplete }) {
                     ),
                   }}
                   inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right' } }}
-                  sx={{ width: 120 }}
+                  sx={{ width: 140 }}
                 />
               </Stack>
             ))}
@@ -126,30 +120,24 @@ export default function BudgetSetup({ onComplete }) {
             </Alert>
           )}
 
-          <Stack spacing={1}>
+          <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={2}>
+            {saved && (
+              <Typography variant="body2" sx={{ color: 'primary.main' }}>
+                Changes saved!
+              </Typography>
+            )}
             <Button
               type="submit"
               variant="contained"
               color="primary"
-              fullWidth
-              disabled={loading}
-              sx={{ fontWeight: 600, py: 1.25 }}
+              disabled={saving}
+              sx={{ fontWeight: 600 }}
             >
-              {loading ? 'Saving...' : 'Get Started'}
-            </Button>
-            <Button
-              type="button"
-              variant="text"
-              color="inherit"
-              fullWidth
-              onClick={handleSkip}
-              sx={{ opacity: 0.5 }}
-            >
-              Skip for now
+              {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </Stack>
         </form>
-      </Paper>
-    </Box>
+      )}
+    </Paper>
   )
 }
