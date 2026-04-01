@@ -32,7 +32,7 @@ Full-stack single-page budgeting app. No test suite exists.
 - On startup, `init_db()` creates tables and `apply_recurring_expenses()` auto-copies last month's recurring expenses into the current month
 
 ### Frontend — `client/src/`
-- **React 19 + Vite + Material UI (MUI v6)**, no router — single page
+- **React 19 + Vite + Material UI (MUI v7) + Recharts**, no router — single page
 - UI is built with MUI components; styling is done via the `sx` prop against the custom dark theme in `theme.js`. There are no component CSS files — `index.css` only contains scrollbar overrides.
 - The MUI theme (`src/theme.js`) defines the dark palette, typography, and component overrides. Wrap any new top-level components with `ThemeProvider` if rendering outside `main.jsx`.
 - `App.jsx` owns a `refreshKey` integer; incrementing it triggers `useEffect` refetches in both `SummaryBar` and `ExpenseList`. Pass `onRefresh` down to trigger this.
@@ -47,8 +47,9 @@ Full-stack single-page budgeting app. No test suite exists.
 | `BudgetSetup.jsx` | Onboarding form to set monthly budget limits per category; shown when no budgets exist |
 | `SummaryBar.jsx` | Monthly summary cards per category with progress bars and over-budget warnings |
 | `ExpenseList.jsx` | Expense table with type-filter tabs, delete, and Add Expense button that opens modal |
-| `AddExpenseForm.jsx` | Modal (MUI Dialog) for adding a new expense (name, amount, type, date, recurring flag) |
+| `AddExpenseForm.jsx` | Modal (MUI Dialog) for adding **or editing** an expense — pass an `expense` prop to enter edit mode |
 | `BudgetEdit.jsx` | "Budget Goals" page — loads and edits monthly limits per category |
+| `SpendingChart.jsx` | Recharts horizontal bar chart (spent vs budget per category); rendered inside `SummaryBar` |
 
 ### Expense Types
 Two sources of truth — one per language boundary:
@@ -83,6 +84,7 @@ In the bundled build, `server.py` detects `sys.frozen` and switches from `reload
 |--------|------|-------|
 | GET | `/expenses` | Optional `?type=` query param to filter by category; returns `{ expenses: [...] }` |
 | POST | `/expenses` | Body: `{ name, amount, type, date, is_recurring }`; returns created expense |
+| PUT | `/expenses/{id}` | Body: same as POST; updates all fields, returns updated expense |
 | DELETE | `/expenses/{id}` | Returns `{ id }` |
 | GET | `/expenses/summary` | Optional `?month=YYYY-MM`; returns `[{ type, total, count }]` sorted by total desc |
 | GET | `/budgets` | Returns array of `{ type, monthly_limit }` |
