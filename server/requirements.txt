@@ -1,4 +1,6 @@
 fastapi
 uvicorn
 aiofiles
+openpyxl
 pyinstaller
+python-multipart

@@ -98,6 +98,22 @@ export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange })
             <Typography variant="body2" color="text.secondary">
               {formatMonthLabel(selectedMonth)}
             </Typography>
+            {selectedMonth > currentMonth() && (
+              <Typography
+                variant="caption"
+                sx={{
+                  px: 0.75, py: 0.1,
+                  bgcolor: 'rgba(240,234,214,0.08)',
+                  border: '1px solid rgba(240,234,214,0.15)',
+                  borderRadius: 1,
+                  color: 'text.secondary',
+                  fontSize: '0.7rem',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                projection
+              </Typography>
+            )}
             <IconButton
               size="small"
               onClick={() => onMonthChange(availableMonths[idx + 1])}

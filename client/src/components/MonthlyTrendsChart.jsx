@@ -4,7 +4,7 @@ import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend,
+  ResponsiveContainer, ReferenceLine, Legend, Cell,
 } from 'recharts'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
@@ -117,6 +117,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           fullLabel: fullLabel(m),
           income: incomeByMonth[m] ?? 0,
           isCurrent: m === current,
+          isFuture: m > current,
           isSelected: m === selectedMonth,
         }
         byTypeRes.data.filter(r => r.month === m).forEach(r => {
@@ -195,7 +196,27 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           barCategoryGap="30%"
           margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
         >
-          <XAxis dataKey="label" tick={TICK} axisLine={AXIS_LINE} tickLine={false} />
+          <XAxis
+            dataKey="label"
+            axisLine={AXIS_LINE}
+            tickLine={false}
+            tick={props => {
+              const entry = chartData[props.index]
+              const isFuture = entry?.isFuture
+              return (
+                <text
+                  x={props.x}
+                  y={props.y + 10}
+                  textAnchor="middle"
+                  fill={isFuture ? 'rgba(240,234,214,0.3)' : TICK.fill}
+                  fontSize={TICK.fontSize}
+                >
+                  {props.payload.value}
+                  {isFuture ? ' ~' : ''}
+                </text>
+              )
+            }}
+          />
           <YAxis
             tickFormatter={v => `$${v}`}
             tick={TICK}
@@ -251,7 +272,11 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                 maxBarSize={48}
                 style={{ cursor: onTypeChange ? 'pointer' : 'default' }}
                 onClick={() => handleBarClick(t.name)}
-              />
+              >
+                {chartData.map((entry, idx) => (
+                  <Cell key={idx} fillOpacity={entry.isFuture ? 0.35 : 1} />
+                ))}
+              </Bar>
             ))
           })()}
 

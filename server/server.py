@@ -11,6 +11,7 @@ from routers.expenses_router import router as expenses_router
 from routers.budgets_router import router as budgets_router
 from routers.types_router import router as types_router
 from routers.incomes_router import router as incomes_router
+from routers.import_router import router as import_router
 
 app = FastAPI()
 
@@ -26,6 +27,7 @@ app.include_router(expenses_router)
 app.include_router(budgets_router)
 app.include_router(types_router)
 app.include_router(incomes_router)
+app.include_router(import_router)
 
 
 @app.on_event("startup")

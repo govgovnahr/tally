@@ -18,9 +18,11 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import RepeatIcon from '@mui/icons-material/Repeat'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
 import api from '../api.js'
 import AddExpenseForm from './AddExpenseForm.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
+import ImportDialog from './ImportDialog.jsx'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 
 const INCOME_COLOR = '#80cbc4'
@@ -51,6 +53,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [editingIncome, setEditingIncome] = useState(null)
+  const [showImport, setShowImport] = useState(false)
 
   useEffect(() => {
     if (activeType === 'Income') {
@@ -111,6 +114,14 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
           {isIncome ? month ? `${formatMonthLabel(month)}'s Income` : 'All Income' : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
         </Typography>
         <Stack direction="row" gap={1}>
+          <Button
+            variant="outlined"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setShowImport(true)}
+            sx={{ fontWeight: 600 }}
+          >
+            Import
+          </Button>
           {isIncome ? (
             <Button
               variant="contained"
@@ -302,6 +313,13 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       )}
       {editingIncome && (
         <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={() => { setEditingIncome(null); onRefresh() }} />
+      )}
+      {showImport && (
+        <ImportDialog
+          defaultRecordType={isIncome ? 'income' : 'expense'}
+          onClose={() => setShowImport(false)}
+          onImported={() => { setShowImport(false); onRefresh() }}
+        />
       )}
     </Paper>
   )

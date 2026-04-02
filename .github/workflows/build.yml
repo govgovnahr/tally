@@ -48,8 +48,10 @@ jobs:
             --hidden-import "routers.budgets_router" \
             --hidden-import "routers.types_router" \
             --hidden-import "routers.incomes_router" \
+            --hidden-import "routers.import_router" \
             --collect-all "uvicorn" \
             --collect-all "fastapi" \
+            --collect-all "openpyxl" \
             --noconfirm \
             server.py
 
@@ -66,8 +68,10 @@ jobs:
             --hidden-import "routers.budgets_router" `
             --hidden-import "routers.types_router" `
             --hidden-import "routers.incomes_router" `
+            --hidden-import "routers.import_router" `
             --collect-all "uvicorn" `
             --collect-all "fastapi" `
+            --collect-all "openpyxl" `
             --noconfirm `
             server.py
 
