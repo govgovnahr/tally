@@ -45,6 +45,9 @@ jobs:
             --add-data "static:static" \
             --add-data "routers:routers" \
             --hidden-import "routers.expenses_router" \
+            --hidden-import "routers.budgets_router" \
+            --hidden-import "routers.types_router" \
+            --hidden-import "routers.incomes_router" \
             --collect-all "uvicorn" \
             --collect-all "fastapi" \
             --noconfirm \
@@ -60,6 +63,9 @@ jobs:
             --add-data "static;static" `
             --add-data "routers;routers" `
             --hidden-import "routers.expenses_router" `
+            --hidden-import "routers.budgets_router" `
+            --hidden-import "routers.types_router" `
+            --hidden-import "routers.incomes_router" `
             --collect-all "uvicorn" `
             --collect-all "fastapi" `
             --noconfirm `
