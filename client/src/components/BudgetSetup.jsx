@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -8,14 +8,20 @@ import Stack from '@mui/material/Stack'
 import Alert from '@mui/material/Alert'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import api from '../api.js'
-import { EXPENSE_TYPES } from '../expenseTypes.js'
+import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
+import { ICON_REGISTRY } from '../expenseTypes.js'
 
 export default function BudgetSetup({ onComplete }) {
-  const [limits, setLimits] = useState(
-    Object.fromEntries(EXPENSE_TYPES.map(t => [t.type, '']))
-  )
+  const { expenseTypes } = useExpenseTypes()
+  const [limits, setLimits] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (expenseTypes.length > 0) {
+      setLimits(Object.fromEntries(expenseTypes.map(t => [t.name, ''])))
+    }
+  }, [expenseTypes])
 
   function handleChange(type, value) {
     setLimits(prev => ({ ...prev, [type]: value }))
@@ -24,9 +30,9 @@ export default function BudgetSetup({ onComplete }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const budgets = EXPENSE_TYPES
-      .filter(t => limits[t.type] !== '' && Number(limits[t.type]) > 0)
-      .map(t => ({ type: t.type, monthly_limit: parseFloat(limits[t.type]) }))
+    const budgets = expenseTypes
+      .filter(t => limits[t.name] !== '' && Number(limits[t.name]) > 0)
+      .map(t => ({ type: t.name, monthly_limit: parseFloat(limits[t.name]) }))
 
     if (budgets.length === 0) {
       return setError('Enter at least one budget limit to get started.')
@@ -44,8 +50,8 @@ export default function BudgetSetup({ onComplete }) {
   }
 
   async function handleSkip() {
-    // Save a placeholder so we don't show setup again
-    await api.post('/budgets', [{ type: 'Other', monthly_limit: 0 }])
+    const firstType = expenseTypes[0]?.name ?? 'Other'
+    await api.post('/budgets', [{ type: firstType, monthly_limit: 0 }])
     onComplete()
   }
 
@@ -72,7 +78,6 @@ export default function BudgetSetup({ onComplete }) {
           maxWidth: 480,
         }}
       >
-        {/* Header */}
         <Stack alignItems="center" spacing={1.5} mb={3}>
           <AccountBalanceWalletIcon sx={{ fontSize: 48, color: 'primary.main' }} />
           <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', textAlign: 'center' }}>
@@ -85,39 +90,37 @@ export default function BudgetSetup({ onComplete }) {
 
         <form onSubmit={handleSubmit}>
           <Stack spacing={1.5} mb={3}>
-            {EXPENSE_TYPES.map(({ type, Icon, color }) => (
-              <Stack
-                key={type}
-                direction="row"
-                alignItems="center"
-                spacing={1.5}
-              >
-                <Icon sx={{ fontSize: 22, color, flexShrink: 0 }} />
-                <Typography
-                  variant="body2"
-                  sx={{ color: 'text.primary', flexGrow: 1, fontWeight: 500 }}
-                >
-                  {type}
-                </Typography>
-                <TextField
-                  type="number"
-                  placeholder="0.00"
-                  value={limits[type]}
-                  onChange={e => handleChange(type, e.target.value)}
-                  size="small"
-                  variant="outlined"
-                  InputProps={{
-                    startAdornment: (
-                      <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>
-                        $
-                      </Typography>
-                    ),
-                  }}
-                  inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right' } }}
-                  sx={{ width: 120 }}
-                />
-              </Stack>
-            ))}
+            {expenseTypes.map(t => {
+              const IconComp = ICON_REGISTRY[t.icon]
+              return (
+                <Stack key={t.name} direction="row" alignItems="center" spacing={1.5}>
+                  {IconComp && <IconComp sx={{ fontSize: 22, color: t.color, flexShrink: 0 }} />}
+                  <Typography
+                    variant="body2"
+                    sx={{ color: 'text.primary', flexGrow: 1, fontWeight: 500 }}
+                  >
+                    {t.name}
+                  </Typography>
+                  <TextField
+                    type="number"
+                    placeholder="0.00"
+                    value={limits[t.name] ?? ''}
+                    onChange={e => handleChange(t.name, e.target.value)}
+                    size="small"
+                    variant="outlined"
+                    InputProps={{
+                      startAdornment: (
+                        <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>
+                          $
+                        </Typography>
+                      ),
+                    }}
+                    inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right' } }}
+                    sx={{ width: 120 }}
+                  />
+                </Stack>
+              )
+            })}
           </Stack>
 
           {error && (

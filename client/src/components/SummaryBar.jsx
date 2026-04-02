@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -6,40 +6,71 @@ import LinearProgress from '@mui/material/LinearProgress'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Stack from '@mui/material/Stack'
+import IconButton from '@mui/material/IconButton'
+import Button from '@mui/material/Button'
+import Divider from '@mui/material/Divider'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import AddIcon from '@mui/icons-material/Add'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import TrendingDownIcon from '@mui/icons-material/TrendingDown'
 import api from '../api.js'
-import { TYPE_MAP } from '../expenseTypes.js'
+import { ICON_REGISTRY } from '../expenseTypes.js'
+import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import SpendingChart from './SpendingChart.jsx'
+import AddIncomeForm from './AddIncomeForm.jsx'
 
 function currentMonth() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-function monthLabel() {
-  return new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
+function formatMonthLabel(m) {
+  const [y, mo] = m.split('-').map(Number)
+  return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
 
-export default function SummaryBar({ refreshKey }) {
+export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange }) {
+  const { typeMap } = useExpenseTypes()
   const [summary, setSummary] = useState([])
   const [budgets, setBudgets] = useState({})
+  const [availableMonths, setAvailableMonths] = useState([])
+  const [totalIncome, setTotalIncome] = useState(0)
+  const [showIncomeForm, setShowIncomeForm] = useState(false)
+  const [editingIncome, setEditingIncome] = useState(null)
 
-  useEffect(() => {
-    const month = currentMonth()
+  const fetchData = useCallback(() => {
     Promise.all([
-      api.get('/expenses/summary', { params: { month } }),
+      api.get('/expenses/summary', { params: { month: selectedMonth } }),
       api.get('/budgets'),
-    ]).then(([summaryRes, budgetsRes]) => {
+      api.get('/expenses/months'),
+      api.get('/incomes/summary', { params: { month: selectedMonth } }),
+    ]).then(([summaryRes, budgetsRes, monthsRes, incomeRes]) => {
       setSummary(summaryRes.data)
       const budgetMap = {}
       budgetsRes.data.forEach(b => { budgetMap[b.type] = b.monthly_limit })
       setBudgets(budgetMap)
+      const now = currentMonth()
+      const months = monthsRes.data.includes(now) ? monthsRes.data : [...monthsRes.data, now].sort()
+      setAvailableMonths(months)
+      setTotalIncome(incomeRes.data.total)
     })
-  }, [refreshKey])
+  }, [selectedMonth])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData, refreshKey])
+
+  const idx = availableMonths.indexOf(selectedMonth)
+  const hasPrev = idx > 0
+  const hasNext = idx !== -1 && idx < availableMonths.length - 1
 
   const totalSpent = summary.reduce((sum, s) => sum + s.total, 0)
   const totalBudget = Object.values(budgets).reduce((sum, v) => sum + v, 0)
   const grandPct = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : null
   const grandOver = totalBudget > 0 && totalSpent > totalBudget
+  const net = totalIncome - totalSpent
+  const hasIncome = totalIncome > 0
 
   return (
     <Paper
@@ -55,9 +86,27 @@ export default function SummaryBar({ refreshKey }) {
       {/* Header row */}
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3}>
         <Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-            {monthLabel()}
-          </Typography>
+          <Stack direction="row" alignItems="center" gap={0.5} sx={{ mb: 0.5 }}>
+            <IconButton
+              size="small"
+              onClick={() => onMonthChange(availableMonths[idx - 1])}
+              disabled={!hasPrev}
+              sx={{ color: 'text.secondary', p: 0.25, '&:hover': { color: 'text.primary' }, '&.Mui-disabled': { opacity: 0.2 } }}
+            >
+              <ChevronLeftIcon fontSize="small" />
+            </IconButton>
+            <Typography variant="body2" color="text.secondary">
+              {formatMonthLabel(selectedMonth)}
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={() => onMonthChange(availableMonths[idx + 1])}
+              disabled={!hasNext}
+              sx={{ color: 'text.secondary', p: 0.25, '&:hover': { color: 'text.primary' }, '&.Mui-disabled': { opacity: 0.2 } }}
+            >
+              <ChevronRightIcon fontSize="small" />
+            </IconButton>
+          </Stack>
           <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1 }}>
             ${totalSpent.toFixed(2)}
           </Typography>
@@ -97,11 +146,53 @@ export default function SummaryBar({ refreshKey }) {
         )}
       </Stack>
 
+      {/* Income / Net row */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
+        <Stack direction="row" gap={3} flexWrap="wrap">
+          <Box>
+            <Typography variant="caption" color="text.secondary">Income</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600, color: hasIncome ? '#80cbc4' : 'text.secondary' }}>
+              ${totalIncome.toFixed(2)}
+            </Typography>
+          </Box>
+          {hasIncome && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Net</Typography>
+              <Stack direction="row" alignItems="center" gap={0.5}>
+                {net >= 0
+                  ? <TrendingUpIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                  : <TrendingDownIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                }
+                <Typography
+                  variant="body1"
+                  sx={{ fontWeight: 600, color: net >= 0 ? 'primary.main' : 'error.main' }}
+                >
+                  {net >= 0 ? '+' : '−'}${Math.abs(net).toFixed(2)}
+                </Typography>
+              </Stack>
+            </Box>
+          )}
+        </Stack>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={() => { setEditingIncome(null); setShowIncomeForm(true) }}
+          sx={{ fontWeight: 600, flexShrink: 0, borderColor: '#80cbc4', color: '#80cbc4',
+            '&:hover': { borderColor: '#80cbc4', bgcolor: 'rgba(128,203,196,0.08)' } }}
+        >
+          Add Income
+        </Button>
+      </Stack>
+
+      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', mb: 3 }} />
+
       {/* Category cards + chart */}
       <Stack direction="row" alignItems="flex-start" gap={3} flexWrap="wrap">
         <Stack direction="row" flexWrap="wrap" gap={2} sx={{ flex: 1, minWidth: 280 }}>
         {summary.map(s => {
-          const config = TYPE_MAP[s.type] || { color: '#a0a0a0', Icon: null }
+          const typeEntry = typeMap[s.type] || { color: '#a0a0a0', icon: null }
+          const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
           const limit = budgets[s.type]
           const pct = limit > 0 ? Math.min((s.total / limit) * 100, 100) : null
           const over = limit > 0 && s.total > limit
@@ -113,7 +204,7 @@ export default function SummaryBar({ refreshKey }) {
               sx={{
                 bgcolor: '#2c2f3a',
                 border: '1px solid rgba(240, 234, 214, 0.1)',
-                borderTop: `3px solid ${config.color}`,
+                borderTop: `3px solid ${typeEntry.color}`,
                 borderRadius: 2,
                 minWidth: 150,
                 flex: '1 1 150px',
@@ -121,8 +212,8 @@ export default function SummaryBar({ refreshKey }) {
             >
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                 <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
-                  {config.Icon && (
-                    <config.Icon sx={{ fontSize: 18, color: config.color }} />
+                  {IconComp && (
+                    <IconComp sx={{ fontSize: 18, color: typeEntry.color }} />
                   )}
                   <Typography variant="body2" color="text.secondary">
                     {s.type}
@@ -132,7 +223,7 @@ export default function SummaryBar({ refreshKey }) {
                   variant="h6"
                   sx={{
                     fontWeight: 700,
-                    color: over ? 'error.main' : config.color,
+                    color: over ? 'error.main' : typeEntry.color,
                     lineHeight: 1.2,
                     mb: 0.5,
                   }}
@@ -159,20 +250,22 @@ export default function SummaryBar({ refreshKey }) {
                       mb: 0.75,
                       bgcolor: 'rgba(240,234,214,0.08)',
                       '& .MuiLinearProgress-bar': {
-                        bgcolor: over ? 'error.main' : config.color,
+                        bgcolor: over ? 'error.main' : typeEntry.color,
                         borderRadius: 2,
                       },
                     }}
                   />
                 )}
-                <Typography variant="caption" color="text.secondary">
-                  {s.count} {s.count === 1 ? 'expense' : 'expenses'}
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography variant="caption" color="text.secondary">
+                    {s.count} {s.count === 1 ? 'expense' : 'expenses'}
+                  </Typography>
                   {over && (
-                    <Typography component="span" variant="caption" color="error.main">
-                      {' '}&middot; Over!
+                    <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>
+                      ${(s.total - limit).toFixed(2)} over
                     </Typography>
                   )}
-                </Typography>
+                </Stack>
               </CardContent>
             </Card>
           )
@@ -188,6 +281,20 @@ export default function SummaryBar({ refreshKey }) {
           <SpendingChart summary={summary} budgets={budgets} />
         </Box>
       </Stack>
+
+      {showIncomeForm && (
+        <AddIncomeForm
+          onClose={() => setShowIncomeForm(false)}
+          onAdded={() => { setShowIncomeForm(false); fetchData() }}
+        />
+      )}
+      {editingIncome && (
+        <AddIncomeForm
+          income={editingIncome}
+          onClose={() => setEditingIncome(null)}
+          onAdded={() => { setEditingIncome(null); fetchData() }}
+        />
+      )}
     </Paper>
   )
 }

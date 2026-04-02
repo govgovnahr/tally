@@ -1,9 +1,9 @@
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import {
-  BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { EXPENSE_TYPES } from '../expenseTypes.js'
+import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 
 const TICK = { fill: 'rgba(240, 234, 214, 0.55)', fontSize: 12 }
 const AXIS_LINE = { stroke: 'rgba(240, 234, 214, 0.12)' }
@@ -43,14 +43,22 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function SpendingChart({ summary, budgets }) {
+  const { expenseTypes } = useExpenseTypes()
+
   if (Object.keys(budgets).length === 0) return null
 
-  const chartData = EXPENSE_TYPES.map(({ type, color }) => {
-    const s = summary.find(x => x.type === type)
-    const budget = budgets[type] ?? 0
-    const spent = s?.total ?? 0
-    return { type, spent, budget, color, isOver: budget > 0 && spent > budget }
-  })
+  // Use all types that have spending or a budget set — fixes the silent bug where
+  // custom/user-defined types were silently omitted when iterating a static array.
+  const chartData = expenseTypes
+    .filter(t => summary.some(s => s.type === t.name) || (budgets[t.name] ?? 0) > 0)
+    .map(t => {
+      const s = summary.find(x => x.type === t.name)
+      const budget = budgets[t.name] ?? 0
+      const spent = s?.total ?? 0
+      return { type: t.name, spent, budget, color: t.color, isOver: budget > 0 && spent > budget }
+    })
+
+  if (chartData.length === 0) return null
 
   const xMax = Math.max(...chartData.map(d => Math.max(d.spent, d.budget)), 1) * 1.1
 
@@ -59,7 +67,7 @@ export default function SpendingChart({ summary, budgets }) {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
         Spent vs Budget
       </Typography>
-      <ResponsiveContainer width="100%" height={230}>
+      <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 38)}>
         <BarChart
           layout="vertical"
           data={chartData}
@@ -78,21 +86,12 @@ export default function SpendingChart({ summary, budgets }) {
           <YAxis
             type="category"
             dataKey="type"
-            width={90}
+            width={110}
             tick={TICK}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(240,234,214,0.04)' }} />
-          <Legend
-            iconType="circle"
-            iconSize={8}
-            formatter={v => (
-              <span style={{ color: 'rgba(240,234,214,0.55)', fontSize: 12 }}>
-                {v === 'spent' ? 'Spent' : 'Budget'}
-              </span>
-            )}
-          />
           <Bar dataKey="budget" name="budget" radius={[0, 3, 3, 0]} maxBarSize={10}>
             {chartData.map(entry => (
               <Cell key={entry.type} fill="rgba(240,234,214,0.12)" />

@@ -2,25 +2,35 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException
-from database import get_connection
+from database import get_connection, seed_recurring_forward
 from models import Expense, Expenses, NewExpense, TypeSummary
 
 router = APIRouter()
 
-EXPENSE_TYPES = ["Food", "Transport", "Housing", "Entertainment", "Health", "Other"]
+
+def _valid_type_names(conn):
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM expense_types")
+    return [row["name"] for row in cursor.fetchall()]
 
 
 @router.get("/expenses")
-def get_expenses(type: Optional[str] = None):
+def get_expenses(type: Optional[str] = None, month: Optional[str] = None):
     conn = get_connection()
     cursor = conn.cursor()
+    conditions = []
+    params = []
     if type:
-        cursor.execute(
-            "SELECT * FROM expenses WHERE type = ? ORDER BY date DESC, created_at DESC",
-            (type,),
-        )
-    else:
-        cursor.execute("SELECT * FROM expenses ORDER BY date DESC, created_at DESC")
+        conditions.append("type = ?")
+        params.append(type)
+    if month:
+        conditions.append("strftime('%Y-%m', date) = ?")
+        params.append(month)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    cursor.execute(
+        f"SELECT * FROM expenses {where} ORDER BY date DESC, created_at DESC",
+        params,
+    )
     rows = cursor.fetchall()
     conn.close()
     expenses = [Expense(**dict(row)) for row in rows]
@@ -29,9 +39,13 @@ def get_expenses(type: Optional[str] = None):
 
 @router.post("/expenses")
 def add_expense(new_expense: NewExpense):
-    if new_expense.type not in EXPENSE_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {EXPENSE_TYPES}")
+    conn = get_connection()
+    valid = _valid_type_names(conn)
+    if new_expense.type not in valid:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {valid}")
     if new_expense.amount <= 0:
+        conn.close()
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
     expense = Expense(
@@ -44,7 +58,6 @@ def add_expense(new_expense: NewExpense):
         is_recurring=new_expense.is_recurring,
     )
 
-    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring) VALUES (?,?,?,?,?,?,?)",
@@ -52,7 +65,23 @@ def add_expense(new_expense: NewExpense):
     )
     conn.commit()
     conn.close()
+
+    if expense.is_recurring:
+        seed_recurring_forward(expense.name, expense.amount, expense.type, expense.date[:7])
+
     return vars(expense)
+
+
+@router.get("/expenses/months")
+def get_months():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT DISTINCT strftime('%Y-%m', date) as month FROM expenses ORDER BY month"
+    )
+    months = [row["month"] for row in cursor.fetchall()]
+    conn.close()
+    return months
 
 
 @router.get("/expenses/summary")
@@ -73,14 +102,47 @@ def get_summary(month: Optional[str] = None):
     return [{"type": row["type"], "total": round(row["total"], 2), "count": row["count"]} for row in rows]
 
 
+@router.get("/expenses/monthly-totals")
+def get_monthly_totals(months: int = 6):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT strftime('%Y-%m', date) as month, SUM(amount) as total "
+        f"FROM expenses "
+        f"WHERE date >= date('now', 'start of month', '-{months - 1} months') "
+        f"GROUP BY month ORDER BY month ASC"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"month": row["month"], "total": round(row["total"], 2)} for row in rows]
+
+
+@router.get("/expenses/monthly-by-type")
+def get_monthly_by_type(months: int = 6):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total "
+        f"FROM expenses "
+        f"WHERE date >= date('now', 'start of month', '-{months - 1} months') "
+        f"GROUP BY month, type ORDER BY month ASC"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"month": row["month"], "type": row["type"], "total": round(row["total"], 2)} for row in rows]
+
+
 @router.put("/expenses/{expense_id}")
 def update_expense(expense_id: str, updated: NewExpense):
-    if updated.type not in EXPENSE_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {EXPENSE_TYPES}")
+    conn = get_connection()
+    valid = _valid_type_names(conn)
+    if updated.type not in valid:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {valid}")
     if updated.amount <= 0:
+        conn.close()
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
-    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM expenses WHERE id = ?", (expense_id,))
     if not cursor.fetchone():
@@ -93,6 +155,10 @@ def update_expense(expense_id: str, updated: NewExpense):
     )
     conn.commit()
     conn.close()
+
+    if updated.is_recurring:
+        seed_recurring_forward(updated.name.strip(), round(updated.amount, 2), updated.type, updated.date[:7])
+
     return {"id": expense_id, "name": updated.name.strip(), "amount": round(updated.amount, 2),
             "type": updated.type, "date": updated.date, "is_recurring": updated.is_recurring}
 

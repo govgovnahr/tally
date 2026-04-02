@@ -6,9 +6,11 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from database import init_db, apply_recurring_expenses
+from database import init_db, apply_recurring_expenses, apply_recurring_incomes
 from routers.expenses_router import router as expenses_router
 from routers.budgets_router import router as budgets_router
+from routers.types_router import router as types_router
+from routers.incomes_router import router as incomes_router
 
 app = FastAPI()
 
@@ -22,12 +24,15 @@ app.add_middleware(
 
 app.include_router(expenses_router)
 app.include_router(budgets_router)
+app.include_router(types_router)
+app.include_router(incomes_router)
 
 
 @app.on_event("startup")
 def startup():
     init_db()
     apply_recurring_expenses()
+    apply_recurring_incomes()
 
 
 def _is_bundled():

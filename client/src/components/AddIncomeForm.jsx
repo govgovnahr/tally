@@ -4,30 +4,23 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import Stack from '@mui/material/Stack'
 import api from '../api.js'
-import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
 
-export default function AddExpenseForm({ onClose, onAdded, expense }) {
-  const { typeNames } = useExpenseTypes()
-  const isEditing = Boolean(expense)
+export default function AddIncomeForm({ onClose, onAdded, income }) {
+  const isEditing = Boolean(income)
   const [form, setForm] = useState({
-    name: expense?.name ?? '',
-    amount: expense?.amount ?? '',
-    type: expense?.type ?? typeNames[0] ?? '',
-    date: expense?.date ?? today(),
+    name: income?.name ?? '',
+    amount: income?.amount ?? '',
+    date: income?.date ?? today(),
   })
-  const [isRecurring, setIsRecurring] = useState(expense?.is_recurring === 1)
+  const [isRecurring, setIsRecurring] = useState(income?.is_recurring === 1)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -48,17 +41,16 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
       const payload = {
         name: form.name.trim(),
         amount: parseFloat(form.amount),
-        type: form.type,
         date: form.date,
         is_recurring: isRecurring ? 1 : 0,
       }
       const res = isEditing
-        ? await api.put(`/expenses/${expense.id}`, payload)
-        : await api.post('/expenses', payload)
+        ? await api.put(`/incomes/${income.id}`, payload)
+        : await api.post('/incomes', payload)
       onAdded(res.data)
       onClose()
     } catch (err) {
-      setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} expense.`)
+      setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} income.`)
     } finally {
       setLoading(false)
     }
@@ -78,15 +70,15 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
       }}
     >
       <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
-        {isEditing ? 'Edit Expense' : 'Add Expense'}
+        {isEditing ? 'Edit Income' : 'Add Income'}
       </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent sx={{ pt: 1 }}>
           <Stack spacing={2.5}>
             <TextField
               name="name"
-              label="Name"
-              placeholder="e.g. Groceries"
+              label="Source"
+              placeholder="e.g. Salary, Freelance"
               value={form.name}
               onChange={handleChange}
               autoFocus
@@ -106,19 +98,6 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
               size="small"
               variant="outlined"
             />
-            <FormControl fullWidth size="small" variant="outlined">
-              <InputLabel>Type</InputLabel>
-              <Select
-                name="type"
-                value={form.type}
-                onChange={handleChange}
-                label="Type"
-              >
-                {typeNames.map(t => (
-                  <MenuItem key={t} value={t}>{t}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
             <TextField
               name="date"
               label="Date"
@@ -139,7 +118,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
                   size="small"
                 />
               }
-              label="Recurring monthly expense"
+              label="Recurring monthly income"
               sx={{ color: 'text.secondary' }}
             />
             {error && (
@@ -159,7 +138,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
             color="primary"
             disabled={loading}
           >
-            {loading ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Expense')}
+            {loading ? (isEditing ? 'Saving…' : 'Adding…') : (isEditing ? 'Save Changes' : 'Add Income')}
           </Button>
         </DialogActions>
       </form>

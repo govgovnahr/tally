@@ -7,15 +7,24 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import api from './api.js'
+import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import SummaryBar from './components/SummaryBar.jsx'
 import ExpenseList from './components/ExpenseList.jsx'
+import MonthlyTrendsChart from './components/MonthlyTrendsChart.jsx'
 import BudgetSetup from './components/BudgetSetup.jsx'
-import BudgetEdit from './components/BudgetEdit.jsx'
+import BudgetGoals from './components/BudgetGoals.jsx'
 
-export default function App() {
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7)
+}
+
+function AppContent() {
+  const { loading: typesLoading } = useExpenseTypes()
   const [refreshKey, setRefreshKey] = useState(0)
   const [budgetsReady, setBudgetsReady] = useState(null) // null = loading
   const [page, setPage] = useState('home')
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const [activeType, setActiveType] = useState('All')
 
   useEffect(() => {
     api.get('/budgets').then(res => {
@@ -27,7 +36,7 @@ export default function App() {
     setRefreshKey(k => k + 1)
   }, [])
 
-  if (budgetsReady === null) return null // loading
+  if (budgetsReady === null || typesLoading) return null
 
   if (!budgetsReady) {
     return <BudgetSetup onComplete={refresh} />
@@ -63,6 +72,11 @@ export default function App() {
               sx={{ color: page === 'home' ? 'primary.main' : 'text.secondary' }}
             />
             <Tab
+              label="All Expenses"
+              value="all-expenses"
+              sx={{ color: page === 'all-expenses' ? 'primary.main' : 'text.secondary' }}
+            />
+            <Tab
               label="Budget Goals"
               value="budgets"
               sx={{ color: page === 'budgets' ? 'primary.main' : 'text.secondary' }}
@@ -79,15 +93,43 @@ export default function App() {
           py: 3,
         }}
       >
-        {page === 'home' ? (
+        {page === 'home' && (
           <>
-            <SummaryBar refreshKey={refreshKey} />
-            <ExpenseList refreshKey={refreshKey} onRefresh={refresh} />
+            <SummaryBar
+              refreshKey={refreshKey}
+              selectedMonth={selectedMonth}
+              onMonthChange={setSelectedMonth}
+            />
+            <MonthlyTrendsChart
+              refreshKey={refreshKey}
+              selectedMonth={selectedMonth}
+              activeType={activeType}
+              onTypeChange={setActiveType}
+            />
+            <ExpenseList
+              refreshKey={refreshKey}
+              onRefresh={refresh}
+              month={selectedMonth}
+              activeType={activeType}
+              onTypeChange={setActiveType}
+            />
           </>
-        ) : (
-          <BudgetEdit onSaved={refresh} />
+        )}
+        {page === 'all-expenses' && (
+          <ExpenseList refreshKey={refreshKey} onRefresh={refresh} />
+        )}
+        {page === 'budgets' && (
+          <BudgetGoals onSaved={refresh} />
         )}
       </Box>
     </Box>
+  )
+}
+
+export default function App() {
+  return (
+    <ExpenseTypesProvider>
+      <AppContent />
+    </ExpenseTypesProvider>
   )
 }
