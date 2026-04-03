@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -14,6 +14,11 @@ import TableRow from '@mui/material/TableRow'
 import TableCell from '@mui/material/TableCell'
 import TableContainer from '@mui/material/TableContainer'
 import Stack from '@mui/material/Stack'
+import Pagination from '@mui/material/Pagination'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
@@ -39,34 +44,69 @@ function formatMonthLabel(m) {
   return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long' })
 }
 
-export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange }) {
-  const { typeNames, typeMap } = useExpenseTypes()
+export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange }) {
+  const { typeNames, typeMap, macroMap } = useExpenseTypes()
 
   // Controlled when propActiveType is provided (home page); internal otherwise (all-expenses page)
   const [internalType, setInternalType] = useState('All')
   const activeType = propActiveType ?? internalType
   const handleTypeChange = onTypeChange ?? setInternalType
+  const tabsRef = useRef(null)
+
+  useEffect(() => {
+    const root = tabsRef.current
+    if (!root) return
+    const scroller = root.querySelector('.MuiTabs-scroller')
+    const selected = root.querySelector('[role="tab"][aria-selected="true"]')
+    if (!scroller || !selected) return
+    const sr = scroller.getBoundingClientRect()
+    const er = selected.getBoundingClientRect()
+    if (er.left < sr.left) {
+      scroller.scrollLeft += er.left - sr.left - 8
+    } else if (er.right > sr.right) {
+      scroller.scrollLeft += er.right - sr.right + 8
+    }
+  }, [activeType])
 
   const [expenses, setExpenses] = useState([])
   const [incomes, setIncomes] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [editingIncome, setEditingIncome] = useState(null)
   const [showImport, setShowImport] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+
+  const PAGE_SIZE = 50
+
+  useEffect(() => {
+    setPage(1)
+  }, [activeType, activeMacro, month, refreshKey])
 
   useEffect(() => {
     if (activeType === 'Income') {
-      const params = {}
+      const params = { page, page_size: PAGE_SIZE }
       if (month) params.month = month
-      api.get('/incomes', { params }).then(res => setIncomes(res.data.incomes))
+      api.get('/incomes', { params }).then(res => {
+        setIncomes(res.data.incomes)
+        setTotal(res.data.total)
+      })
     } else {
-      const params = {}
-      if (activeType !== 'All') params.type = activeType
+      const params = { page, page_size: PAGE_SIZE }
+      if (activeMacro) {
+        params.macrocategory_id = activeMacro
+      } else if (activeType !== 'All') {
+        params.type = activeType
+      }
       if (month) params.month = month
-      api.get('/expenses', { params }).then(res => setExpenses(res.data.expenses))
+      api.get('/expenses', { params }).then(res => {
+        setExpenses(res.data.expenses)
+        setTotal(res.data.total)
+      })
     }
-  }, [refreshKey, activeType, month])
+  }, [refreshKey, activeType, activeMacro, month, page])
 
   async function handleDeleteExpense(id) {
     setExpenses(prev => prev.filter(e => e.id !== id))
@@ -74,7 +114,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       await api.delete(`/expenses/${id}`)
       onRefresh()
     } catch {
-      const params = {}
+      const params = { page, page_size: PAGE_SIZE }
       if (activeType !== 'All') params.type = activeType
       if (month) params.month = month
       api.get('/expenses', { params }).then(res => setExpenses(res.data.expenses))
@@ -87,16 +127,25 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       await api.delete(`/incomes/${id}`)
       onRefresh()
     } catch {
-      const params = {}
+      const params = { page, page_size: PAGE_SIZE }
       if (month) params.month = month
       api.get('/incomes', { params }).then(res => setIncomes(res.data.incomes))
     }
   }
 
-  const tabs = ['All', ...typeNames, 'Income']
+  async function handleClearAll() {
+    const params = month ? { month } : {}
+    await api.delete('/transactions', { params })
+    setShowClearConfirm(false)
+    onRefresh()
+  }
+
+  const tabs = ['All', 'Income', ...typeNames.filter(n => n !== 'Income')]
   const isIncome = activeType === 'Income'
   const rows = isIncome ? incomes : expenses
   const isEmpty = rows.length === 0
+  const pageCount = Math.ceil(total / PAGE_SIZE)
+  const macroName = activeMacro ? (macroMap[activeMacro]?.name ?? '') : null
 
   return (
     <Paper
@@ -111,9 +160,21 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       {/* Header */}
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 3, pt: 3, pb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-          {isIncome ? month ? `${formatMonthLabel(month)}'s Income` : 'All Income' : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
+          {isIncome
+            ? month ? `${formatMonthLabel(month)}'s Income` : 'All Income'
+            : macroName
+              ? month ? `${formatMonthLabel(month)} · ${macroName}` : macroName
+              : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
         </Typography>
         <Stack direction="row" gap={1}>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => setShowClearConfirm(true)}
+            sx={{ fontWeight: 600 }}
+          >
+            {month ? 'Clear Month' : 'Clear All'}
+          </Button>
           <Button
             variant="outlined"
             startIcon={<UploadFileIcon />}
@@ -147,13 +208,21 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       </Stack>
 
       {/* Type filter tabs */}
-      <Box sx={{ borderBottom: '1px solid rgba(240, 234, 214, 0.12)', px: 1 }}>
+      <Box ref={tabsRef} sx={{ borderBottom: '1px solid rgba(240, 234, 214, 0.12)', px: 1 }}>
         <Tabs
           value={activeType}
           onChange={(_, val) => handleTypeChange(val)}
           variant="scrollable"
-          scrollButtons="auto"
-          TabIndicatorProps={{ style: { height: 2 } }}
+          scrollButtons={false}
+          TabIndicatorProps={{
+            style: {
+              height: 2,
+              backgroundColor:
+                activeType === 'Income' ? INCOME_COLOR
+                : activeType !== 'All' ? (typeMap[activeType]?.color ?? '#8fb996')
+                : '#8fb996',
+            },
+          }}
           sx={{
             minHeight: 40,
             '& .MuiTab-root': { minHeight: 40, py: 0, fontSize: '0.85rem', color: 'text.secondary' },
@@ -302,6 +371,18 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         </TableContainer>
       )}
 
+      {pageCount > 1 && (
+        <Stack alignItems="center" sx={{ py: 2 }}>
+          <Pagination
+            count={pageCount}
+            page={page}
+            onChange={(_, v) => setPage(v)}
+            size="small"
+            sx={{ '& .MuiPaginationItem-root': { color: 'text.secondary' } }}
+          />
+        </Stack>
+      )}
+
       {showExpenseForm && (
         <AddExpenseForm onClose={() => setShowExpenseForm(false)} onAdded={onRefresh} />
       )}
@@ -321,6 +402,30 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
           onImported={() => { setShowImport(false); onRefresh() }}
         />
       )}
+      <Dialog
+        open={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
+          {month ? `Clear ${formatMonthLabel(month)}?` : 'Clear all transactions?'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {month
+              ? `This will permanently delete all expenses and income for ${formatMonthLabel(month)}. This cannot be undone.`
+              : 'This will permanently delete all expenses and income records. This cannot be undone.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button variant="text" color="inherit" onClick={() => setShowClearConfirm(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleClearAll}>
+            {month ? 'Delete Month' : 'Delete Everything'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   )
 }

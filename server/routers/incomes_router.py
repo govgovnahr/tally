@@ -9,19 +9,30 @@ router = APIRouter()
 
 
 @router.get("/incomes")
-def get_incomes(month: Optional[str] = None):
+def get_incomes(month: Optional[str] = None, page: int = 1, page_size: int = 50):
     conn = get_connection()
     cursor = conn.cursor()
     if month:
         cursor.execute(
-            "SELECT * FROM incomes WHERE strftime('%Y-%m', date) = ? ORDER BY date DESC, created_at DESC",
-            (month,),
+            "SELECT COUNT(*) FROM incomes WHERE strftime('%Y-%m', date) = ?", (month,)
+        )
+        total = cursor.fetchone()[0]
+        offset = (page - 1) * page_size
+        cursor.execute(
+            "SELECT * FROM incomes WHERE strftime('%Y-%m', date) = ? ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
+            (month, page_size, offset),
         )
     else:
-        cursor.execute("SELECT * FROM incomes ORDER BY date DESC, created_at DESC")
+        cursor.execute("SELECT COUNT(*) FROM incomes")
+        total = cursor.fetchone()[0]
+        offset = (page - 1) * page_size
+        cursor.execute(
+            "SELECT * FROM incomes ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
+            (page_size, offset),
+        )
     rows = cursor.fetchall()
     conn.close()
-    return {"incomes": [vars(Income(**dict(r))) for r in rows]}
+    return {"incomes": [vars(Income(**dict(r))) for r in rows], "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/incomes/summary")

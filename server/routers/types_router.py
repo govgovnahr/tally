@@ -64,8 +64,8 @@ def update_type(type_id: str, body: NewExpenseType):
         cursor.execute("UPDATE expenses SET type = ? WHERE type = ?", (name, old_name))
         cursor.execute("UPDATE budgets SET type = ? WHERE type = ?", (name, old_name))
     cursor.execute(
-        "UPDATE expense_types SET name = ?, color = ?, icon = ? WHERE id = ?",
-        (name, body.color, body.icon, type_id),
+        "UPDATE expense_types SET name = ?, color = ?, icon = ?, macrocategory_id = ? WHERE id = ?",
+        (name, body.color, body.icon, body.macrocategory_id, type_id),
     )
     cursor.execute("SELECT * FROM expense_types WHERE id = ?", (type_id,))
     result = dict(cursor.fetchone())
@@ -83,6 +83,9 @@ def delete_type(type_id: str, reassign_to: Optional[str] = None):
     if not existing:
         conn.close()
         raise HTTPException(status_code=404, detail="Category not found.")
+    if existing["is_default"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Default categories cannot be deleted.")
     cursor.execute("SELECT COUNT(*) as count FROM expenses WHERE type = ?", (existing["name"],))
     count = cursor.fetchone()["count"]
     if count > 0 and not reassign_to:

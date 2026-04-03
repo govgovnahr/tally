@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from database import get_connection, seed_recurring_forward
 from models import Expense, Expenses, NewExpense, TypeSummary
 
@@ -15,7 +15,7 @@ def _valid_type_names(conn):
 
 
 @router.get("/expenses")
-def get_expenses(type: Optional[str] = None, month: Optional[str] = None):
+def get_expenses(type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None, page: int = 1, page_size: int = 50):
     conn = get_connection()
     cursor = conn.cursor()
     conditions = []
@@ -23,18 +23,24 @@ def get_expenses(type: Optional[str] = None, month: Optional[str] = None):
     if type:
         conditions.append("type = ?")
         params.append(type)
+    if macrocategory_id:
+        conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = ?)")
+        params.append(macrocategory_id)
     if month:
         conditions.append("strftime('%Y-%m', date) = ?")
         params.append(month)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    cursor.execute(f"SELECT COUNT(*) FROM expenses {where}", params)
+    total = cursor.fetchone()[0]
+    offset = (page - 1) * page_size
     cursor.execute(
-        f"SELECT * FROM expenses {where} ORDER BY date DESC, created_at DESC",
-        params,
+        f"SELECT * FROM expenses {where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
+        params + [page_size, offset],
     )
     rows = cursor.fetchall()
     conn.close()
     expenses = [Expense(**dict(row)) for row in rows]
-    return {"expenses": [vars(e) for e in expenses]}
+    return {"expenses": [vars(e) for e in expenses], "total": total, "page": page, "page_size": page_size}
 
 
 @router.post("/expenses")
@@ -161,6 +167,21 @@ def update_expense(expense_id: str, updated: NewExpense):
 
     return {"id": expense_id, "name": updated.name.strip(), "amount": round(updated.amount, 2),
             "type": updated.type, "date": updated.date, "is_recurring": updated.is_recurring}
+
+
+@router.delete("/transactions")
+def clear_transactions(month: Optional[str] = Query(None)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    if month:
+        cursor.execute("DELETE FROM expenses WHERE strftime('%Y-%m', date) = ?", (month,))
+        cursor.execute("DELETE FROM incomes WHERE strftime('%Y-%m', date) = ?", (month,))
+    else:
+        cursor.execute("DELETE FROM expenses")
+        cursor.execute("DELETE FROM incomes")
+    conn.commit()
+    conn.close()
+    return {"cleared": True}
 
 
 @router.delete("/expenses/{expense_id}")

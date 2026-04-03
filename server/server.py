@@ -12,6 +12,8 @@ from routers.budgets_router import router as budgets_router
 from routers.types_router import router as types_router
 from routers.incomes_router import router as incomes_router
 from routers.import_router import router as import_router
+from routers.import_rules_router import router as import_rules_router
+from routers.macrocategories_router import router as macrocategories_router
 
 app = FastAPI()
 
@@ -28,6 +30,8 @@ app.include_router(budgets_router)
 app.include_router(types_router)
 app.include_router(incomes_router)
 app.include_router(import_router)
+app.include_router(import_rules_router)
+app.include_router(macrocategories_router)
 
 
 @app.on_event("startup")

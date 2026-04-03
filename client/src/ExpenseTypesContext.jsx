@@ -5,6 +5,7 @@ const ExpenseTypesContext = createContext(null)
 
 export function ExpenseTypesProvider({ children }) {
   const [expenseTypes, setExpenseTypes] = useState([])
+  const [macrocategories, setMacrocategories] = useState([])
   const [loading, setLoading] = useState(true)
 
   const reloadTypes = useCallback(() => {
@@ -13,15 +14,19 @@ export function ExpenseTypesProvider({ children }) {
     }).finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    reloadTypes()
-  }, [reloadTypes])
+  const reloadMacros = useCallback(() => {
+    return api.get('/macrocategories').then(res => setMacrocategories(res.data))
+  }, [])
+
+  useEffect(() => { reloadTypes() }, [reloadTypes])
+  useEffect(() => { reloadMacros() }, [reloadMacros])
 
   const typeMap = Object.fromEntries(expenseTypes.map(t => [t.name, t]))
   const typeNames = expenseTypes.map(t => t.name)
+  const macroMap = Object.fromEntries(macrocategories.map(m => [m.id, m]))
 
   return (
-    <ExpenseTypesContext.Provider value={{ expenseTypes, typeMap, typeNames, reloadTypes, loading }}>
+    <ExpenseTypesContext.Provider value={{ expenseTypes, typeMap, typeNames, reloadTypes, macrocategories, macroMap, reloadMacros, loading }}>
       {children}
     </ExpenseTypesContext.Provider>
   )

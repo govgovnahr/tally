@@ -25,6 +25,7 @@ function AppContent() {
   const [page, setPage] = useState('home')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [activeType, setActiveType] = useState('All')
+  const [activeMacro, setActiveMacro] = useState(null)
 
   useEffect(() => {
     api.get('/budgets').then(res => {
@@ -99,19 +100,27 @@ function AppContent() {
               refreshKey={refreshKey}
               selectedMonth={selectedMonth}
               onMonthChange={setSelectedMonth}
+              activeType={activeType}
+              onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
+              activeMacro={activeMacro}
+              onMacroChange={m => { setActiveMacro(m); setActiveType('All') }}
             />
             <MonthlyTrendsChart
               refreshKey={refreshKey}
               selectedMonth={selectedMonth}
               activeType={activeType}
-              onTypeChange={setActiveType}
+              onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
+              activeMacro={activeMacro}
+              onMacroChange={m => { setActiveMacro(m); setActiveType('All') }}
             />
             <ExpenseList
               refreshKey={refreshKey}
               onRefresh={refresh}
               month={selectedMonth}
               activeType={activeType}
-              onTypeChange={setActiveType}
+              onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
+              activeMacro={activeMacro}
+              onMacroChange={m => { setActiveMacro(m); setActiveType('All') }}
             />
           </>
         )}

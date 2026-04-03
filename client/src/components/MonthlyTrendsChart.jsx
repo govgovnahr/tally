@@ -83,39 +83,53 @@ function CustomTooltip({ active, payload, label, totalBudget, activeType, expens
   )
 }
 
-export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeType = 'All', onTypeChange }) {
-  const { expenseTypes } = useExpenseTypes()
+export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeType = 'All', onTypeChange, activeMacro, onMacroChange }) {
+  const { expenseTypes, macroMap } = useExpenseTypes()
   const [chartData, setChartData] = useState([])
   const [totalBudget, setTotalBudget] = useState(0)
   const [budgetByType, setBudgetByType] = useState({})
+  const [hasOverrides, setHasOverrides] = useState(false)
 
   useEffect(() => {
     Promise.all([
       api.get('/expenses/monthly-by-type', { params: { months: MONTHS_TO_SHOW } }),
       api.get('/incomes/monthly-totals', { params: { months: MONTHS_TO_SHOW } }),
-      api.get('/budgets'),
+      api.get('/budgets/effective-range', { params: { months: MONTHS_TO_SHOW } }),
     ]).then(([byTypeRes, incomeRes, budgetsRes]) => {
-      const budget = budgetsRes.data.reduce((sum, b) => sum + b.monthly_limit, 0)
-      setTotalBudget(budget)
-      setBudgetByType(Object.fromEntries(budgetsRes.data.map(b => [b.type, b.monthly_limit])))
+      // budgetsRes.data: [{ month, total, by_type }]
+      const budgetByMonth = Object.fromEntries(budgetsRes.data.map(r => [r.month, r]))
+      // Default (first entry's by_type as baseline for budgetByType)
+      const defaultByType = budgetsRes.data[0]?.by_type ?? {}
+      const defaultTotal = Object.values(defaultByType).reduce((s, v) => s + v, 0)
+      setTotalBudget(defaultTotal)
+      setBudgetByType(defaultByType)
+
+      // Check if any month in the range has a different total (i.e. has overrides)
+      const anyOverrides = budgetsRes.data.some(r => Math.abs(r.total - defaultTotal) > 0.001
+        || Object.entries(r.by_type).some(([t, v]) => Math.abs(v - (defaultByType[t] ?? 0)) > 0.001))
+      setHasOverrides(anyOverrides)
 
       // Build a set of all months that appear in either dataset
       const monthSet = new Set([
         ...byTypeRes.data.map(r => r.month),
         ...incomeRes.data.map(r => r.month),
+        ...budgetsRes.data.map(r => r.month),
       ])
       const current = currentMonth()
       const months = [...monthSet].sort()
 
-      // Build per-month objects with type breakdown + income
+      // Build per-month objects with type breakdown + income + budget
       const incomeByMonth = Object.fromEntries(incomeRes.data.map(r => [r.month, r.total]))
 
       const built = months.map(m => {
+        const bm = budgetByMonth[m]
         const row = {
           month: m,
           label: shortLabel(m),
           fullLabel: fullLabel(m),
           income: incomeByMonth[m] ?? 0,
+          budget: bm?.total ?? defaultTotal,
+          budgetByType: bm?.by_type ?? defaultByType,
           isCurrent: m === current,
           isFuture: m > current,
           isSelected: m === selectedMonth,
@@ -136,16 +150,18 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
   )
   if (!hasAnyData) return null
 
-  // Determine which types actually have data in this window
-  const activeTypes = expenseTypes.filter(t => chartData.some(d => (d[t.name] ?? 0) > 0))
+  // Determine which types actually have data in this window, filtered by macrocategory if active
+  const activeTypes = expenseTypes.filter(t =>
+    chartData.some(d => (d[t.name] ?? 0) > 0) &&
+    (!activeMacro || t.macrocategory_id === activeMacro)
+  )
 
   // Y-axis domain
   const yMax = Math.ceil((Math.max(
     ...chartData.map(d => {
       const spent = activeTypes.reduce((s, t) => s + (d[t.name] ?? 0), 0)
-      return Math.max(spent, d.income)
+      return Math.max(spent, d.income, d.budget ?? 0)
     }),
-    totalBudget,
     1
   ) * 1.2)/100) * 100 // round to nice number
 
@@ -169,25 +185,31 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
           Monthly Spending
-          {activeType !== 'All' && activeType !== 'Income' && (
-            <Typography
-              component="span"
-              variant="body2"
-              sx={{ ml: 1, color: expenseTypes.find(t => t.name === activeType)?.color }}
-            >
+          {activeMacro && macroMap[activeMacro] && (
+            <Typography component="span" variant="body2" sx={{ ml: 1, color: macroMap[activeMacro].color }}>
+              · {macroMap[activeMacro].name}
+            </Typography>
+          )}
+          {!activeMacro && activeType !== 'All' && activeType !== 'Income' && (
+            <Typography component="span" variant="body2"
+              sx={{ ml: 1, color: expenseTypes.find(t => t.name === activeType)?.color }}>
               · {activeType}
             </Typography>
           )}
         </Typography>
-        {activeType !== 'All' && activeType !== 'Income' && (
-          <Typography
-            variant="caption"
+        {activeMacro ? (
+          <Typography variant="caption"
             sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}
-            onClick={() => onTypeChange?.('All')}
-          >
+            onClick={() => onMacroChange?.(null)}>
+            Clear group filter ×
+          </Typography>
+        ) : activeType !== 'All' && activeType !== 'Income' ? (
+          <Typography variant="caption"
+            sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}
+            onClick={() => onTypeChange?.('All')}>
             Clear filter ×
           </Typography>
-        )}
+        ) : null}
       </Box>
 
       <ResponsiveContainer width="100%" height={300}>
@@ -227,11 +249,14 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           />
           {(() => {
             const isTypeFilter = activeType !== 'All' && activeType !== 'Income'
-            const refBudget = isTypeFilter ? (budgetByType[activeType] ?? 0) : totalBudget
             const refColor = isTypeFilter
               ? (expenseTypes.find(t => t.name === activeType)?.color ?? 'rgba(240,234,214,0.3)')
               : 'rgba(240, 234, 214, 0.3)'
-            return refBudget > 0 ? (
+            const refBudget = isTypeFilter ? (budgetByType[activeType] ?? 0) : totalBudget
+            if (refBudget <= 0) return null
+            // When overrides exist, render as a varying Line; otherwise use a flat ReferenceLine
+            if (hasOverrides) return null  // Line rendered below
+            return (
               <ReferenceLine
                 y={refBudget}
                 stroke={refColor}
@@ -245,16 +270,27 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                   opacity: 0.8,
                 }}
               />
-            ) : null
+            )
           })()}
           <Tooltip
-            content={
-              <CustomTooltip
-                totalBudget={activeType !== 'All' && activeType !== 'Income' ? (budgetByType[activeType] ?? 0) : totalBudget}
-                activeType={activeType}
-                expenseTypes={expenseTypes}
-              />
-            }
+            content={({ active, payload, label }) => {
+              const entry = payload?.[0]?.payload
+              const perMonthBudget = entry
+                ? (activeType !== 'All' && activeType !== 'Income'
+                    ? (entry.budgetByType?.[activeType] ?? budgetByType[activeType] ?? 0)
+                    : (entry.budget ?? totalBudget))
+                : 0
+              return (
+                <CustomTooltip
+                  active={active}
+                  payload={payload}
+                  label={label}
+                  totalBudget={perMonthBudget}
+                  activeType={activeType}
+                  expenseTypes={expenseTypes}
+                />
+              )
+            }}
             cursor={{ fill: 'rgba(240,234,214,0.04)' }}
           />
 
@@ -290,6 +326,28 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
             activeDot={{ r: 5 }}
             connectNulls
           />
+
+          {/* Budget line — only when monthly overrides exist (otherwise ReferenceLine is used) */}
+          {hasOverrides && (() => {
+            const isTypeFilter = activeType !== 'All' && activeType !== 'Income'
+            const refColor = isTypeFilter
+              ? (expenseTypes.find(t => t.name === activeType)?.color ?? 'rgba(240,234,214,0.5)')
+              : 'rgba(240, 234, 214, 0.5)'
+            const refBudget = isTypeFilter ? (budgetByType[activeType] ?? 0) : totalBudget
+            if (refBudget <= 0) return null
+            return (
+              <Line
+                type="monotone"
+                dataKey={isTypeFilter ? `budgetByType.${activeType}` : 'budget'}
+                stroke={refColor}
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                dot={false}
+                activeDot={false}
+                connectNulls
+              />
+            )
+          })()}
         </ComposedChart>
       </ResponsiveContainer>
     </Paper>

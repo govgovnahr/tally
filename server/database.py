@@ -85,6 +85,39 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS import_rules (
+            id TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL UNIQUE,
+            expense_type TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monthly_budgets (
+            type TEXT NOT NULL,
+            month TEXT NOT NULL,
+            monthly_limit REAL NOT NULL,
+            PRIMARY KEY (type, month)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS macrocategories (
+            id           TEXT PRIMARY KEY,
+            name         TEXT NOT NULL UNIQUE,
+            color        TEXT NOT NULL DEFAULT '#a0a0a0',
+            budget_limit REAL
+        )
+    """)
+
+    # Migration: add macrocategory_id to expense_types
+    try:
+        cursor.execute("ALTER TABLE expense_types ADD COLUMN macrocategory_id TEXT REFERENCES macrocategories(id)")
+    except Exception:
+        pass  # column already exists
+
     conn.commit()
     conn.close()
 

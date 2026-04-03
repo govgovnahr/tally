@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -78,3 +78,10 @@ class NewExpenseType(BaseModel):
     name: str
     color: str
     icon: str
+    macrocategory_id: Optional[str] = None
+
+
+class NewMacrocategory(BaseModel):
+    name: str
+    color: str = '#a0a0a0'
+    budget_limit: Optional[float] = None

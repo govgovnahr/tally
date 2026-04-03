@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -28,10 +28,42 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
     date: expense?.date ?? today(),
   })
   const [isRecurring, setIsRecurring] = useState(expense?.is_recurring === 1)
+  const [rememberRule, setRememberRule] = useState(false)
+  const [rulePattern, setRulePattern] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Track whether the type was set by auto-categorization (vs manually by the user)
+  const typeAutoSet = useRef(!isEditing)
+  const debounceTimer = useRef(null)
+
+  useEffect(() => {
+    if (!typeAutoSet.current) return
+    const name = form.name.trim()
+    if (!name) return
+    clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/import/infer-type', { params: { name } })
+        if (typeAutoSet.current) {
+          setForm(f => ({ ...f, type: res.data.type }))
+        }
+      } catch {
+        // silently ignore
+      }
+    }, 500)
+    return () => clearTimeout(debounceTimer.current)
+  }, [form.name])
+
+  function cleanPattern(name) {
+    return name
+      .replace(/\d{2}\/\d{2}/g, '')
+      .replace(/[A-Z]{2,3}-[A-Z]{2,3}\d+/gi, '')
+      .replace(/\b[A-Z]{2}\b$/g, '')
+      .replace(/\s+/g, ' ').trim()
+  }
 
   function handleChange(e) {
+    if (e.target.name === 'type') typeAutoSet.current = false
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
     setError('')
   }
@@ -55,6 +87,9 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
       const res = isEditing
         ? await api.put(`/expenses/${expense.id}`, payload)
         : await api.post('/expenses', payload)
+      if (rememberRule && rulePattern.trim()) {
+        await api.post('/import-rules', { pattern: rulePattern.trim(), expense_type: form.type })
+      }
       onAdded(res.data)
       onClose()
     } catch (err) {
@@ -142,6 +177,36 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
               label="Recurring monthly expense"
               sx={{ color: 'text.secondary' }}
             />
+            {isEditing && (
+              <>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={rememberRule}
+                      onChange={e => {
+                        setRememberRule(e.target.checked)
+                        if (e.target.checked) setRulePattern(cleanPattern(form.name))
+                      }}
+                      color="primary"
+                      size="small"
+                    />
+                  }
+                  label="Remember this categorization for future imports"
+                  sx={{ color: 'text.secondary' }}
+                />
+                {rememberRule && (
+                  <TextField
+                    label="Auto-categorize transactions containing"
+                    value={rulePattern}
+                    onChange={e => setRulePattern(e.target.value)}
+                    fullWidth
+                    size="small"
+                    variant="outlined"
+                    helperText={`Future imports with "${rulePattern}" in the description will be set to ${form.type}`}
+                  />
+                )}
+              </>
+            )}
             {error && (
               <Alert severity="error" sx={{ py: 0.5 }}>
                 {error}

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from database import get_connection
 
 router = APIRouter()
@@ -105,13 +105,21 @@ def _soft_match_type(raw: str, valid: list[str]) -> Optional[str]:
     return None
 
 
-def _infer_type(name: str, valid_types: list[str]) -> str:
-    """Try to match a transaction name to an expense type by keyword, then fall back to 'Other' or first type."""
+def _infer_type(name: str, valid_types: list[str], rules: list[tuple] = []) -> str:
+    """Try to match a transaction name to an expense type using learned rules, then keywords, then fallback."""
+    name_lower = name.lower()
+    # 1. User-defined rules (case-insensitive substring match)
+    for pattern, expense_type in rules:
+        if pattern.lower() in name_lower:
+            matched = _soft_match_type(expense_type, valid_types)
+            if matched:
+                return matched
+
     KEYWORDS = {
         "food": ["restaurant", "food", "grocery", "groceries", "cafe", "coffee", "lunch", "dinner",
                  "breakfast", "pizza", "burger", "sushi", "diner", "bakery", "donut", "sandwich"],
         "transport": ["uber", "lyft", "gas", "fuel", "parking", "transit", "metro", "bus", "train",
-                      "airline", "flight", "taxi", "toll", "shell", "chevron", "bp"],
+                      "airline", "flight", "taxi", "toll", "shell", "chevron", "bp", "car"],
         "housing": ["rent", "mortgage", "electric", "electricity", "water", "internet", "cable",
                     "utilities", "utility", "hoa", "insurance"],
         "health": ["pharmacy", "cvs", "walgreens", "doctor", "hospital", "medical", "dental",
@@ -159,6 +167,125 @@ def _get_raw_rows(content: bytes, filename: str, sheet_name: Optional[str] = Non
         raise HTTPException(status_code=400, detail="Unsupported file type. Upload a .csv or .xlsx file.")
 
 
+@router.get("/import/infer-type")
+def infer_type_endpoint(name: str = Query(..., description="Transaction name/description to categorize")):
+    with get_connection() as conn:
+        valid_types = [r[0] for r in conn.execute("SELECT name FROM expense_types ORDER BY sort_order").fetchall()]
+        rules = conn.execute("SELECT pattern, expense_type FROM import_rules").fetchall()
+    if not valid_types:
+        return {"type": "Other"}
+    return {"type": _infer_type(name, valid_types, rules)}
+
+
+_DEFAULT_COLORS = [
+    "#e8a87c", "#82b4e0", "#c49ee8", "#f0c040", "#80cbc4", "#a0a0a0",
+    "#ef9a9a", "#90caf9", "#a5d6a7", "#ffcc80", "#ce93d8", "#f48fb1",
+    "#ff8a65", "#4db6ac", "#7986cb", "#aed581",
+]
+_DEFAULT_ICON = "Category"
+
+
+@router.post("/import/budgets")
+async def import_budgets(
+    file: UploadFile = File(...),
+    mapping: str = Form(...),
+    header_row: int = Form(...),
+    sheet_name: Optional[str] = Form(None),
+    target_month: Optional[str] = Form(None),  # YYYY-MM — overrides per-row month column
+):
+    mapping_dict = json.loads(mapping)
+    cat_col = mapping_dict.get("category", "")
+    limit_col = mapping_dict.get("monthly_limit", "")
+    month_col = mapping_dict.get("month", "")
+
+    content = await file.read()
+    raw_rows = _get_raw_rows(content, file.filename, sheet_name)
+    _, data_rows = _rows_to_dicts(raw_rows, header_row)
+
+    # Aggregate: (normalized_category, month_or_None) → sum
+    aggregated: dict[tuple, float] = {}
+    # Track original-case name per category
+    display_name: dict[str, str] = {}
+    errors = []
+    skipped = 0
+
+    for i, row in enumerate(data_rows, start=header_row + 2):
+        cat_raw = row.get(cat_col, "").strip()
+        limit_raw = row.get(limit_col, "").strip().replace(",", "").lstrip("$").lstrip("-").strip()
+        month_raw = row.get(month_col, "").strip() if month_col else ""
+
+        if not cat_raw:
+            errors.append({"row": i, "reason": "Missing category"})
+            skipped += 1
+            continue
+
+        try:
+            limit_val = float(limit_raw)
+        except ValueError:
+            errors.append({"row": i, "reason": f"Invalid amount: '{row.get(limit_col, '')}'"})
+            skipped += 1
+            continue
+
+        # target_month takes priority over any per-row month column
+        if target_month:
+            month_key = target_month
+        elif month_raw:
+            try:
+                month_key = _parse_date(month_raw)[:7]
+            except ValueError:
+                errors.append({"row": i, "reason": f"Invalid month: '{month_raw}'"})
+                skipped += 1
+                continue
+        else:
+            month_key = None
+
+        norm = cat_raw.lower()
+        display_name.setdefault(norm, cat_raw)
+        key = (norm, month_key)
+        aggregated[key] = aggregated.get(key, 0.0) + limit_val
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Existing types: lower-name → actual name
+    existing = {r["name"].lower(): r["name"]
+                for r in cursor.execute("SELECT name FROM expense_types").fetchall()}
+    used_colors = {r["color"] for r in cursor.execute("SELECT color FROM expense_types").fetchall()}
+
+    # Create missing categories
+    new_categories = {norm for norm, _ in aggregated} - existing.keys()
+    available_colors = [c for c in _DEFAULT_COLORS if c not in used_colors] or _DEFAULT_COLORS
+    for idx, norm in enumerate(sorted(new_categories)):
+        name = display_name[norm]
+        color = available_colors[idx % len(available_colors)]
+        sort_order = cursor.execute("SELECT COALESCE(MAX(sort_order)+1, 0) FROM expense_types").fetchone()[0]
+        cursor.execute(
+            "INSERT INTO expense_types (id, name, color, icon, sort_order) VALUES (?,?,?,?,?)",
+            (str(uuid.uuid4()), name, color, _DEFAULT_ICON, sort_order),
+        )
+        existing[norm] = name
+
+    # Upsert budgets / monthly_budgets
+    imported = 0
+    for (norm, month_key), total in aggregated.items():
+        type_name = existing[norm]
+        if month_key:
+            cursor.execute(
+                "INSERT OR REPLACE INTO monthly_budgets (type, month, monthly_limit) VALUES (?,?,?)",
+                (type_name, month_key, total),
+            )
+        else:
+            cursor.execute(
+                "INSERT OR REPLACE INTO budgets (type, monthly_limit) VALUES (?,?)",
+                (type_name, total),
+            )
+        imported += 1
+
+    conn.commit()
+    conn.close()
+    return {"imported": imported, "skipped": skipped, "errors": errors}
+
+
 @router.post("/import/preview")
 async def preview_import(
     file: UploadFile = File(...),
@@ -204,6 +331,8 @@ async def import_records(
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM expense_types")
     valid_types = [r["name"] for r in cursor.fetchall()]
+    cursor.execute("SELECT pattern, expense_type FROM import_rules")
+    rules = [(r["pattern"], r["expense_type"]) for r in cursor.fetchall()]
 
     imported = 0
     errors = []
@@ -239,9 +368,9 @@ async def import_records(
                 # Resolve expense type
                 raw_type = row.get(col_map.get("type", ""), "").strip() if col_map.get("type") else ""
                 if raw_type:
-                    expense_type = _soft_match_type(raw_type, valid_types) or _infer_type(name, valid_types)
+                    expense_type = _soft_match_type(raw_type, valid_types) or _infer_type(name, valid_types, rules)
                 else:
-                    expense_type = _infer_type(name, valid_types)
+                    expense_type = _infer_type(name, valid_types, rules)
                 cursor.execute(
                     "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring) VALUES (?,?,?,?,?,?,?)",
                     (new_id, name, amount, expense_type, date_str, now, is_recurring),
