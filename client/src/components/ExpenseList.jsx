@@ -19,11 +19,16 @@ import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
+import TextField from '@mui/material/TextField'
+import InputAdornment from '@mui/material/InputAdornment'
+import TableSortLabel from '@mui/material/TableSortLabel'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import RepeatIcon from '@mui/icons-material/Repeat'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
+import SearchIcon from '@mui/icons-material/Search'
+import CloseIcon from '@mui/icons-material/Close'
 import api from '../api.js'
 import AddExpenseForm from './AddExpenseForm.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
@@ -68,6 +73,11 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
     }
   }, [activeType])
 
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('date')
+  const [sortDir, setSortDir] = useState('desc')
+
   const [expenses, setExpenses] = useState([])
   const [incomes, setIncomes] = useState([])
   const [total, setTotal] = useState(0)
@@ -82,31 +92,47 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const PAGE_SIZE = 50
 
   useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  function handleSort(col) {
+    if (sortBy === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(col)
+      setSortDir('asc')
+    }
+  }
+
+  useEffect(() => {
     setPage(1)
-  }, [activeType, activeMacro, month, refreshKey])
+  }, [activeType, activeMacro, month, refreshKey, search, sortBy, sortDir])
 
   useEffect(() => {
     if (activeType === 'Income') {
-      const params = { page, page_size: PAGE_SIZE }
+      const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
       if (month) params.month = month
+      if (search) params.search = search
       api.get('/incomes', { params }).then(res => {
         setIncomes(res.data.incomes)
         setTotal(res.data.total)
       })
     } else {
-      const params = { page, page_size: PAGE_SIZE }
+      const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
       if (activeMacro) {
         params.macrocategory_id = activeMacro
       } else if (activeType !== 'All') {
         params.type = activeType
       }
       if (month) params.month = month
+      if (search) params.search = search
       api.get('/expenses', { params }).then(res => {
         setExpenses(res.data.expenses)
         setTotal(res.data.total)
       })
     }
-  }, [refreshKey, activeType, activeMacro, month, page])
+  }, [refreshKey, activeType, activeMacro, month, page, search, sortBy, sortDir])
 
   async function handleDeleteExpense(id) {
     setExpenses(prev => prev.filter(e => e.id !== id))
@@ -158,7 +184,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       }}
     >
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 3, pt: 3, pb: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 }, pb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
           {isIncome
             ? month ? `${formatMonthLabel(month)}'s Income` : 'All Income'
@@ -166,7 +192,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               ? month ? `${formatMonthLabel(month)} · ${macroName}` : macroName
               : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
         </Typography>
-        <Stack direction="row" gap={1}>
+        <Stack direction="row" gap={1} flexWrap="wrap">
           <Button
             variant="outlined"
             color="error"
@@ -224,8 +250,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
             },
           }}
           sx={{
-            minHeight: 40,
-            '& .MuiTab-root': { minHeight: 40, py: 0, fontSize: '0.85rem', color: 'text.secondary' },
+            minHeight: 44,
+            '& .MuiTab-root': { minHeight: 44, py: 0, fontSize: '0.9rem', color: 'text.secondary' },
           }}
         >
           {tabs.map(tab => (
@@ -247,6 +273,40 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         </Tabs>
       </Box>
 
+      {/* Search */}
+      <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid rgba(240,234,214,0.08)' }}>
+        <TextField
+          size="small"
+          placeholder="Search by name…"
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          fullWidth
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+                </InputAdornment>
+              ),
+              endAdornment: searchInput ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => { setSearchInput(''); setSearch('') }}>
+                    <CloseIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            }
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              fontSize: '0.85rem',
+              '& fieldset': { borderColor: 'rgba(240,234,214,0.15)' },
+              '&:hover fieldset': { borderColor: 'rgba(240,234,214,0.3)' },
+            },
+          }}
+        />
+      </Box>
+
       {/* Content */}
       {isEmpty ? (
         <Box sx={{ py: 6, textAlign: 'center' }}>
@@ -258,20 +318,41 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         </Box>
       ) : (
         <TableContainer>
-          <Table size="small">
+          <Table size="small" sx={{ minWidth: 480 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
-                  Name
+                  <TableSortLabel
+                    active={sortBy === 'name'}
+                    direction={sortBy === 'name' ? sortDir : 'asc'}
+                    onClick={() => handleSort('name')}
+                    sx={{ color: 'inherit !important', '& .MuiTableSortLabel-icon': { color: 'text.disabled !important' } }}
+                  >
+                    Name
+                  </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
                   {isIncome ? 'Source' : 'Type'}
                 </TableCell>
                 <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
-                  Date
+                  <TableSortLabel
+                    active={sortBy === 'date'}
+                    direction={sortBy === 'date' ? sortDir : 'asc'}
+                    onClick={() => handleSort('date')}
+                    sx={{ color: 'inherit !important', '& .MuiTableSortLabel-icon': { color: 'text.disabled !important' } }}
+                  >
+                    Date
+                  </TableSortLabel>
                 </TableCell>
                 <TableCell align="right" sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
-                  Amount
+                  <TableSortLabel
+                    active={sortBy === 'amount'}
+                    direction={sortBy === 'amount' ? sortDir : 'asc'}
+                    onClick={() => handleSort('amount')}
+                    sx={{ color: 'inherit !important', '& .MuiTableSortLabel-icon': { color: 'text.disabled !important' }, flexDirection: 'row-reverse' }}
+                  >
+                    Amount
+                  </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ borderColor: 'rgba(240,234,214,0.08)', width: 80 }} />
               </TableRow>

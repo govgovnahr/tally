@@ -33,6 +33,7 @@ import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY, ICON_OPTIONS } from '../expenseTypes.js'
 import ImportBudgetsDialog from './ImportBudgetsDialog.jsx'
+import { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } from '../menuStyles.js'
 
 // ─── Shared constants ────────────────────────────────────────────────────────
 
@@ -305,6 +306,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
   const [enabled, setEnabled] = useState({})   // typeName → bool
   const [overrideLimits, setOverrideLimits] = useState({})  // typeName → string value
   const [overrideMonths, setOverrideMonths] = useState([])  // months with any override
+  const [savedOverrides, setSavedOverrides] = useState(new Set())  // typenames persisted in DB for selectedMonth
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -327,6 +329,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
       })
       setEnabled(newEnabled)
       setOverrideLimits(newLimits)
+      setSavedOverrides(new Set(Object.keys(existing)))
     }).catch(() => {})
   }, [selectedMonth, expenseTypes])
 
@@ -344,6 +347,18 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
       setSaveError('Failed to save. Please try again.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDeleteType(typeName) {
+    try {
+      await api.delete(`/budgets/monthly-overrides/${selectedMonth}/${encodeURIComponent(typeName)}`)
+      setSavedOverrides(prev => { const next = new Set(prev); next.delete(typeName); return next })
+      setEnabled(prev => ({ ...prev, [typeName]: false }))
+      setOverrideLimits(prev => ({ ...prev, [typeName]: defaultLimits[typeName] ?? '' }))
+      setSaved(true)
+    } catch {
+      setSaveError('Failed to delete override.')
     }
   }
 
@@ -392,7 +407,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
             <Chip
               label={`${overrideMonths.length} month${overrideMonths.length > 1 ? 's' : ''}`}
               size="small"
-              sx={{ bgcolor: 'rgba(240,234,214,0.08)', color: 'text.secondary', fontSize: '0.7rem' }}
+              sx={{ bgcolor: 'rgba(240,234,214,0.08)', color: 'text.secondary', fontSize: '0.8rem' }}
             />
           )}
           <IconButton size="small" sx={{ color: 'text.secondary' }}>
@@ -410,9 +425,10 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
               value={selectedMonth}
               onChange={e => setSelectedMonth(e.target.value)}
               label="Month"
+              {...DROPDOWN_MENU_PROPS}
             >
               {SELECTABLE_MONTHS.map(({ key, label }) => (
-                <MenuItem key={key} value={key}>
+                <MenuItem key={key} value={key} sx={DROPDOWN_ITEM_SX}>
                   <Stack direction="row" alignItems="center" gap={1}>
                     {label}
                     {overrideMonths.includes(key) && (
@@ -477,6 +493,17 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
                     inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right', width: 80 } }}
                     sx={{ width: 130, flexShrink: 0 }}
                   />
+                  {savedOverrides.has(t.name) && (
+                    <Tooltip title="Remove override for this month">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteType(t.name)}
+                        sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' }, flexShrink: 0 }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Stack>
               )
             })}
@@ -579,7 +606,7 @@ function MacrocategoryManager() {
         <Stack direction="row" alignItems="center" gap={1}>
           {macrocategories.length > 0 && (
             <Chip label={macrocategories.length} size="small"
-              sx={{ bgcolor: 'rgba(240,234,214,0.08)', color: 'text.secondary', fontSize: '0.7rem' }} />
+              sx={{ bgcolor: 'rgba(240,234,214,0.08)', color: 'text.secondary', fontSize: '0.8rem' }} />
           )}
           <IconButton size="small" sx={{ color: 'text.secondary' }}>
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -615,7 +642,7 @@ function MacrocategoryManager() {
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: m.color, flexShrink: 0 }} />
               <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1 }}>{m.name}</Typography>
               {m.budget_limit > 0 && (
-                <Typography variant="caption" color="text.secondary">${m.budget_limit.toFixed(0)} ceiling</Typography>
+                <Typography variant="body2" color="text.secondary">${m.budget_limit.toFixed(0)} ceiling</Typography>
               )}
               <IconButton size="small"
                 onClick={() => { setEditTarget(m); setEditName(m.name); setEditColor(m.color); setEditBudget(m.budget_limit ? String(m.budget_limit) : ''); setError('') }}
@@ -653,10 +680,19 @@ function MacrocategoryManager() {
   )
 }
 
+const STATUS_COLORS = {
+  on_track: '#8fb996',
+  at_risk: '#f0c040',
+  over_budget: '#e07c7c',
+  no_budget: 'rgba(240,234,214,0.15)',
+}
+
 export default function BudgetGoals({ onSaved }) {
   const { expenseTypes, reloadTypes, macrocategories, macroMap, reloadMacros } = useExpenseTypes()
   const [limits, setLimits] = useState({})
+  const [effectiveLimits, setEffectiveLimits] = useState({})
   const [spending, setSpending] = useState({})
+  const [pacing, setPacing] = useState({})
   const [loadingBudgets, setLoadingBudgets] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -676,14 +712,20 @@ export default function BudgetGoals({ onSaved }) {
     setSaved(false)
     Promise.all([
       api.get('/budgets'),
+      api.get('/budgets/effective', { params: { month: currentMonth() } }),
       api.get('/expenses/summary', { params: { month: currentMonth() } }),
-    ]).then(([budgetsRes, summaryRes]) => {
+      api.get('/analysis/pacing', { params: { month: currentMonth() } }),
+    ]).then(([budgetsRes, effectiveRes, summaryRes, pacingRes]) => {
       const fromApi = Object.fromEntries(
         budgetsRes.data.map(b => [b.type, b.monthly_limit > 0 ? String(b.monthly_limit) : ''])
       )
       const defaults = Object.fromEntries(expenseTypes.map(t => [t.name, '']))
       setLimits({ ...defaults, ...fromApi })
+      setEffectiveLimits(Object.fromEntries(
+        effectiveRes.data.map(b => [b.type, b.monthly_limit > 0 ? b.monthly_limit : null])
+      ))
       setSpending(Object.fromEntries(summaryRes.data.map(r => [r.type, r.total])))
+      setPacing(Object.fromEntries((pacingRes.data.categories ?? []).map(c => [c.type, c])))
     }).finally(() => setLoadingBudgets(false))
   }, [expenseTypes])
 
@@ -743,7 +785,7 @@ export default function BudgetGoals({ onSaved }) {
             Set monthly limits and manage your spending categories.
           </Typography>
         </Box>
-        <Stack direction="row" gap={1}>
+        <Stack direction="row" gap={1} flexWrap="wrap">
           <Button
             variant="outlined"
             color="inherit"
@@ -781,7 +823,7 @@ export default function BudgetGoals({ onSaved }) {
             function renderCard(t) {
               const IconComp = ICON_REGISTRY[t.icon]
               const spent = spending[t.name] ?? 0
-              const limit = parseFloat(limits[t.name])
+              const limit = effectiveLimits[t.name] ?? parseFloat(limits[t.name])
               const hasLimit = !isNaN(limit) && limit > 0
               const over = hasLimit && spent > limit
               const pct = hasLimit ? Math.min((spent / limit) * 100, 100) : null
@@ -823,21 +865,34 @@ export default function BudgetGoals({ onSaved }) {
                     {hasLimit && (
                       <>
                         <Stack direction="row" alignItems="baseline" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ color: over ? 'error.main' : 'text.secondary' }}>
+                          <Typography variant="body2" sx={{ color: over ? 'error.main' : 'text.secondary' }}>
                             ${spent.toFixed(2)} spent
                           </Typography>
                           {over ? (
-                            <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>
+                            <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
                               +${(spent - limit).toFixed(2)} over
                             </Typography>
                           ) : (
-                            <Typography variant="caption" color="text.secondary">/ ${limit.toFixed(0)}</Typography>
+                            <Typography variant="body2" color="text.secondary">/ ${limit.toFixed(0)}</Typography>
                           )}
                         </Stack>
                         <LinearProgress variant="determinate" value={pct}
                           sx={{ height: 4, borderRadius: 2, mb: 1.5, bgcolor: 'rgba(240,234,214,0.08)',
                             '& .MuiLinearProgress-bar': { bgcolor: over ? 'error.main' : t.color, borderRadius: 2 } }} />
                       </>
+                    )}
+
+                    {pacing[t.name]?.projected_spend != null && (
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.75}>
+                        <Typography variant="body2" color="text.secondary">
+                          → ${pacing[t.name].projected_spend.toFixed(2)} projected
+                        </Typography>
+                        <Chip
+                          label={pacing[t.name].status.replace('_', ' ')}
+                          size="small"
+                          sx={{ fontSize: '0.72rem', height: 20, bgcolor: STATUS_COLORS[pacing[t.name].status], color: '#22252e', fontWeight: 600 }}
+                        />
+                      </Stack>
                     )}
 
                     <TextField
@@ -898,15 +953,18 @@ export default function BudgetGoals({ onSaved }) {
                 const expanded = expandedGroups.has(key)
                 return (
                   <Box sx={{ mt: 1, mb: 1 }}>
-                    <Typography variant="caption"
+                    <Box
                       onClick={() => setExpandedGroups(prev => {
                         const next = new Set(prev)
                         expanded ? next.delete(key) : next.add(key)
                         return next
                       })}
-                      sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}>
-                      {expanded ? 'Show less ↑' : `Show all ${list.length} ↓`}
-                    </Typography>
+                      sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                    >
+                      <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                        {expanded ? 'Show less ↑' : `Show all ${list.length} ↓`}
+                      </Typography>
+                    </Box>
                   </Box>
                 )
               }
@@ -920,7 +978,7 @@ export default function BudgetGoals({ onSaved }) {
                           {m.name}
                         </Typography>
                         {m.budget_limit > 0 && (
-                          <Typography variant="caption" color="text.secondary">— ${m.budget_limit.toFixed(0)} ceiling</Typography>
+                          <Typography variant="body2" color="text.secondary">— ${m.budget_limit.toFixed(0)} ceiling</Typography>
                         )}
                       </Stack>
                       <Stack direction="row" flexWrap="wrap" gap={2}>
@@ -953,10 +1011,14 @@ export default function BudgetGoals({ onSaved }) {
                 </Stack>
                 {sorted.length > CARD_LIMIT && (
                   <Box sx={{ mb: 3 }}>
-                    <Typography variant="caption" onClick={() => setShowAllCategories(v => !v)}
-                      sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}>
-                      {showAllCategories ? 'Show less ↑' : `Show all ${sorted.length} categories ↓`}
-                    </Typography>
+                    <Box
+                      onClick={() => setShowAllCategories(v => !v)}
+                      sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                    >
+                      <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                        {showAllCategories ? 'Show less ↑' : `Show all ${sorted.length} categories ↓`}
+                      </Typography>
+                    </Box>
                   </Box>
                 )}
               </>

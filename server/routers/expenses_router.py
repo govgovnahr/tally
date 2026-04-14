@@ -14,8 +14,14 @@ def _valid_type_names(conn):
     return [row["name"] for row in cursor.fetchall()]
 
 
+_ALLOWED_SORT = {"name", "date", "amount"}
+
 @router.get("/expenses")
-def get_expenses(type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None, page: int = 1, page_size: int = 50):
+def get_expenses(type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None,
+                 page: int = 1, page_size: int = 50, search: Optional[str] = None,
+                 sort_by: str = "date", sort_dir: str = "desc"):
+    col = sort_by if sort_by in _ALLOWED_SORT else "date"
+    direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
     conn = get_connection()
     cursor = conn.cursor()
     conditions = []
@@ -29,12 +35,15 @@ def get_expenses(type: Optional[str] = None, month: Optional[str] = None, macroc
     if month:
         conditions.append("strftime('%Y-%m', date) = ?")
         params.append(month)
+    if search:
+        conditions.append("name LIKE ?")
+        params.append(f"%{search}%")
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     cursor.execute(f"SELECT COUNT(*) FROM expenses {where}", params)
     total = cursor.fetchone()[0]
     offset = (page - 1) * page_size
     cursor.execute(
-        f"SELECT * FROM expenses {where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM expenses {where} ORDER BY {col} {direction}, created_at DESC LIMIT ? OFFSET ?",
         params + [page_size, offset],
     )
     rows = cursor.fetchall()

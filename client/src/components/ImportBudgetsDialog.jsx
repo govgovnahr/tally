@@ -23,6 +23,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import api from '../api.js'
+import { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } from '../menuStyles.js'
 
 const FIELDS = [
   { key: 'category',      label: 'Category',      required: true,  hint: 'The expense category name' },
@@ -250,9 +251,10 @@ export default function ImportBudgetsDialog({ onClose, onImported }) {
                 value={targetMonth}
                 label="Apply to month"
                 onChange={e => setTargetMonth(e.target.value)}
+                {...DROPDOWN_MENU_PROPS}
               >
                 {SELECTABLE_MONTHS.map(({ key, label }) => (
-                  <MenuItem key={key} value={key}>{label}</MenuItem>
+                  <MenuItem key={key} value={key} sx={DROPDOWN_ITEM_SX}>{label}</MenuItem>
                 ))}
               </Select>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, ml: 0.5 }}>

@@ -1,0 +1,258 @@
+import calendar
+import math
+from datetime import date
+from fastapi import APIRouter, Query
+from database import get_connection, get_avg_monthly_expenses, compute_budget_pacing
+
+router = APIRouter()
+
+
+def _current_month():
+    today = date.today()
+    return f"{today.year}-{today.month:02d}"
+
+
+def _months_range(n: int):
+    today = date.today()
+    months = []
+    for i in range(n - 1, -1, -1):
+        y = today.year
+        m = today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(f"{y}-{m:02d}")
+    return months
+
+
+def _effective_budgets_map(conn, month: str) -> dict:
+    """Return {type: monthly_limit} for the given month (overrides win over defaults)."""
+    defaults = {r["type"]: r["monthly_limit"]
+                for r in conn.execute("SELECT type, monthly_limit FROM budgets").fetchall()}
+    overrides = {r["type"]: r["monthly_limit"]
+                 for r in conn.execute(
+                     "SELECT type, monthly_limit FROM monthly_budgets WHERE month = ?", (month,)
+                 ).fetchall()}
+    return overrides if overrides else defaults
+
+
+@router.get("/analysis/pacing")
+def get_pacing(month: str = Query(...), lookback_months: int = Query(3)):
+    today = date.today()
+    cur_month = _current_month()
+    y, m = map(int, month.split("-"))
+    days_in_month = calendar.monthrange(y, m)[1]
+
+    if month > cur_month:
+        return {
+            "month": month,
+            "days_elapsed": 0,
+            "days_in_month": days_in_month,
+            "is_current_month": False,
+            "categories": [],
+        }
+
+    conn = get_connection()
+    pacing_rows = compute_budget_pacing(conn, month, lookback_months=lookback_months)
+    budgets = _effective_budgets_map(conn, month)
+    conn.close()
+
+    days_elapsed = today.day if month == cur_month else days_in_month
+
+    categories = []
+    for row in pacing_rows:
+        t = row["type"]
+        budget_limit = budgets.get(t)
+        projected = row["projected_spend"]
+
+        if not budget_limit or budget_limit <= 0 or projected is None:
+            status = "no_budget"
+        elif projected > budget_limit:
+            status = "over_budget"
+        elif projected > budget_limit * 0.9:
+            status = "at_risk"
+        else:
+            status = "on_track"
+
+        pacing_pct = None
+        if budget_limit and budget_limit > 0 and projected is not None:
+            pacing_pct = round(min((projected / budget_limit) * 100, 150), 1)
+
+        categories.append({
+            "type": t,
+            "spent": row["spent"],
+            "projected_spend": projected,
+            "budget_limit": budget_limit,
+            "pacing_pct": pacing_pct,
+            "status": status,
+        })
+
+    return {
+        "month": month,
+        "days_elapsed": days_elapsed,
+        "days_in_month": days_in_month,
+        "is_current_month": month == cur_month,
+        "categories": categories,
+    }
+
+
+@router.get("/analysis/category-stats")
+def get_category_stats(months: int = Query(6)):
+    """Per-category: avg monthly spend, over-budget frequency, trend, monthly breakdown."""
+    month_list = _months_range(months)
+    conn = get_connection()
+    placeholders = ",".join("?" * len(month_list))
+
+    rows = conn.execute(
+        f"SELECT strftime('%Y-%m', date) as month, type, COALESCE(SUM(amount), 0) as total "
+        f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders}) "
+        f"GROUP BY month, type",
+        month_list,
+    ).fetchall()
+    budget_map = {r["type"]: r["monthly_limit"]
+                  for r in conn.execute("SELECT type, monthly_limit FROM budgets").fetchall()}
+    conn.close()
+
+    by_type = {}
+    for row in rows:
+        t = row["type"]
+        if t not in by_type:
+            by_type[t] = {}
+        by_type[t][row["month"]] = round(row["total"], 2)
+
+    result = []
+    for t, month_totals in by_type.items():
+        monthly_vals = [month_totals.get(m, 0.0) for m in month_list]
+        non_zero = [v for v in monthly_vals if v > 0]
+        avg = round(sum(non_zero) / len(non_zero), 2) if non_zero else 0.0
+        budget_limit = budget_map.get(t)
+
+        months_over = 0
+        avg_overage = 0.0
+        if budget_limit and budget_limit > 0:
+            overages = [v - budget_limit for v in monthly_vals if v > budget_limit]
+            months_over = len(overages)
+            avg_overage = round(sum(overages) / len(overages), 2) if overages else 0.0
+
+        last = monthly_vals[-1]
+        if avg > 0:
+            trend = "up" if last > avg * 1.05 else ("down" if last < avg * 0.95 else "flat")
+        else:
+            trend = "flat"
+
+        result.append({
+            "type": t,
+            "avg_monthly": avg,
+            "last_month": round(last, 2),
+            "budget_limit": budget_limit,
+            "months_over": months_over,
+            "months_total": months,
+            "frequency_pct": round(months_over / months * 100, 1) if months > 0 else 0.0,
+            "avg_overage": avg_overage,
+            "trend": trend,
+            "monthly": [{"month": m, "total": month_totals.get(m, 0.0)} for m in month_list],
+        })
+
+    result.sort(key=lambda x: (x["frequency_pct"], x["avg_monthly"]), reverse=True)
+    return result
+
+
+@router.get("/analysis/outliers")
+def get_outliers(months: int = Query(3)):
+    """Individual expenses that are statistical outliers within their category."""
+    month_list = _months_range(months)
+    conn = get_connection()
+    placeholders = ",".join("?" * len(month_list))
+
+    expenses = conn.execute(
+        f"SELECT id, name, type, amount, date FROM expenses "
+        f"WHERE strftime('%Y-%m', date) IN ({placeholders}) ORDER BY date DESC",
+        month_list,
+    ).fetchall()
+    conn.close()
+
+    # Per-category stats
+    by_type: dict[str, list[float]] = {}
+    for e in expenses:
+        by_type.setdefault(e["type"], []).append(e["amount"])
+
+    type_stats = {}
+    for t, amounts in by_type.items():
+        n = len(amounts)
+        mean = sum(amounts) / n
+        std = math.sqrt(sum((a - mean) ** 2 for a in amounts) / n) if n > 1 else 0.0
+        type_stats[t] = {"mean": mean, "std": std, "n": n}
+
+    outliers = []
+    for e in expenses:
+        stats = type_stats.get(e["type"])
+        if not stats or stats["n"] < 3 or stats["std"] == 0:
+            continue
+        z = (e["amount"] - stats["mean"]) / stats["std"]
+        if z < 1.5:
+            continue
+        pct_above = round(((e["amount"] - stats["mean"]) / stats["mean"]) * 100) if stats["mean"] > 0 else 0
+        outliers.append({
+            "id": e["id"],
+            "name": e["name"],
+            "type": e["type"],
+            "amount": round(e["amount"], 2),
+            "date": e["date"][:10],
+            "category_avg": round(stats["mean"], 2),
+            "z_score": round(z, 2),
+            "pct_above_avg": int(pct_above),
+        })
+
+    outliers.sort(key=lambda x: x["z_score"], reverse=True)
+    return outliers[:15]
+
+
+@router.get("/analysis/avg-monthly-expenses")
+def get_avg_expenses(months: int = Query(3)):
+    conn = get_connection()
+    avg = get_avg_monthly_expenses(conn, months)
+    conn.close()
+    return {"avg_monthly_expenses": avg, "months": months}
+
+
+@router.get("/analysis/month-over-month")
+def get_month_over_month(months: int = Query(6)):
+    month_list = _months_range(months)
+    conn = get_connection()
+    placeholders = ",".join("?" * len(month_list))
+
+    expense_rows = conn.execute(
+        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        month_list,
+    ).fetchall()
+    expense_by_month = {r["month"]: round(r["total"], 2) for r in expense_rows}
+
+    income_rows = conn.execute(
+        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        month_list,
+    ).fetchall()
+    income_by_month = {r["month"]: round(r["total"], 2) for r in income_rows}
+    conn.close()
+
+    result = []
+    prev_spent = None
+    for mo in month_list:
+        total_spent = expense_by_month.get(mo, 0.0)
+        total_income = income_by_month.get(mo, 0.0)
+        net = round(total_income - total_spent, 2)
+        if prev_spent is not None and prev_spent > 0:
+            mom_change_pct = round(((total_spent - prev_spent) / prev_spent) * 100, 1)
+        else:
+            mom_change_pct = None
+        result.append({
+            "month": mo,
+            "total_spent": total_spent,
+            "total_income": total_income,
+            "net": net,
+            "mom_change_pct": mom_change_pct,
+        })
+        prev_spent = total_spent
+
+    return result

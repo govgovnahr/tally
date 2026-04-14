@@ -22,6 +22,7 @@ import TextField from '@mui/material/TextField'
 import CircularProgress from '@mui/material/CircularProgress'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import api from '../api.js'
+import SavingsLinkModal from './SavingsLinkModal.jsx'
 
 const IMPORT_FIELDS = [
   { key: 'name',         label: 'Name / Description',                                                required: true,  hint: null },
@@ -64,6 +65,7 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [results, setResults] = useState(null)
+  const [savingsModalOpen, setSavingsModalOpen] = useState(false)
   const fileInputRef = useRef(null)
 
   const fields = IMPORT_FIELDS
@@ -127,6 +129,9 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
       const res = await api.post('/import', fd)
       setResults(res.data)
       setStep(2)
+      if (res.data.savings_expenses?.length > 0) {
+        setSavingsModalOpen(true)
+      }
     } catch (e) {
       setError(e.response?.data?.detail || 'Import failed.')
     } finally {
@@ -269,6 +274,18 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
               {results.imported} record{results.imported !== 1 ? 's' : ''} imported
               {results.skipped > 0 && `, ${results.skipped} skipped`}.
             </Alert>
+            {results.savings_expenses?.length > 0 && (
+              <Alert
+                severity="info"
+                action={
+                  <Button size="small" color="inherit" onClick={() => setSavingsModalOpen(true)}>
+                    Assign
+                  </Button>
+                }
+              >
+                {results.savings_expenses.length} Savings transaction{results.savings_expenses.length !== 1 ? 's' : ''} — assign to goals
+              </Alert>
+            )}
 
             {results.errors.length > 0 && (
               <TableContainer sx={{ maxHeight: 240 }}>
@@ -318,6 +335,15 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
           </Button>
         )}
       </DialogActions>
+
+      {savingsModalOpen && results?.savings_expenses?.length > 0 && (
+        <SavingsLinkModal
+          open
+          expenses={results.savings_expenses}
+          onClose={() => setSavingsModalOpen(false)}
+          onDone={() => setSavingsModalOpen(false)}
+        />
+      )}
     </Dialog>
   )
 }

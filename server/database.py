@@ -1,6 +1,7 @@
 import sqlite3
 import uuid
 import os
+import calendar
 from datetime import datetime, date
 
 _DEFAULT_TYPES = [
@@ -118,6 +119,55 @@ def init_db():
     except Exception:
         pass  # column already exists
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS savings_goals (
+            id         TEXT PRIMARY KEY,
+            goal_type  TEXT NOT NULL,
+            name       TEXT NOT NULL,
+            target     REAL NOT NULL,
+            deadline   TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    # Migrations: savings_goals new columns
+    try:
+        cursor.execute("ALTER TABLE savings_goals ADD COLUMN allocation_pct REAL")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE savings_goals ADD COLUMN priority INTEGER")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE savings_goals ADD COLUMN paused INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE savings_goals ADD COLUMN color TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE savings_goals ADD COLUMN months_target INTEGER")
+    except Exception:
+        pass
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS savings_contributions (
+            id         TEXT PRIMARY KEY,
+            goal_id    TEXT NOT NULL,
+            amount     REAL NOT NULL,
+            date       TEXT NOT NULL,
+            note       TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    try:
+        cursor.execute("ALTER TABLE savings_contributions ADD COLUMN expense_id TEXT")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -207,6 +257,122 @@ def seed_income_recurring_forward(name: str, amount: float, source_month: str):
             )
     conn.commit()
     conn.close()
+
+
+def get_avg_monthly_expenses(conn, months: int = 3) -> float:
+    """Average monthly expenses over last N complete months (excludes current month)."""
+    today = date.today()
+    past_months = []
+    for i in range(months, 0, -1):
+        y = today.year
+        m = today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        past_months.append(f"{y}-{m:02d}")
+    if not past_months:
+        return 0.0
+    placeholders = ",".join("?" * len(past_months))
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount),0) as total "
+        f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        past_months,
+    )
+    expense_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
+    totals = [expense_by_month.get(m, 0.0) for m in past_months]
+    return round(sum(totals) / len(totals), 2)
+
+
+def compute_budget_pacing(conn, month: str, lookback_months: int = 3) -> list:
+    """Compute spending pacing per expense type for a given month.
+
+    For past months: returns spent amounts with projected_spend=None (nothing to project).
+    For current month: projected = spent_so_far + historical_daily_rate * remaining_days,
+      where historical_daily_rate comes from the past N complete months.
+      Falls back to current-pace extrapolation when no history exists for a category.
+    Returns [] for future months.
+    """
+    today = date.today()
+    cur_month = f"{today.year}-{today.month:02d}"
+
+    if month > cur_month:
+        return []
+
+    y, m = map(int, month.split("-"))
+    days_in_month = calendar.monthrange(y, m)[1]
+    is_current = month == cur_month
+    days_elapsed = today.day if is_current else days_in_month
+
+    cursor = conn.cursor()
+
+    # Actual spending in the target month
+    cursor.execute(
+        "SELECT type, COALESCE(SUM(amount), 0) as spent "
+        "FROM expenses WHERE strftime('%Y-%m', date) = ? GROUP BY type",
+        (month,),
+    )
+    month_spending = {row["type"]: round(row["spent"], 2) for row in cursor.fetchall()}
+
+    # Past months: no projection needed
+    if not is_current:
+        return [
+            {"type": t, "spent": s, "projected_spend": None,
+             "days_elapsed": days_elapsed, "days_in_month": days_in_month}
+            for t, s in month_spending.items()
+        ]
+
+    # Current month: build historical daily rate per category from past N complete months
+    past_months = []
+    for i in range(lookback_months, 0, -1):
+        py, pm = today.year, today.month - i
+        while pm <= 0:
+            pm += 12
+            py -= 1
+        past_months.append(f"{py}-{pm:02d}")
+
+    historical_daily: dict[str, float] = {}
+    if past_months:
+        placeholders = ",".join("?" * len(past_months))
+        cursor.execute(
+            f"SELECT type, strftime('%Y-%m', date) as mo, COALESCE(SUM(amount), 0) as total "
+            f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY type, mo",
+            past_months,
+        )
+        by_type: dict[str, dict] = {}
+        for row in cursor.fetchall():
+            by_type.setdefault(row["type"], {})[row["mo"]] = row["total"]
+
+        for t, month_totals in by_type.items():
+            total_days = sum(calendar.monthrange(*map(int, mo.split("-")))[1] for mo in past_months)
+            total_spent = sum(month_totals.get(mo, 0.0) for mo in past_months)
+            historical_daily[t] = total_spent / total_days if total_days > 0 else 0.0
+
+    remaining_days = days_in_month - days_elapsed
+    all_types = set(month_spending.keys()) | set(historical_daily.keys())
+
+    result = []
+    for t in all_types:
+        spent = month_spending.get(t, 0.0)
+        daily_rate = historical_daily.get(t)
+
+        if daily_rate is not None:
+            projected = round(spent + daily_rate * remaining_days, 2)
+        elif days_elapsed > 0:
+            # No history: fall back to extrapolating current pace
+            projected = round((spent / days_elapsed) * days_in_month, 2)
+        else:
+            projected = None
+
+        result.append({
+            "type": t,
+            "spent": round(spent, 2),
+            "projected_spend": projected,
+            "days_elapsed": days_elapsed,
+            "days_in_month": days_in_month,
+        })
+
+    return result
 
 
 def apply_recurring_incomes():

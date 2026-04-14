@@ -63,6 +63,7 @@ def update_type(type_id: str, body: NewExpenseType):
             raise HTTPException(status_code=409, detail="A category with that name already exists.")
         cursor.execute("UPDATE expenses SET type = ? WHERE type = ?", (name, old_name))
         cursor.execute("UPDATE budgets SET type = ? WHERE type = ?", (name, old_name))
+        cursor.execute("UPDATE monthly_budgets SET type = ? WHERE type = ?", (name, old_name))
     cursor.execute(
         "UPDATE expense_types SET name = ?, color = ?, icon = ?, macrocategory_id = ? WHERE id = ?",
         (name, body.color, body.icon, body.macrocategory_id, type_id),
@@ -105,6 +106,7 @@ def delete_type(type_id: str, reassign_to: Optional[str] = None):
             (target["name"], existing["name"]),
         )
     cursor.execute("DELETE FROM budgets WHERE type = ?", (existing["name"],))
+    cursor.execute("DELETE FROM monthly_budgets WHERE type = ?", (existing["name"],))
     cursor.execute("DELETE FROM expense_types WHERE id = ?", (type_id,))
     conn.commit()
     conn.close()

@@ -13,6 +13,9 @@ import ExpenseList from './components/ExpenseList.jsx'
 import MonthlyTrendsChart from './components/MonthlyTrendsChart.jsx'
 import BudgetSetup from './components/BudgetSetup.jsx'
 import BudgetGoals from './components/BudgetGoals.jsx'
+import SavingsPage from './components/SavingsPage.jsx'
+import MonthSelector from './components/MonthSelector.jsx'
+import AnalysisPage from './components/AnalysisPage.jsx'
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -53,11 +56,11 @@ function AppContent() {
           borderBottom: '1px solid rgba(240, 234, 214, 0.12)',
         }}
       >
-        <Toolbar sx={{ gap: 2 }}>
-          <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28 }} />
+        <Toolbar sx={{ gap: 2, px: { xs: 1, sm: 2 } }}>
+          <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
           <Typography
             variant="h6"
-            sx={{ fontWeight: 600, color: 'text.primary', flexGrow: 0, mr: 3 }}
+            sx={{ fontWeight: 600, color: 'text.primary', flexGrow: 0, mr: { xs: 0, sm: 2 }, display: { xs: 'none', sm: 'block' } }}
           >
             Budget Tracker
           </Typography>
@@ -65,6 +68,9 @@ function AppContent() {
             value={page}
             onChange={(_, val) => setPage(val)}
             textColor="inherit"
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
             TabIndicatorProps={{ style: { backgroundColor: '#8fb996' } }}
           >
             <Tab
@@ -82,6 +88,16 @@ function AppContent() {
               value="budgets"
               sx={{ color: page === 'budgets' ? 'primary.main' : 'text.secondary' }}
             />
+            <Tab
+              label="Savings"
+              value="savings"
+              sx={{ color: page === 'savings' ? 'primary.main' : 'text.secondary' }}
+            />
+            <Tab
+              label="Analysis"
+              value="analysis"
+              sx={{ color: page === 'analysis' ? 'primary.main' : 'text.secondary' }}
+            />
           </Tabs>
         </Toolbar>
       </AppBar>
@@ -96,10 +112,14 @@ function AppContent() {
       >
         {page === 'home' && (
           <>
+            <MonthSelector
+              selectedMonth={selectedMonth}
+              onMonthChange={setSelectedMonth}
+              refreshKey={refreshKey}
+            />
             <SummaryBar
               refreshKey={refreshKey}
               selectedMonth={selectedMonth}
-              onMonthChange={setSelectedMonth}
               activeType={activeType}
               onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
               activeMacro={activeMacro}
@@ -129,6 +149,12 @@ function AppContent() {
         )}
         {page === 'budgets' && (
           <BudgetGoals onSaved={refresh} />
+        )}
+        {page === 'savings' && (
+          <SavingsPage />
+        )}
+        {page === 'analysis' && (
+          <AnalysisPage />
         )}
       </Box>
     </Box>

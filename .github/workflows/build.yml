@@ -50,6 +50,9 @@ jobs:
             --hidden-import "routers.incomes_router" \
             --hidden-import "routers.import_router" \
             --hidden-import "routers.import_rules_router" \
+            --hidden-import "routers.macrocategories_router" \
+            --hidden-import "routers.savings_goals_router" \
+            --hidden-import "routers.analysis_router" \
             --collect-all "uvicorn" \
             --collect-all "fastapi" \
             --collect-all "openpyxl" \
@@ -71,6 +74,9 @@ jobs:
             --hidden-import "routers.incomes_router" `
             --hidden-import "routers.import_router" `
             --hidden-import "routers.import_rules_router" `
+            --hidden-import "routers.macrocategories_router" `
+            --hidden-import "routers.savings_goals_router" `
+            --hidden-import "routers.analysis_router" `
             --collect-all "uvicorn" `
             --collect-all "fastapi" `
             --collect-all "openpyxl" `

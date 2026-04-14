@@ -8,28 +8,31 @@ from models import Income, NewIncome
 router = APIRouter()
 
 
+_ALLOWED_SORT = {"name", "date", "amount"}
+
 @router.get("/incomes")
-def get_incomes(month: Optional[str] = None, page: int = 1, page_size: int = 50):
+def get_incomes(month: Optional[str] = None, page: int = 1, page_size: int = 50,
+                search: Optional[str] = None, sort_by: str = "date", sort_dir: str = "desc"):
+    col = sort_by if sort_by in _ALLOWED_SORT else "date"
+    direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
     conn = get_connection()
     cursor = conn.cursor()
+    conditions = []
+    params = []
     if month:
-        cursor.execute(
-            "SELECT COUNT(*) FROM incomes WHERE strftime('%Y-%m', date) = ?", (month,)
-        )
-        total = cursor.fetchone()[0]
-        offset = (page - 1) * page_size
-        cursor.execute(
-            "SELECT * FROM incomes WHERE strftime('%Y-%m', date) = ? ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
-            (month, page_size, offset),
-        )
-    else:
-        cursor.execute("SELECT COUNT(*) FROM incomes")
-        total = cursor.fetchone()[0]
-        offset = (page - 1) * page_size
-        cursor.execute(
-            "SELECT * FROM incomes ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
-            (page_size, offset),
-        )
+        conditions.append("strftime('%Y-%m', date) = ?")
+        params.append(month)
+    if search:
+        conditions.append("name LIKE ?")
+        params.append(f"%{search}%")
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    cursor.execute(f"SELECT COUNT(*) FROM incomes {where}", params)
+    total = cursor.fetchone()[0]
+    offset = (page - 1) * page_size
+    cursor.execute(
+        f"SELECT * FROM incomes {where} ORDER BY {col} {direction}, created_at DESC LIMIT ? OFFSET ?",
+        params + [page_size, offset],
+    )
     rows = cursor.fetchall()
     conn.close()
     return {"incomes": [vars(Income(**dict(r))) for r in rows], "total": total, "page": page, "page_size": page_size}

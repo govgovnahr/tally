@@ -336,6 +336,7 @@ async def import_records(
 
     imported = 0
     errors = []
+    savings_expenses = []
 
     for i, row in enumerate(data_rows, start=header_row + 2):
         try:
@@ -367,14 +368,28 @@ async def import_records(
             if row_type == "expense":
                 # Resolve expense type
                 raw_type = row.get(col_map.get("type", ""), "").strip() if col_map.get("type") else ""
-                if raw_type:
+
+                # Handle "Savings" type specially: auto-create the type if needed
+                if raw_type and raw_type.lower() == "savings":
+                    if "Savings" not in valid_types:
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO expense_types (id, name, color, icon, sort_order, is_default) VALUES (?,?,?,?,?,?)",
+                            (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1),
+                        )
+                        valid_types.append("Savings")
+                    expense_type = "Savings"
+                elif raw_type:
                     expense_type = _soft_match_type(raw_type, valid_types) or _infer_type(name, valid_types, rules)
                 else:
                     expense_type = _infer_type(name, valid_types, rules)
+
                 cursor.execute(
                     "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring) VALUES (?,?,?,?,?,?,?)",
                     (new_id, name, amount, expense_type, date_str, now, is_recurring),
                 )
+
+                if expense_type == "Savings":
+                    savings_expenses.append({"id": new_id, "name": name, "amount": amount, "date": date_str})
             else:
                 cursor.execute(
                     "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring) VALUES (?,?,?,?,?,?)",
@@ -389,4 +404,4 @@ async def import_records(
     conn.commit()
     conn.close()
 
-    return {"imported": imported, "skipped": len(errors), "errors": errors}
+    return {"imported": imported, "skipped": len(errors), "errors": errors, "savings_expenses": savings_expenses}

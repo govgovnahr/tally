@@ -15,6 +15,7 @@ import Alert from '@mui/material/Alert'
 import Stack from '@mui/material/Stack'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
+import SavingsLinkModal from './SavingsLinkModal.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -32,6 +33,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
   const [rulePattern, setRulePattern] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [savingsExpense, setSavingsExpense] = useState(null)
   // Track whether the type was set by auto-categorization (vs manually by the user)
   const typeAutoSet = useRef(!isEditing)
   const debounceTimer = useRef(null)
@@ -89,6 +91,10 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
         : await api.post('/expenses', payload)
       if (rememberRule && rulePattern.trim()) {
         await api.post('/import-rules', { pattern: rulePattern.trim(), expense_type: form.type })
+      }
+      if (!isEditing && form.type === 'Savings') {
+        setSavingsExpense(res.data)
+        return
       }
       onAdded(res.data)
       onClose()
@@ -191,7 +197,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
                       size="small"
                     />
                   }
-                  label="Remember this categorization for future imports"
+                  label="Learn from this edit"
                   sx={{ color: 'text.secondary' }}
                 />
                 {rememberRule && (
@@ -202,7 +208,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
                     fullWidth
                     size="small"
                     variant="outlined"
-                    helperText={`Future imports with "${rulePattern}" in the description will be set to ${form.type}`}
+                    helperText={`Transactions with "${rulePattern}" in the description will be set to: ${form.type}`}
                   />
                 )}
               </>
@@ -228,6 +234,15 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
           </Button>
         </DialogActions>
       </form>
+
+      {savingsExpense && (
+        <SavingsLinkModal
+          open
+          expenses={[savingsExpense]}
+          onClose={() => { setSavingsExpense(null); onAdded(savingsExpense); onClose() }}
+          onDone={() => { setSavingsExpense(null); onAdded(savingsExpense); onClose() }}
+        />
+      )}
     </Dialog>
   )
 }

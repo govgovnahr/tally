@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from database import get_connection
 from models import NewBudget
 from pydantic import BaseModel
@@ -23,20 +23,24 @@ def _month_range(months: int) -> list[str]:
 
 
 def _effective_budgets(conn, month: str) -> list[dict]:
-    """Return effective budget per type for a given month (override wins over default)."""
+    """Return effective budget per type for a given month.
+    If any override exists for the month, use ONLY the overrides for that month.
+    Otherwise fall back to defaults.
+    """
     defaults = {r["type"]: r["monthly_limit"]
                 for r in conn.execute("SELECT type, monthly_limit FROM budgets").fetchall()}
     overrides = {r["type"]: r["monthly_limit"]
                  for r in conn.execute(
                      "SELECT type, monthly_limit FROM monthly_budgets WHERE month = ?", (month,)
                  ).fetchall()}
+    if overrides:
+        return [
+            {"type": t, "monthly_limit": limit, "is_override": True}
+            for t, limit in overrides.items()
+        ]
     return [
-        {
-            "type": t,
-            "monthly_limit": overrides.get(t, defaults[t]),
-            "is_override": t in overrides,
-        }
-        for t in defaults
+        {"type": t, "monthly_limit": limit, "is_override": False}
+        for t, limit in defaults.items()
     ]
 
 
@@ -53,6 +57,11 @@ def get_budgets():
 @router.post("/budgets")
 def set_budgets(budgets: List[NewBudget]):
     conn = get_connection()
+    valid_types = {r["name"] for r in conn.execute("SELECT name FROM expense_types").fetchall()}
+    invalid = [b.type for b in budgets if b.type not in valid_types]
+    if invalid:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Unknown expense types: {invalid}")
     cursor = conn.cursor()
     for b in budgets:
         cursor.execute(
@@ -107,7 +116,7 @@ def get_effective_range(months: int = Query(6)):
     result = []
     for m in month_list:
         mo = overrides_by_month.get(m, {})
-        by_type = {t: mo.get(t, defaults[t]) for t in defaults}
+        by_type = dict(mo) if mo else dict(defaults)
         result.append({
             "month": m,
             "total": sum(by_type.values()),
@@ -142,6 +151,11 @@ class MonthlyOverridesPayload(BaseModel):
 @router.post("/budgets/monthly-overrides")
 def set_monthly_overrides(payload: MonthlyOverridesPayload):
     conn = get_connection()
+    valid_types = {r["name"] for r in conn.execute("SELECT name FROM expense_types").fetchall()}
+    invalid = [b.type for b in payload.budgets if b.type not in valid_types]
+    if invalid:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Unknown expense types: {invalid}")
     cursor = conn.cursor()
     for b in payload.budgets:
         cursor.execute(
@@ -160,3 +174,12 @@ def delete_monthly_overrides(month: str):
     conn.commit()
     conn.close()
     return {"deleted": month}
+
+
+@router.delete("/budgets/monthly-overrides/{month}/{type_name}")
+def delete_monthly_override_type(month: str, type_name: str):
+    conn = get_connection()
+    conn.execute("DELETE FROM monthly_budgets WHERE month = ? AND type = ?", (month, type_name))
+    conn.commit()
+    conn.close()
+    return {"deleted": type_name, "month": month}

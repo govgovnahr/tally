@@ -3,14 +3,13 @@ import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import LinearProgress from '@mui/material/LinearProgress'
+import Chip from '@mui/material/Chip'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Stack from '@mui/material/Stack'
 import IconButton from '@mui/material/IconButton'
 import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import AddIcon from '@mui/icons-material/Add'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
@@ -20,25 +19,17 @@ import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import SpendingChart from './SpendingChart.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
 
-function currentMonth() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function formatMonthLabel(m) {
-  const [y, mo] = m.split('-').map(Number)
-  return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-}
 
 const CARD_LIMIT = 9
 
-export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange, activeType, onTypeChange, activeMacro, onMacroChange }) {
+export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTypeChange, activeMacro, onMacroChange }) {
   const { typeMap } = useExpenseTypes()
   const [summary, setSummary] = useState([])
   const [budgets, setBudgets] = useState({})
-  const [availableMonths, setAvailableMonths] = useState([])
   const [totalIncome, setTotalIncome] = useState(0)
   const [macroSummary, setMacroSummary] = useState([])
+  const [pacing, setPacing] = useState({})
+  const [isCurrentMonth, setIsCurrentMonth] = useState(true)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [editingIncome, setEditingIncome] = useState(null)
   const [showAllCards, setShowAllCards] = useState(false)
@@ -47,29 +38,24 @@ export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange, a
     Promise.all([
       api.get('/expenses/summary', { params: { month: selectedMonth } }),
       api.get('/budgets/effective', { params: { month: selectedMonth } }),
-      api.get('/expenses/months'),
       api.get('/incomes/summary', { params: { month: selectedMonth } }),
       api.get('/macrocategories/summary', { params: { month: selectedMonth } }),
-    ]).then(([summaryRes, budgetsRes, monthsRes, incomeRes, macroRes]) => {
+      api.get('/analysis/pacing', { params: { month: selectedMonth, lookback_months: 3 } }),
+    ]).then(([summaryRes, budgetsRes, incomeRes, macroRes, pacingRes]) => {
       setSummary(summaryRes.data)
       const budgetMap = {}
       budgetsRes.data.forEach(b => { budgetMap[b.type] = b.monthly_limit })
       setBudgets(budgetMap)
-      const now = currentMonth()
-      const months = monthsRes.data.includes(now) ? monthsRes.data : [...monthsRes.data, now].sort()
-      setAvailableMonths(months)
       setTotalIncome(incomeRes.data.total)
       setMacroSummary(macroRes.data)
+      setPacing(Object.fromEntries((pacingRes.data.categories ?? []).map(c => [c.type, c])))
+      setIsCurrentMonth(pacingRes.data.is_current_month ?? true)
     })
   }, [selectedMonth])
 
   useEffect(() => {
     fetchData()
   }, [fetchData, refreshKey])
-
-  const idx = availableMonths.indexOf(selectedMonth)
-  const hasPrev = idx > 0
-  const hasNext = idx !== -1 && idx < availableMonths.length - 1
 
   const totalSpent = summary.reduce((sum, s) => sum + s.total, 0)
   const totalBudget = Object.values(budgets).reduce((sum, v) => sum + v, 0)
@@ -85,50 +71,13 @@ export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange, a
         bgcolor: 'background.paper',
         border: '1px solid rgba(240, 234, 214, 0.12)',
         borderRadius: 2,
-        p: 3,
+        p: { xs: 2, sm: 3 },
         mb: 3,
       }}
     >
       {/* Header row */}
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3}>
         <Box>
-          <Stack direction="row" alignItems="center" gap={0.5} sx={{ mb: 0.5 }}>
-            <IconButton
-              size="small"
-              onClick={() => onMonthChange(availableMonths[idx - 1])}
-              disabled={!hasPrev}
-              sx={{ color: 'text.secondary', p: 0.25, '&:hover': { color: 'text.primary' }, '&.Mui-disabled': { opacity: 0.2 } }}
-            >
-              <ChevronLeftIcon fontSize="small" />
-            </IconButton>
-            <Typography variant="body2" color="text.secondary">
-              {formatMonthLabel(selectedMonth)}
-            </Typography>
-            {selectedMonth > currentMonth() && (
-              <Typography
-                variant="caption"
-                sx={{
-                  px: 0.75, py: 0.1,
-                  bgcolor: 'rgba(240,234,214,0.08)',
-                  border: '1px solid rgba(240,234,214,0.15)',
-                  borderRadius: 1,
-                  color: 'text.secondary',
-                  fontSize: '0.7rem',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                projection
-              </Typography>
-            )}
-            <IconButton
-              size="small"
-              onClick={() => onMonthChange(availableMonths[idx + 1])}
-              disabled={!hasNext}
-              sx={{ color: 'text.secondary', p: 0.25, '&:hover': { color: 'text.primary' }, '&.Mui-disabled': { opacity: 0.2 } }}
-            >
-              <ChevronRightIcon fontSize="small" />
-            </IconButton>
-          </Stack>
           <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1 }}>
             ${totalSpent.toFixed(2)}
           </Typography>
@@ -138,38 +87,22 @@ export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange, a
             </Typography>
           )}
         </Box>
-        {grandPct !== null && (
-          <Box sx={{ width: 200, pt: 1 }}>
-            <LinearProgress
-              variant="determinate"
-              value={grandPct}
-              sx={{
-                height: 8,
-                borderRadius: 4,
-                bgcolor: 'rgba(240,234,214,0.1)',
-                '& .MuiLinearProgress-bar': {
-                  bgcolor: grandOver ? 'error.main' : 'primary.main',
-                  borderRadius: 4,
-                },
-              }}
-            />
+        {totalBudget > 0 && (
+          <Box sx={{ pt: 0.5, textAlign: 'right' }}>
             <Typography
-              variant="caption"
-              sx={{
-                mt: 0.5,
-                display: 'block',
-                textAlign: 'right',
-                color: grandOver ? 'error.main' : 'text.secondary',
-              }}
+              variant="h6"
+              sx={{ fontWeight: 700, color: grandOver ? 'error.main' : 'primary.main', lineHeight: 1.2 }}
             >
-              {grandOver ? 'Over budget' : `${Math.round(grandPct)}%`}
+              {grandOver
+                ? `$${(totalSpent - totalBudget).toFixed(2)} over budget`
+                : `$${(totalBudget - totalSpent).toFixed(2)} remaining`}
             </Typography>
           </Box>
         )}
       </Stack>
 
       {/* Income / Net row */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap">
         <Stack direction="row" gap={3} flexWrap="wrap">
           <Box>
             <Typography variant="caption" color="text.secondary">Income</Typography>
@@ -334,32 +267,56 @@ export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange, a
                     </Typography>
                   )}
                 </Typography>
-                {pct !== null && (
-                  <LinearProgress
-                    variant="determinate"
-                    value={pct}
-                    sx={{
-                      height: 4,
-                      borderRadius: 2,
-                      mb: 0.75,
-                      bgcolor: 'rgba(240,234,214,0.08)',
-                      '& .MuiLinearProgress-bar': {
-                        bgcolor: over ? 'error.main' : typeEntry.color,
-                        borderRadius: 2,
-                      },
-                    }}
-                  />
-                )}
+                {/* Two-tone bar: solid = actual spend (category color), ghost extension = projection */}
+                {pct !== null && (() => {
+                  const pac = pacing[s.type]
+                  const actuallyOver = limit > 0 && s.total > limit
+                  const solidColor = actuallyOver ? '#e07c7c' : typeEntry.color
+                  const statusColor = pac?.status === 'over_budget' ? '#e07c7c'
+                    : pac?.status === 'at_risk' ? '#f0c040'
+                    : typeEntry.color
+                  const projPct = isCurrentMonth && pac?.projected_spend != null && pac.projected_spend > s.total && limit > 0
+                    ? Math.min((pac.projected_spend / limit) * 100, 100)
+                    : null
+                  const ghostWidth = projPct !== null ? projPct - (pct ?? 0) : null
+                  return (
+                    <Box sx={{ position: 'relative', height: 4, borderRadius: 2, bgcolor: 'rgba(240,234,214,0.08)', mb: 0.75, overflow: 'hidden' }}>
+                      {ghostWidth !== null && ghostWidth > 0 && (
+                        <Box sx={{ position: 'absolute', top: 0, left: `${pct}%`, height: '100%', width: `${ghostWidth}%`, bgcolor: statusColor, opacity: 0.4, borderRadius: 2 }} />
+                      )}
+                      <Box sx={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct}%`, bgcolor: solidColor, borderRadius: 2 }} />
+                    </Box>
+                  )
+                })()}
                 <Stack direction="row" alignItems="center" justifyContent="space-between">
                   <Typography variant="caption" color="text.secondary">
                     {s.count} {s.count === 1 ? 'expense' : 'expenses'}
                   </Typography>
-                  {over && (
+                  {isCurrentMonth && pacing[s.type]?.status && pacing[s.type].status !== 'no_budget' ? (
+                    <Chip
+                      label={pacing[s.type].status === 'over_budget' ? `$${(pacing[s.type].projected_spend - limit).toFixed(0)} proj. over`
+                        : pacing[s.type].status === 'at_risk' ? 'at risk'
+                        : 'on track'}
+                      size="small"
+                      sx={{
+                        fontSize: '0.72rem', height: 20, fontWeight: 600,
+                        bgcolor: pacing[s.type].status === 'over_budget' ? '#e07c7c'
+                          : pacing[s.type].status === 'at_risk' ? '#f0c040'
+                          : '#8fb996',
+                        color: '#22252e',
+                      }}
+                    />
+                  ) : over ? (
                     <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>
                       ${(s.total - limit).toFixed(2)} over
                     </Typography>
-                  )}
+                  ) : null}
                 </Stack>
+                {isCurrentMonth && pacing[s.type]?.projected_spend != null && (
+                  <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                    → ${pacing[s.type].projected_spend.toFixed(2)} projected
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           )
@@ -371,13 +328,14 @@ export default function SummaryBar({ refreshKey, selectedMonth, onMonthChange, a
           )}
           {summary.length > CARD_LIMIT && (
             <Box sx={{ width: '100%' }}>
-              <Typography
-                variant="caption"
+              <Box
                 onClick={() => setShowAllCards(v => !v)}
-                sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}
+                sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
               >
-                {showAllCards ? 'Show less ↑' : `Show all ${summary.length} categories ↓`}
-              </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                  {showAllCards ? 'Show less ↑' : `Show all ${summary.length} categories ↓`}
+                </Typography>
+              </Box>
             </Box>
           )}
         </Stack>

@@ -9,7 +9,7 @@ import {
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 
-const MONTHS_TO_SHOW = 6
+const MONTH_OPTIONS = [6, 12, 24]
 const INCOME_COLOR = '#80cbc4'
 const TICK = { fill: 'rgba(240, 234, 214, 0.55)', fontSize: 12 }
 const AXIS_LINE = { stroke: 'rgba(240, 234, 214, 0.12)' }
@@ -85,6 +85,7 @@ function CustomTooltip({ active, payload, label, totalBudget, activeType, expens
 
 export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeType = 'All', onTypeChange, activeMacro, onMacroChange }) {
   const { expenseTypes, macroMap } = useExpenseTypes()
+  const [monthsToShow, setMonthsToShow] = useState(6)
   const [chartData, setChartData] = useState([])
   const [totalBudget, setTotalBudget] = useState(0)
   const [budgetByType, setBudgetByType] = useState({})
@@ -92,9 +93,9 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
 
   useEffect(() => {
     Promise.all([
-      api.get('/expenses/monthly-by-type', { params: { months: MONTHS_TO_SHOW } }),
-      api.get('/incomes/monthly-totals', { params: { months: MONTHS_TO_SHOW } }),
-      api.get('/budgets/effective-range', { params: { months: MONTHS_TO_SHOW } }),
+      api.get('/expenses/monthly-by-type', { params: { months: monthsToShow } }),
+      api.get('/incomes/monthly-totals', { params: { months: monthsToShow } }),
+      api.get('/budgets/effective-range', { params: { months: monthsToShow } }),
     ]).then(([byTypeRes, incomeRes, budgetsRes]) => {
       // budgetsRes.data: [{ month, total, by_type }]
       const budgetByMonth = Object.fromEntries(budgetsRes.data.map(r => [r.month, r]))
@@ -142,7 +143,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
 
       setChartData(built)
     })
-  }, [refreshKey, selectedMonth])
+  }, [refreshKey, selectedMonth, monthsToShow])
 
   if (chartData.length === 0) return null
   const hasAnyData = chartData.some(d =>
@@ -178,7 +179,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
         bgcolor: 'background.paper',
         border: '1px solid rgba(240, 234, 214, 0.12)',
         borderRadius: 2,
-        p: 3,
+        p: { xs: 2, sm: 3 },
         mb: 3,
       }}
     >
@@ -197,19 +198,49 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
             </Typography>
           )}
         </Typography>
-        {activeMacro ? (
-          <Typography variant="caption"
-            sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}
-            onClick={() => onMacroChange?.(null)}>
-            Clear group filter ×
-          </Typography>
-        ) : activeType !== 'All' && activeType !== 'Income' ? (
-          <Typography variant="caption"
-            sx={{ color: 'text.secondary', cursor: 'pointer', '&:hover': { color: 'text.primary' } }}
-            onClick={() => onTypeChange?.('All')}>
-            Clear filter ×
-          </Typography>
-        ) : null}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 0.25 }}>
+            {MONTH_OPTIONS.map(n => (
+              <Box
+                key={n}
+                onClick={() => setMonthsToShow(n)}
+                sx={{ minHeight: 40, minWidth: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: monthsToShow === n ? 600 : 400,
+                    color: monthsToShow === n ? 'primary.main' : 'text.disabled',
+                    '&:hover': { color: monthsToShow === n ? 'primary.main' : 'text.secondary' },
+                  }}
+                >
+                  {n}m
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          {activeMacro ? (
+            <Box
+              onClick={() => onMacroChange?.(null)}
+              sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+            >
+              <Typography variant="body2"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                Clear group filter ×
+              </Typography>
+            </Box>
+          ) : activeType !== 'All' && activeType !== 'Income' ? (
+            <Box
+              onClick={() => onTypeChange?.('All')}
+              sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+            >
+              <Typography variant="body2"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                Clear filter ×
+              </Typography>
+            </Box>
+          ) : null}
+        </Box>
       </Box>
 
       <ResponsiveContainer width="100%" height={300}>
