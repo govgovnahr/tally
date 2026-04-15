@@ -698,6 +698,7 @@ export default function BudgetGoals({ onSaved }) {
   const [saveError, setSaveError] = useState('')
   const [saved, setSaved] = useState(false)
 
+  const [defaultsOpen, setDefaultsOpen] = useState(true)
   const [showAllCategories, setShowAllCategories] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState(new Set())
   const [formOpen, setFormOpen] = useState(false)
@@ -809,9 +810,31 @@ export default function BudgetGoals({ onSaved }) {
         </Stack>
       </Stack>
 
-      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', my: 2.5 }} />
+      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', mt: 2.5 }} />
+
+      {/* Default limits sub-header (collapsible) */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        onClick={() => setDefaultsOpen(o => !o)}
+        sx={{ cursor: 'pointer', userSelect: 'none', py: 2 }}
+      >
+        <Box>
+          <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            Default Limits
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Monthly budget limits applied across all months.
+          </Typography>
+        </Box>
+        <IconButton size="small" sx={{ color: 'text.secondary' }}>
+          {defaultsOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+        </IconButton>
+      </Stack>
 
       {/* Category cards */}
+      <Collapse in={defaultsOpen}>
       {loadingBudgets ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>Loading…</Typography>
       ) : (
@@ -853,7 +876,7 @@ export default function BudgetGoals({ onSaved }) {
                           title="Edit category" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, p: 0.25 }}>
                           <EditOutlinedIcon sx={{ fontSize: 14 }} />
                         </IconButton>
-                        {!t.is_default && (
+                        {t.name !== 'Other' && (
                           <IconButton size="small" onClick={() => setDeleteTarget(t)}
                             title="Delete category" sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' }, p: 0.25 }}>
                             <DeleteOutlineIcon sx={{ fontSize: 14 }} />
@@ -1045,6 +1068,7 @@ export default function BudgetGoals({ onSaved }) {
           </Stack>
         </form>
       )}
+      </Collapse>
 
       {/* Monthly overrides */}
       <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} />

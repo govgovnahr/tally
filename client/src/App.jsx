@@ -5,7 +5,14 @@ import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
+import BottomNavigation from '@mui/material/BottomNavigation'
+import BottomNavigationAction from '@mui/material/BottomNavigationAction'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
+import HomeIcon from '@mui/icons-material/Home'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
+import SavingsIcon from '@mui/icons-material/Savings'
+import BarChartIcon from '@mui/icons-material/BarChart'
 import api from './api.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import SummaryBar from './components/SummaryBar.jsx'
@@ -60,7 +67,7 @@ function AppContent() {
           <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
           <Typography
             variant="h6"
-            sx={{ fontWeight: 600, color: 'text.primary', flexGrow: 0, mr: { xs: 0, sm: 2 }, display: { xs: 'none', sm: 'block' } }}
+            sx={{ fontWeight: 600, color: 'text.primary', flexGrow: 0, mr: { xs: 0, sm: 2 } }}
           >
             Budget Tracker
           </Typography>
@@ -72,35 +79,41 @@ function AppContent() {
             scrollButtons="auto"
             allowScrollButtonsMobile
             TabIndicatorProps={{ style: { backgroundColor: '#8fb996' } }}
+            sx={{ display: { xs: 'none', sm: 'flex' } }}
           >
-            <Tab
-              label="Overview"
-              value="home"
-              sx={{ color: page === 'home' ? 'primary.main' : 'text.secondary' }}
-            />
-            <Tab
-              label="All Expenses"
-              value="all-expenses"
-              sx={{ color: page === 'all-expenses' ? 'primary.main' : 'text.secondary' }}
-            />
-            <Tab
-              label="Budget Goals"
-              value="budgets"
-              sx={{ color: page === 'budgets' ? 'primary.main' : 'text.secondary' }}
-            />
-            <Tab
-              label="Savings"
-              value="savings"
-              sx={{ color: page === 'savings' ? 'primary.main' : 'text.secondary' }}
-            />
-            <Tab
-              label="Analysis"
-              value="analysis"
-              sx={{ color: page === 'analysis' ? 'primary.main' : 'text.secondary' }}
-            />
+            <Tab label="Overview" value="home" sx={{ color: page === 'home' ? 'primary.main' : 'text.secondary' }} />
+            <Tab label="All Expenses" value="all-expenses" sx={{ color: page === 'all-expenses' ? 'primary.main' : 'text.secondary' }} />
+            <Tab label="Budget Goals" value="budgets" sx={{ color: page === 'budgets' ? 'primary.main' : 'text.secondary' }} />
+            <Tab label="Savings" value="savings" sx={{ color: page === 'savings' ? 'primary.main' : 'text.secondary' }} />
+            <Tab label="Analysis" value="analysis" sx={{ color: page === 'analysis' ? 'primary.main' : 'text.secondary' }} />
           </Tabs>
         </Toolbar>
       </AppBar>
+      {/* Mobile bottom navigation */}
+      <BottomNavigation
+        value={page}
+        onChange={(_, val) => setPage(val)}
+        sx={{
+          display: { xs: 'flex', sm: 'none' },
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1100,
+          bgcolor: '#22252e',
+          borderTop: '1px solid rgba(240,234,214,0.12)',
+          '& .MuiBottomNavigationAction-root': { color: 'text.disabled', minWidth: 0, px: 0.5 },
+          '& .Mui-selected': { color: 'primary.main' },
+          '& .MuiBottomNavigationAction-label': { fontSize: '0.65rem' },
+        }}
+      >
+        <BottomNavigationAction label="Home" value="home" icon={<HomeIcon />} />
+        <BottomNavigationAction label="Expenses" value="all-expenses" icon={<ReceiptLongIcon />} />
+        <BottomNavigationAction label="Budgets" value="budgets" icon={<AccountBalanceIcon />} />
+        <BottomNavigationAction label="Savings" value="savings" icon={<SavingsIcon />} />
+        <BottomNavigationAction label="Analysis" value="analysis" icon={<BarChartIcon />} />
+      </BottomNavigation>
+
       <Box
         component="main"
         sx={{
@@ -108,6 +121,7 @@ function AppContent() {
           mx: 'auto',
           px: { xs: 2, sm: 3 },
           py: 3,
+          pb: { xs: 10, sm: 3 },
         }}
       >
         {page === 'home' && (

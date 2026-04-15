@@ -84,9 +84,9 @@ def delete_type(type_id: str, reassign_to: Optional[str] = None):
     if not existing:
         conn.close()
         raise HTTPException(status_code=404, detail="Category not found.")
-    if existing["is_default"]:
+    if existing["name"] == "Other":
         conn.close()
-        raise HTTPException(status_code=403, detail="Default categories cannot be deleted.")
+        raise HTTPException(status_code=403, detail="The 'Other' category cannot be deleted.")
     cursor.execute("SELECT COUNT(*) as count FROM expenses WHERE type = ?", (existing["name"],))
     count = cursor.fetchone()["count"]
     if count > 0 and not reassign_to:

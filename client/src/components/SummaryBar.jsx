@@ -10,9 +10,12 @@ import Stack from '@mui/material/Stack'
 import IconButton from '@mui/material/IconButton'
 import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
+import Collapse from '@mui/material/Collapse'
 import AddIcon from '@mui/icons-material/Add'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import api from '../api.js'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
@@ -33,6 +36,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [editingIncome, setEditingIncome] = useState(null)
   const [showAllCards, setShowAllCards] = useState(false)
+  const [categoriesOpen, setCategoriesOpen] = useState(true)
 
   const fetchData = useCallback(() => {
     Promise.all([
@@ -64,6 +68,11 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
   const net = totalIncome - totalSpent
   const hasIncome = totalIncome > 0
 
+  const totalProjected = isCurrentMonth
+    ? Object.values(pacing).reduce((sum, p) => sum + (p.projected_spend ?? p.spent ?? 0), 0)
+    : null
+  const projectedOver = totalBudget > 0 && totalProjected != null && totalProjected > totalBudget
+
   return (
     <Paper
       elevation={0}
@@ -86,6 +95,11 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
               of ${totalBudget.toFixed(2)} budget
             </Typography>
           )}
+          {totalProjected != null && totalBudget > 0 && (
+            <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
+              ${totalProjected.toFixed(2)} projected
+            </Typography>
+          )}
         </Box>
         {totalBudget > 0 && (
           <Box sx={{ pt: 0.5, textAlign: 'right' }}>
@@ -97,6 +111,13 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                 ? `$${(totalSpent - totalBudget).toFixed(2)} over budget`
                 : `$${(totalBudget - totalSpent).toFixed(2)} remaining`}
             </Typography>
+            {totalProjected != null && (
+              <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
+                {projectedOver
+                  ? `$${(totalProjected - totalBudget).toFixed(2)} proj. over`
+                  : `$${(totalBudget - totalProjected).toFixed(2)} proj. remaining`}
+              </Typography>
+            )}
           </Box>
         )}
       </Stack>
@@ -161,8 +182,8 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                     border: isSelected ? `1px solid ${m.color}` : '1px solid rgba(240,234,214,0.1)',
                     borderTop: `3px solid ${m.color}`,
                     borderRadius: 2,
-                    minWidth: 160,
-                    flex: '1 1 160px',
+                    minWidth: { xs: 0, sm: 160 },
+                    flex: { xs: '1 1 100%', sm: '1 1 160px' },
                     cursor: 'pointer',
                     transition: 'background-color 0.15s, border-color 0.15s',
                     '&:hover': { bgcolor: 'rgba(240,234,214,0.06)' },
@@ -204,6 +225,22 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
       )}
 
       {/* Category cards + chart */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        onClick={() => setCategoriesOpen(o => !o)}
+        sx={{ cursor: 'pointer', userSelect: 'none', mb: categoriesOpen ? 2 : 0 }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem' }}>
+          Categories
+        </Typography>
+        <IconButton size="small" sx={{ color: 'text.secondary' }}>
+          {categoriesOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+        </IconButton>
+      </Stack>
+
+      <Collapse in={categoriesOpen}>
       <Stack direction="row" alignItems="flex-start" gap={3} flexWrap="wrap">
         <Stack direction="row" flexWrap="wrap" gap={2} sx={{ flex: 1, minWidth: 280 }}>
         {[...summary].filter(s => !activeMacro || typeMap[s.type]?.macrocategory_id === activeMacro).sort((a, b) => {
@@ -230,8 +267,8 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                   : '1px solid rgba(240, 234, 214, 0.1)',
                 borderTop: `3px solid ${typeEntry.color}`,
                 borderRadius: 2,
-                minWidth: 150,
-                flex: '1 1 150px',
+                minWidth: { xs: 0, sm: 150 },
+                flex: { xs: '1 1 100%', sm: '1 1 150px' },
                 cursor: onTypeChange ? 'pointer' : 'default',
                 transition: 'background-color 0.15s, border-color 0.15s',
                 '&:hover': onTypeChange ? { bgcolor: 'rgba(240,234,214,0.06)' } : {},
@@ -340,7 +377,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
           )}
         </Stack>
 
-        <Box sx={{ flexShrink: 0, width: { xs: '100%', md: 340 } }}>
+        <Box sx={{ flexShrink: 0, width: { xs: '100%', md: 340 }, display: { xs: 'none', sm: 'block' } }}>
           <SpendingChart
             summary={[...summary].filter(s => !activeMacro || typeMap[s.type]?.macrocategory_id === activeMacro).sort((a, b) => {
               const pctA = budgets[a.type] > 0 ? a.total / budgets[a.type] : -1
@@ -351,6 +388,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
           />
         </Box>
       </Stack>
+      </Collapse>
 
       {showIncomeForm && (
         <AddIncomeForm

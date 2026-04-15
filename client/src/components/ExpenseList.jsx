@@ -22,6 +22,10 @@ import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
 import InputAdornment from '@mui/material/InputAdornment'
 import TableSortLabel from '@mui/material/TableSortLabel'
+import Tooltip from '@mui/material/Tooltip'
+import Divider from '@mui/material/Divider'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
@@ -51,6 +55,8 @@ function formatMonthLabel(m) {
 
 export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange }) {
   const { typeNames, typeMap, macroMap } = useExpenseTypes()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   // Controlled when propActiveType is provided (home page); internal otherwise (all-expenses page)
   const [internalType, setInternalType] = useState('All')
@@ -88,6 +94,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const [editingIncome, setEditingIncome] = useState(null)
   const [showImport, setShowImport] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [detailItem, setDetailItem] = useState(null)
+  const [detailIsIncome, setDetailIsIncome] = useState(false)
 
   const PAGE_SIZE = 50
 
@@ -192,7 +200,9 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               ? month ? `${formatMonthLabel(month)} · ${macroName}` : macroName
               : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
         </Typography>
-        <Stack direction="row" gap={1} flexWrap="wrap">
+
+        {/* Desktop header buttons (sm+) */}
+        <Stack direction="row" gap={1} sx={{ display: { xs: 'none', sm: 'flex' } }}>
           <Button
             variant="outlined"
             color="error"
@@ -230,6 +240,29 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               Add Expense
             </Button>
           )}
+        </Stack>
+
+        {/* Mobile header buttons (xs only) */}
+        <Stack direction="row" gap={0.5} sx={{ display: { xs: 'flex', sm: 'none' } }}>
+          <Tooltip title={month ? 'Clear Month' : 'Clear All'}>
+            <IconButton size="small" color="error" onClick={() => setShowClearConfirm(true)}>
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Import">
+            <IconButton size="small" onClick={() => setShowImport(true)} sx={{ color: 'text.secondary' }}>
+              <UploadFileIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={isIncome ? 'Add Income' : 'Add Expense'}>
+            <IconButton
+              size="small"
+              onClick={() => isIncome ? setShowIncomeForm(true) : setShowExpenseForm(true)}
+              sx={{ color: isIncome ? INCOME_COLOR : 'primary.main' }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Stack>
 
@@ -307,7 +340,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         />
       </Box>
 
-      {/* Content */}
+      {/* Content — mobile cards vs desktop table */}
       {isEmpty ? (
         <Box sx={{ py: 6, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
@@ -316,7 +349,54 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               : `No expenses${activeType !== 'All' ? ` in ${activeType}` : ''} yet`}
           </Typography>
         </Box>
+      ) : isMobile ? (
+        /* Mobile: tappable card list */
+        <Box>
+          {rows.map(row => (
+            <Box
+              key={row.id}
+              onClick={() => { setDetailItem(row); setDetailIsIncome(isIncome) }}
+              sx={{
+                px: 2,
+                py: 1.5,
+                borderBottom: '1px solid rgba(240,234,214,0.08)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' },
+                '&:active': { bgcolor: 'rgba(240,234,214,0.06)' },
+              }}
+            >
+              <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+                <Stack direction="row" alignItems="center" gap={0.75} sx={{ minWidth: 0, flexShrink: 1 }}>
+                  <Typography
+                    variant="body2"
+                    fontWeight={600}
+                    sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {row.name}
+                  </Typography>
+                  {row.is_recurring === 1 && <RepeatIcon sx={{ fontSize: 13, color: 'text.secondary', flexShrink: 0 }} />}
+                </Stack>
+                <Typography variant="body2" fontWeight={600} sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || '#a0a0a0', flexShrink: 0 }}>
+                  ${row.amount.toFixed(2)}
+                </Typography>
+              </Stack>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                <Chip
+                  label={isIncome ? 'Income' : row.type}
+                  variant="outlined"
+                  size="small"
+                  sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || '#a0a0a0', borderColor: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || '#a0a0a0', fontSize: '0.7rem', height: 20 }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {formatDate(row.date)}
+                </Typography>                                      
+              </Stack>     
+            </Box>
+          ))}
+        </Box>
       ) : (
+        /* Desktop: sortable table */
         <TableContainer>
           <Table size="small" sx={{ minWidth: 480 }}>
             <TableHead>
@@ -429,7 +509,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                     <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
                       {formatDate(e.date)}
                     </TableCell>
-                    <TableCell align="right" sx={{ color: 'text.primary', fontWeight: 500 }}>
+                    <TableCell align="right" sx={{ color: isIncome ? INCOME_COLOR : typeMap[e.type]?.color || 'text.primary', fontWeight: 500 }}>
                       ${e.amount.toFixed(2)}
                     </TableCell>
                     <TableCell align="center">
@@ -483,6 +563,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
           onImported={() => { setShowImport(false); onRefresh() }}
         />
       )}
+
+      {/* Clear confirmation dialog */}
       <Dialog
         open={showClearConfirm}
         onClose={() => setShowClearConfirm(false)}
@@ -504,6 +586,99 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
           <Button variant="text" color="inherit" onClick={() => setShowClearConfirm(false)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleClearAll}>
             {month ? 'Delete Month' : 'Delete Everything'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Transaction detail modal (mobile) */}
+      <Dialog
+        open={!!detailItem}
+        onClose={() => setDetailItem(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+              {detailItem?.name}
+            </Typography>
+            <IconButton size="small" onClick={() => setDetailItem(null)} sx={{ color: 'text.secondary' }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <Divider sx={{ borderColor: 'rgba(240,234,214,0.12)' }} />
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack gap={1.5}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="body2" color="text.secondary">Amount</Typography>
+              <Typography variant="body1" fontWeight={600}
+                sx={{ color: detailIsIncome ? INCOME_COLOR : 'text.primary' }}>
+                ${detailItem?.amount?.toFixed(2)}
+              </Typography>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="body2" color="text.secondary">Type</Typography>
+              {detailIsIncome ? (
+                <Chip label="Income" variant="outlined" size="small"
+                  sx={{ color: INCOME_COLOR, borderColor: INCOME_COLOR, fontSize: '0.75rem', height: 22 }} />
+              ) : (
+                <Chip
+                  label={detailItem?.type}
+                  variant="outlined"
+                  size="small"
+                  sx={{
+                    color: typeMap[detailItem?.type]?.color || '#a0a0a0',
+                    borderColor: typeMap[detailItem?.type]?.color || '#a0a0a0',
+                    fontSize: '0.75rem',
+                    height: 22,
+                  }}
+                />
+              )}
+            </Stack>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="body2" color="text.secondary">Date</Typography>
+              <Typography variant="body2" color="text.primary">
+                {detailItem?.date ? formatDate(detailItem.date) : ''}
+              </Typography>
+            </Stack>
+            {detailItem?.is_recurring === 1 && (
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="body2" color="text.secondary">Recurring</Typography>
+                <Stack direction="row" alignItems="center" gap={0.5}>
+                  <RepeatIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">Monthly</Typography>
+                </Stack>
+              </Stack>
+            )}
+          </Stack>
+        </DialogContent>
+        <Divider sx={{ borderColor: 'rgba(240,234,214,0.12)' }} />
+        <DialogActions sx={{ px: 2, py: 1.5, justifyContent: 'space-between' }}>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={() => {
+              if (detailIsIncome) handleDeleteIncome(detailItem.id)
+              else handleDeleteExpense(detailItem.id)
+              setDetailItem(null)
+            }}
+          >
+            Delete
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<EditOutlinedIcon />}
+            onClick={() => {
+              if (detailIsIncome) setEditingIncome(detailItem)
+              else setEditingExpense(detailItem)
+              setDetailItem(null)
+            }}
+            sx={detailIsIncome ? { bgcolor: INCOME_COLOR, '&:hover': { bgcolor: '#5fa8a2' } } : {}}
+          >
+            Edit
           </Button>
         </DialogActions>
       </Dialog>

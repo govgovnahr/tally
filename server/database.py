@@ -357,7 +357,9 @@ def compute_budget_pacing(conn, month: str, lookback_months: int = 3) -> list:
         daily_rate = historical_daily.get(t)
 
         if daily_rate is not None:
-            projected = round(spent + daily_rate * remaining_days, 2)
+            historical_monthly_avg = daily_rate * days_in_month
+            raw_projected = spent + daily_rate * remaining_days
+            projected = round(min(raw_projected, max(spent, historical_monthly_avg)), 2)
         elif days_elapsed > 0:
             # No history: fall back to extrapolating current pace
             projected = round((spent / days_elapsed) * days_in_month, 2)

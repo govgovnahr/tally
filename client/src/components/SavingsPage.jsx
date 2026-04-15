@@ -997,7 +997,7 @@ export default function SavingsPage() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
             gap: 2,
             mt: monthlyGoal ? 2 : 0,
           }}

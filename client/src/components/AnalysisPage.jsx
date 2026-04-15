@@ -315,7 +315,7 @@ function BudgetPerformanceSection({ months }) {
                       key={d.type}
                       sx={{ px: 2, py: 1.5, borderRadius: 2, bgcolor: 'rgba(240,234,214,0.03)', border: '1px solid rgba(240,234,214,0.07)' }}
                     >
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1} flexWrap="wrap" gap={1}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" mb={1} gap={0.5}>
                         <Stack direction="row" alignItems="center" gap={0.75}>
                           {IconComp && <IconComp sx={{ fontSize: 18, color: typeEntry.color }} />}
                           <Typography variant="body1" sx={{ fontWeight: 500, color: 'text.primary' }}>{d.type}</Typography>
@@ -395,32 +395,30 @@ function OutliersSection({ months }) {
                 key={e.id}
                 sx={{ px: 2, py: 1.5, borderRadius: 2, border: '1px solid rgba(240,234,214,0.07)', bgcolor: 'rgba(240,234,214,0.02)' }}
               >
-                <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2} flexWrap="wrap">
-                  <Stack direction="row" alignItems="flex-start" gap={1.5} sx={{ minWidth: 0, flex: 1 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} mb={0.5}>
+                  <Typography variant="body2" fontWeight={600} sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                    {e.name}
+                  </Typography>
+                  <Typography variant="body2" fontWeight={700} sx={{ color: 'text.primary', flexShrink: 0 }}>
+                    ${e.amount.toFixed(2)}
+                  </Typography>
+                </Stack>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" alignItems="center" gap={1} sx={{ minWidth: 0, flex: 1 }}>
                     <Chip
                       label={e.type}
                       size="small"
-                      sx={{ fontSize: '0.72rem', height: 22, bgcolor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44`, flexShrink: 0, mt: 0.25 }}
+                      sx={{ fontSize: '0.7rem', height: 20, bgcolor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44`, flexShrink: 0 }}
                     />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 500, color: 'text.primary', wordBreak: 'break-word' }}>
-                        {e.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                        {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)} in this category
-                      </Typography>
-                    </Box>
-                  </Stack>
-                  <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                      ${e.amount.toFixed(2)}
+                    <Typography variant="caption" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)}
                     </Typography>
-                    <Chip
-                      label={`+${e.pct_above_avg}%`}
-                      size="small"
-                      sx={{ fontSize: '0.72rem', height: 22, bgcolor: severity, color: '#22252e', fontWeight: 700 }}
-                    />
                   </Stack>
+                  <Chip
+                    label={`+${e.pct_above_avg}%`}
+                    size="small"
+                    sx={{ fontSize: '0.72rem', height: 22, bgcolor: severity, color: '#22252e', fontWeight: 700, flexShrink: 0, ml: 1 }}
+                  />
                 </Stack>
               </Box>
             )
