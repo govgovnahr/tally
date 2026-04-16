@@ -4,7 +4,7 @@ import ButtonBase from '@mui/material/ButtonBase'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { useC } from '../colors'
 
-export default function OutlierAlert({ count, onNavigate }) {
+export default function OutlierAlert({ count, onSeeDetails }) {
   const C = useC()
   return (
     <Box
@@ -29,7 +29,7 @@ export default function OutlierAlert({ count, onNavigate }) {
         </Typography>
       </Box>
       <ButtonBase
-        onClick={() => onNavigate('analysis')}
+        onClick={onSeeDetails}
         sx={{
           fontSize: '0.8rem',
           fontWeight: 600,

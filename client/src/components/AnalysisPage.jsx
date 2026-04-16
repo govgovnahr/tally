@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -6,12 +6,17 @@ import Stack from '@mui/material/Stack'
 import Chip from '@mui/material/Chip'
 import LinearProgress from '@mui/material/LinearProgress'
 import Divider from '@mui/material/Divider'
+import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
 import TrendingFlatIcon from '@mui/icons-material/TrendingFlat'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -26,10 +31,12 @@ import {
   Cell
 } from 'recharts'
 import api from '../api.js'
+import { useMenuStyles } from '../menuStyles.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import MonthSelector from './MonthSelector.jsx'
 import { useC } from '../colors'
+import AddExpenseForm from './AddExpenseForm.jsx'
 
 function currentMonth() {
   const now = new Date()
@@ -44,6 +51,17 @@ function shortMonth(ym) {
 function fmtDate(d) {
   const [y, m, day] = d.split('-').map(Number)
   return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function fmtMonth(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+}
+
+function monthsFromNow(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  const now = new Date()
+  return Math.max(1, (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m) + 1)
 }
 
 const STATUS_LABELS = {
@@ -367,23 +385,54 @@ function BudgetPerformanceSection({ months }) {
 
 // ─── Outliers Section ─────────────────────────────────────────────────────────
 
-function OutliersSection({ months }) {
+function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
   const C = useC()
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const { typeMap } = useExpenseTypes()
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAllOutliers, setShowAllOutliers] = useState(false)
+  const [editingExpense, setEditingExpense] = useState(null)
+  const [filterMonth, setFilterMonth] = useState(defaultMonth ?? '')
+  const [sortBy, setSortBy] = useState('date')
+  const [sortDir, setSortDir] = useState('desc')
+  const sectionRef = useRef(null)
 
   useEffect(() => {
+    if (defaultMonth) {
+      setFilterMonth(defaultMonth)
+      setTimeout(() => sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+    }
+  }, [defaultMonth])
+
+  const fetchMonths = defaultMonth ? Math.max(months, monthsFromNow(defaultMonth)) : months
+
+  const fetchOutliers = () => {
     setLoading(true)
-    setShowAllOutliers(false)
-    api.get('/analysis/outliers', { params: { months } })
+    api.get('/analysis/outliers', { params: { months: fetchMonths } })
       .then(r => setData(r.data))
       .finally(() => setLoading(false))
-  }, [months])
+  }
+
+  useEffect(() => {
+    setShowAllOutliers(false)
+    fetchOutliers()
+  }, [fetchMonths])
+
+  const availableMonths = [...new Set(data.map(e => e.date.slice(0, 7)))].sort().reverse()
+  const filtered = filterMonth ? data.filter(e => e.date.startsWith(filterMonth)) : data
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'amount') cmp = a.amount - b.amount
+    else if (sortBy === 'pct') cmp = a.pct_above_avg - b.pct_above_avg
+    else cmp = a.date.localeCompare(b.date)
+    return sortDir === 'desc' ? -cmp : cmp
+  })
 
   return (
+    <>
     <Paper
+      ref={sectionRef}
       elevation={0}
       sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
     >
@@ -393,19 +442,64 @@ function OutliersSection({ months }) {
           Unusual Expenses
         </Typography>
       </Stack>
-      <Typography variant="body2" color="text.secondary" mb={2.5}>
+      <Typography variant="body2" color="text.secondary" mb={2}>
         Individual expenses significantly above their category average
       </Typography>
-
+        {data.length > 0 && (                                                                                                                                                         
+          <Stack direction="row" gap={1.5} mb={2} flexWrap="wrap">                                                                                                                    
+            {availableMonths.length > 1 && (                                                                                                                                          
+              <Select
+                size="small"
+                value={filterMonth}
+                displayEmpty
+                onChange={e => {
+                  setFilterMonth(e.target.value)
+                  if (!e.target.value) onClearDefaultMonth?.()
+                }}
+                sx={{ fontSize: '0.8rem', minWidth: 160 }}
+                {...DROPDOWN_MENU_PROPS}
+              >
+                <MenuItem value="" sx={DROPDOWN_ITEM_SX}>All months</MenuItem>
+                {availableMonths.map(m => (
+                  <MenuItem key={m} value={m} sx={DROPDOWN_ITEM_SX}>{fmtMonth(m)}</MenuItem>
+                ))}
+              </Select>
+            )}
+            <Stack direction="row" alignItems="center" gap={0.5}>
+              <Select
+                size="small"
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                sx={{ fontSize: '0.8rem', minWidth: 140 }}
+                {...DROPDOWN_MENU_PROPS}
+              >
+                <MenuItem value="date" sx={DROPDOWN_ITEM_SX}>Date</MenuItem>
+                <MenuItem value="amount" sx={DROPDOWN_ITEM_SX}>Amount</MenuItem>
+                <MenuItem value="pct" sx={DROPDOWN_ITEM_SX}>Anomaly %</MenuItem>
+              </Select>
+              <IconButton
+                size="small"
+                onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+                sx={{ border: `1px solid`, borderColor: 'divider', borderRadius: 1, p: 0.5 }}
+              >
+                {sortDir === 'desc'
+                  ? <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+                  : <ArrowUpwardIcon sx={{ fontSize: 16 }} />}
+              </IconButton>
+            </Stack>                                                                                                                                                                 
+          </Stack>                                               
+        )}   
       {loading ? (
         <Typography variant="body2" color="text.secondary">Loading…</Typography>
-      ) : data.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          No unusual expenses detected in the selected period. Need at least 3 expenses per category to compute.
+          {data.length === 0
+            ? 'No unusual expenses detected in the selected period. Need at least 3 expenses per category to compute.'
+            : `No unusual expenses in ${fmtMonth(filterMonth)}.`}
         </Typography>
       ) : (
         <Stack spacing={1.5}>
-          {(showAllOutliers ? data : data.slice(0, 3)).map(e => {
+          {(showAllOutliers ? sorted : sorted.slice(0, 3)).map(e => {
             const typeEntry = typeMap[e.type] || { color: C.dimText }
             const severity = e.z_score >= 3 ? C.overBudget : e.z_score >= 2 ? C.atRisk : C.spent
             const typChipSx = { fontSize: '0.72rem', height: 22, bgcolor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44` }
@@ -413,7 +507,8 @@ function OutliersSection({ months }) {
             return (
               <Box
                 key={e.id}
-                sx={{ px: 2, py: 1.5, borderRadius: 2, border: '1px solid rgba(240,234,214,0.07)', bgcolor: 'rgba(240,234,214,0.02)' }}
+                onClick={() => setEditingExpense(e)}
+                sx={{ px: 2, py: 1.5, borderRadius: 2, border: '1px solid rgba(240,234,214,0.07)', bgcolor: 'rgba(240,234,214,0.02)', cursor: 'pointer', '&:hover': { bgcolor: `${typeEntry.color}66`, borderColor: 'rgba(240,234,214,0.18)' }, transition: 'background-color 0.15s, border-color 0.15s' }}
               >
                 {/* Desktop: name on top row (left-aligned), chip+date below — avoids fixed-width spacing */}
                 <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2} sx={{ display: { xs: 'none', sm: 'flex' } }}>
@@ -459,12 +554,20 @@ function OutliersSection({ months }) {
               </Box>
             )
           })}
-          {data.length > 3 && (
-            <ShowMoreToggle shown={showAllOutliers} total={data.length} label="expenses" onToggle={() => setShowAllOutliers(v => !v)} />
+          {sorted.length > 3 && (
+            <ShowMoreToggle shown={showAllOutliers} total={sorted.length} label="expenses" onToggle={() => setShowAllOutliers(v => !v)} />
           )}
         </Stack>
       )}
     </Paper>
+    {editingExpense && (
+      <AddExpenseForm
+        expense={editingExpense}
+        onClose={() => setEditingExpense(null)}
+        onAdded={() => { setEditingExpense(null); fetchOutliers() }}
+      />
+    )}
+  </>
   )
 }
 
@@ -543,7 +646,7 @@ function MonthOverMonthSection({ months }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AnalysisPage() {
+export default function AnalysisPage({ outlierMonth, onClearOutlierMonth }) {
   const toggleSx = useToggleSx()
   const [pacingMonth, setPacingMonth] = useState(currentMonth())
   const [historyMonths, setHistoryMonths] = useState(6)
@@ -574,7 +677,7 @@ export default function AnalysisPage() {
 
       <PacingSection month={pacingMonth} onMonthChange={setPacingMonth} />
       <BudgetPerformanceSection months={historyMonths} />
-      <OutliersSection months={historyMonths} />
+      <OutliersSection months={historyMonths} defaultMonth={outlierMonth} onClearDefaultMonth={onClearOutlierMonth} />
       <MonthOverMonthSection months={historyMonths} />
     </Box>
   )

@@ -46,6 +46,12 @@ function AppContent({ mode, onToggleMode }) {
   const [budgetsReady, setBudgetsReady] = useState(null)
   const [page, setPage] = useState('home')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const [outlierMonth, setOutlierMonth] = useState(null)
+
+  const handleNavigate = useCallback((pg, opts = {}) => {
+    setPage(pg)
+    if (opts.outlierMonth !== undefined) setOutlierMonth(opts.outlierMonth)
+  }, [])
 
   useEffect(() => {
     api.get('/budgets').then(res => {
@@ -249,11 +255,11 @@ function AppContent({ mode, onToggleMode }) {
             onMonthChange={setSelectedMonth}
             refreshKey={refreshKey}
             onRefresh={refresh}
-            onNavigate={setPage}
+            onNavigate={handleNavigate}
           />
         )}
         {page === 'analysis' && (
-          <AnalysisPage />
+          <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} />
         )}
         {page === 'savings' && (
           <SavingsPage />

@@ -237,7 +237,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
         sx={{ cursor: 'pointer', userSelect: 'none', mb: categoriesOpen ? 2 : 0 }}
       >
         <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem' }}>
-          Categories
+          All Categories
         </Typography>
         <IconButton size="small" sx={{ color: 'text.secondary' }}>
           {categoriesOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}

@@ -6,8 +6,6 @@ import Stack from '@mui/material/Stack'
 import LinearProgress from '@mui/material/LinearProgress'
 import Divider from '@mui/material/Divider'
 import Chip from '@mui/material/Chip'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
 import api from '../api.js'
 import { useC } from '../colors'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
@@ -21,7 +19,7 @@ import SavingsGoalsMini from './SavingsGoalsMini.jsx'
 
 function fmt(n) { return `$${n.toFixed(2)}` }
 
-function KPICard({ label, value, subtitle, subtitle2, color, icon, progress, progressColor }) {
+function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, icon, progress, progressColor }) {
   const C = useC()
   return (
     <Paper elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 2, p: { xs: 1.75, sm: 2.5 } }}>
@@ -39,7 +37,7 @@ function KPICard({ label, value, subtitle, subtitle2, color, icon, progress, pro
         </Typography>
       </Stack>
       {subtitle && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: 'block' }}>
+        <Typography variant="caption" sx={{ color: subtitleColor ?? 'text.secondary', mt: 0.25, display: 'block' }}>
           {subtitle}
         </Typography>
       )}
@@ -91,7 +89,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
       api.get('/expenses/summary', { params: { month: selectedMonth } }),
       api.get('/budgets/effective', { params: { month: selectedMonth } }),
       api.get('/incomes/summary', { params: { month: selectedMonth } }),
-      api.get('/analysis/outliers', { params: { months: 1 } }),
+      api.get('/analysis/outliers', { params: { months: 12 } }),
       api.get('/savings-goals'),
       api.get('/analysis/pacing', { params: { month: selectedMonth, lookback_months: 3 } }),
     ]).then(([summaryRes, budgetsRes, incomeRes, outliersRes, goalsRes, pacingRes]) => {
@@ -100,7 +98,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
       budgetsRes.data.forEach(b => { budgetMap[b.type] = b.monthly_limit })
       setBudgets(budgetMap)
       setTotalIncome(incomeRes.data.total)
-      setOutliers(outliersRes.data)
+      setOutliers(outliersRes.data.filter(e => e.date.startsWith(selectedMonth)))
       setGoals(goalsRes.data)
       setPacingCats(pacingRes.data.categories ?? [])
       setIsCurrentMonth(pacingRes.data.is_current_month ?? false)
@@ -118,6 +116,20 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
     ? pacingCats.reduce((s, c) => s + (c.projected_spend ?? c.spent ?? 0), 0)
     : null
 
+  const [yr, mo] = selectedMonth.split('-').map(Number)
+  const daysInMonth = new Date(yr, mo, 0).getDate()
+  const daysElapsed = isCurrentMonth ? Math.max(new Date().getDate(), 1) : daysInMonth
+  const dailyRate = daysElapsed > 0 ? totalSpent / daysElapsed : 0
+  const targetDailyRate = totalBudget > 0 ? totalBudget / daysInMonth : null
+
+  const needsAttention = pacingCats
+    .filter(c => c.status === 'over_budget' || (isCurrentMonth && c.status === 'at_risk'))
+    .sort((a, b) => {
+      if (a.status === 'over_budget' && b.status !== 'over_budget') return -1
+      if (b.status === 'over_budget' && a.status !== 'over_budget') return 1
+      return (b.spent / (b.budget_limit || 1)) - (a.spent / (a.budget_limit || 1))
+    })
+
   const spentColor = totalBudget > 0 && totalSpent > totalBudget ? C.overBudget : 'text.primary'
   const netColor = net >= 0 ? C.primary : C.overBudget
   const savingsColor = savingsRate == null ? 'text.secondary'
@@ -127,19 +139,13 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
   const budgetBarColor = totalSpent > totalBudget ? C.overBudget
     : totalBudget > 0 && totalSpent / totalBudget > 0.85 ? C.atRisk
     : C.primary
+  const rateColor = dailyRate == null || targetDailyRate == null ? 'text.secondary'
+    : dailyRate >= targetDailyRate ? C.overBudget
+    : dailyRate < targetDailyRate ? C.primary
+    : C.primary
 
   const activeGoals = goals.filter(g => !g.completed && !g.is_paused)
   const hasGoals = activeGoals.length > 0
-
-  // Budget status rows: sort by pct used desc, show top N
-  const budgetRows = [...pacingCats]
-    .filter(c => c.spent > 0 || (c.budget_limit ?? 0) > 0)
-    .sort((a, b) => {
-      const pA = (a.budget_limit ?? 0) > 0 ? a.spent / a.budget_limit : a.spent / 1e9
-      const pB = (b.budget_limit ?? 0) > 0 ? b.spent / b.budget_limit : b.spent / 1e9
-      return pB - pA
-    })
-    .slice(0, hasGoals ? 4 : 7)
 
   const handleTypeChange = t => { setActiveType(t); setActiveMacro(null) }
   const handleMacroChange = m => { setActiveMacro(m); setActiveType('All') }
@@ -154,7 +160,10 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
       <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} refreshKey={refreshKey} />
 
       {outliers.length > 0 && (
-        <OutlierAlert count={outliers.length} onNavigate={onNavigate} />
+        <OutlierAlert
+          count={outliers.length}
+          onSeeDetails={() => onNavigate('analysis', { outlierMonth: selectedMonth })}
+        />
       )}
 
       {/* KPI Row */}
@@ -169,17 +178,17 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
           progressColor={budgetBarColor}
         />
         <KPICard
-          label="Income"
+          label="Income / Net"
           value={fmt(totalIncome)}
           color={totalIncome > 0 ? C.income : 'text.secondary'}
+          subtitle={totalIncome > 0 ? `Net ${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}` : 'add income to track'}
+          subtitleColor={totalIncome > 0 ? netColor : undefined}
         />
         <KPICard
-          label="Net"
-          value={`${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}`}
-          color={netColor}
-          icon={net >= 0
-            ? <TrendingUpIcon sx={{ fontSize: 18, color: netColor }} />
-            : <TrendingDownIcon sx={{ fontSize: 18, color: netColor }} />}
+          label="Burn Rate"
+          value={dailyRate != null ? `$${dailyRate.toFixed(2)}/day` : '—'}
+          subtitle={targetDailyRate != null ? `Target: $${targetDailyRate.toFixed(2)}/day` : '-'}
+          color={rateColor}
         />
         <KPICard
           label="Savings Rate"
@@ -211,24 +220,24 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
             </>
           )}
 
-          <Typography variant="body2" sx={{ ...LABEL_SX, mb: 1.5 }}>Budget Status</Typography>
-          {budgetRows.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No budget data yet.</Typography>
+          <Typography variant="body2" sx={{ ...LABEL_SX, mb: 1.5 }}>{isCurrentMonth ? 'Needs Attention' : 'Over Budget'}</Typography>
+          {needsAttention.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {pacingCats.length === 0 ? 'No budget data yet.' : 'All categories on track.'}
+            </Typography>
           ) : (
             <Stack gap={1.25}>
-              {budgetRows.map(cat => {
+              {needsAttention.map(cat => {
                 const limit = cat.budget_limit ?? 0
                 const spent = cat.spent ?? 0
                 const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : null
                 const typeEntry = typeMap[cat.type] ?? {}
                 const catColor = typeEntry.color ?? C.dimText
-                const barColor = cat.status === 'over_budget' ? C.overBudget
-                  : cat.status === 'at_risk' ? C.atRisk
-                  : catColor
-                const statusLabel = cat.status === 'over_budget' ? 'over'
-                  : cat.status === 'at_risk' ? 'at risk'
-                  : cat.status === 'on_track' ? null
-                  : null
+                const barColor = cat.status === 'over_budget' ? C.overBudget : C.atRisk
+                const overBy = limit > 0 ? spent - limit : 0
+                const statusLabel = cat.status === 'at_risk' ? 'at risk'
+                  : !isCurrentMonth ? `+${fmt(overBy)} over`
+                  : 'proj. over'
 
                 return (
                   <Box key={cat.type}>
@@ -240,20 +249,18 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
                         </Typography>
                       </Stack>
                       <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0, ml: 1 }}>
-                        {statusLabel && (
-                          <Chip
-                            label={statusLabel}
-                            size="small"
-                            sx={{
-                              height: 18,
-                              fontSize: '0.68rem',
-                              fontWeight: 600,
-                              bgcolor: cat.status === 'over_budget' ? C.overBudget : C.atRisk,
-                              color: C.surface,
-                              '& .MuiChip-label': { px: 0.75 },
-                            }}
-                          />
-                        )}
+                        <Chip
+                          label={statusLabel}
+                          size="small"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            bgcolor: barColor,
+                            color: C.surface,
+                            '& .MuiChip-label': { px: 0.75 },
+                          }}
+                        />
                         <Typography variant="caption" color="text.secondary">
                           ${spent.toFixed(0)}{limit > 0 ? ` / $${limit.toFixed(0)}` : ''}
                         </Typography>

@@ -65,8 +65,11 @@ def get_pacing(month: str = Query(...), lookback_months: int = Query(3)):
         budget_limit = budgets.get(t)
         projected = row["projected_spend"]
 
-        if not budget_limit or budget_limit <= 0 or projected is None:
+        if not budget_limit or budget_limit <= 0:
             status = "no_budget"
+        elif projected is None:
+            # past month — no projection, compare actual spend
+            status = "over_budget" if row["spent"] > budget_limit else "on_track"
         elif projected > budget_limit:
             status = "over_budget"
         elif projected > budget_limit * 0.9:
