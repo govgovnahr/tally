@@ -23,11 +23,13 @@ import {
   CartesianGrid,
   ReferenceLine,
   Legend,
+  Cell
 } from 'recharts'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import MonthSelector from './MonthSelector.jsx'
+import { useC } from '../colors'
 
 function currentMonth() {
   const now = new Date()
@@ -44,13 +46,6 @@ function fmtDate(d) {
   return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-const STATUS_COLORS = {
-  on_track: '#8fb996',
-  at_risk: '#f0c040',
-  over_budget: '#e07c7c',
-  no_budget: 'rgba(240,234,214,0.25)',
-}
-
 const STATUS_LABELS = {
   on_track: 'On track',
   at_risk: 'At risk',
@@ -58,31 +53,39 @@ const STATUS_LABELS = {
   no_budget: 'No budget',
 }
 
-const TREND_ICON = {
-  up: <TrendingUpIcon sx={{ fontSize: 16, color: '#e07c7c' }} />,
-  down: <TrendingDownIcon sx={{ fontSize: 16, color: '#8fb996' }} />,
-  flat: <TrendingFlatIcon sx={{ fontSize: 16, color: 'text.disabled' }} />,
+function useStatusColors() {
+  const C = useC()
+  return {
+    on_track:    C.onTrack,
+    at_risk:     C.atRisk,
+    over_budget: C.overBudget,
+    no_budget:   C.noBudget,
+  }
 }
 
-// Shared toggle button style with adequate tap targets
-const toggleSx = {
-  '& .MuiToggleButton-root': {
-    color: 'text.secondary',
-    borderColor: 'rgba(240,234,214,0.15)',
-    fontSize: '0.8rem',
-    py: 0.75,
-    px: 1.5,
-    minHeight: 36,
-    '&.Mui-selected': { color: 'primary.main', bgcolor: 'rgba(143,185,150,0.1)' },
-  },
+function useToggleSx() {
+  const C = useC()
+  return {
+    '& .MuiToggleButton-root': {
+      color: 'text.secondary',
+      borderColor: C.borderLight,
+      fontSize: '0.8rem',
+      py: 0.75,
+      px: 1.5,
+      minHeight: 36,
+      '&.Mui-selected': { color: 'primary.main', bgcolor: C.primaryTint },
+    },
+  }
 }
 
 function StatusChip({ status }) {
+  const C = useC()
+  const STATUS_COLORS = useStatusColors()
   return (
     <Chip
       label={STATUS_LABELS[status]}
       size="small"
-      sx={{ fontSize: '0.72rem', height: 22, bgcolor: STATUS_COLORS[status], color: '#22252e', fontWeight: 600, flexShrink: 0 }}
+      sx={{ fontSize: '0.72rem', height: 22, bgcolor: STATUS_COLORS[status], color: C.surface, fontWeight: 600, flexShrink: 0 }}
     />
   )
 }
@@ -103,6 +106,9 @@ function ShowMoreToggle({ shown, total, label, onToggle }) {
 // ─── Pacing Section ───────────────────────────────────────────────────────────
 
 function PacingSection({ month, onMonthChange }) {
+  const C = useC()
+  const STATUS_COLORS = useStatusColors()
+  const toggleSx = useToggleSx()
   const { typeMap } = useExpenseTypes()
   const [lookbackMonths, setLookbackMonths] = useState(3)
   const [data, setData] = useState(null)
@@ -121,7 +127,7 @@ function PacingSection({ month, onMonthChange }) {
   return (
     <Paper
       elevation={0}
-      sx={{ bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)', borderRadius: 2, p: { xs: 2, sm: 3 } }}
+      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 } }}
     >
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={2.5} flexWrap="wrap" gap={2}>
         <Box>
@@ -181,7 +187,7 @@ function PacingSection({ month, onMonthChange }) {
             })
             .slice(0, showAllPacing ? undefined : 3)
             .map(cat => {
-              const typeEntry = typeMap[cat.type] || { color: '#a0a0a0', icon: null }
+              const typeEntry = typeMap[cat.type] || { color: C.dimText, icon: null }
               const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
               const statusColor = STATUS_COLORS[cat.status]
               const actuallyOver = cat.budget_limit && cat.spent > cat.budget_limit
@@ -219,7 +225,7 @@ function PacingSection({ month, onMonthChange }) {
                       )}
                     </Stack>
                   </Stack>
-                  <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: 'rgba(240,234,214,0.08)', overflow: 'hidden' }}>
+                  <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: C.hoverStrong, overflow: 'hidden' }}>
                     {ghostWidth !== null && ghostWidth > 0 && (
                       <Box sx={{
                         position: 'absolute', top: 0, left: `${spentPct}%`,
@@ -231,7 +237,7 @@ function PacingSection({ month, onMonthChange }) {
                       <Box sx={{
                         position: 'absolute', top: 0, left: 0, height: '100%',
                         width: `${spentPct}%`,
-                        bgcolor: actuallyOver ? '#e07c7c' : typeEntry.color,
+                        bgcolor: actuallyOver ? C.overBudget : typeEntry.color,
                         borderRadius: 3,
                       }} />
                     )}
@@ -254,10 +260,18 @@ function PacingSection({ month, onMonthChange }) {
 // ─── Budget Performance Section ───────────────────────────────────────────────
 
 function BudgetPerformanceSection({ months }) {
+  const C = useC()
+  const TREND_ICON = {
+    up:   <TrendingUpIcon sx={{ fontSize: 16, color: C.trendUp }} />,
+    down: <TrendingDownIcon sx={{ fontSize: 16, color: C.trendDown }} />,
+    flat: <TrendingFlatIcon sx={{ fontSize: 16, color: 'text.disabled' }} />,
+  }
   const { typeMap } = useExpenseTypes()
   const [data, setData] = useState([])
+  const [showAllOffenders, setShowAllOffenders] = useState(false)
 
   useEffect(() => {
+    setShowAllOffenders(false)
     api.get('/analysis/category-stats', { params: { months } }).then(r => setData(r.data))
   }, [months])
 
@@ -271,7 +285,7 @@ function BudgetPerformanceSection({ months }) {
   return (
     <Paper
       elevation={0}
-      sx={{ bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)', borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
+      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
     >
       <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5, fontSize: { xs: '1rem', sm: '1.1rem' } }}>
         Budget Performance
@@ -286,36 +300,36 @@ function BudgetPerformanceSection({ months }) {
         <>
           <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 30)}>
             <ComposedChart data={chartData} layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(240,234,214,0.06)" horizontal={false} />
-              <XAxis type="number" tick={{ fill: '#a0a0a0', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
-              <YAxis type="category" dataKey="type" tick={{ fill: '#c0c0c0', fontSize: 12 }} axisLine={false} tickLine={false} width={90} />
+              <CartesianGrid strokeDasharray="3 3" stroke={C.gridLine} horizontal={false} />
+              <XAxis type="number" tick={{ fill: C.dimText, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+              <YAxis type="category" dataKey="type" tick={{ fill: C.tickLight, fontSize: 12 }} axisLine={false} tickLine={false} width={90} />
               <Tooltip
-                contentStyle={{ background: '#2c2f3a', border: '1px solid rgba(240,234,214,0.12)', borderRadius: 8, fontSize: 13 }}
-                labelStyle={{ color: '#f0ead6' }}
+                contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }}
+                labelStyle={{ color: C.warmText }}
                 formatter={(val, name) => [`$${Number(val).toFixed(2)}`, name]}
               />
-              <Bar dataKey="avg" name="Avg spend" fill="#82b4e0" radius={[0, 3, 3, 0]} barSize={12} />
-              <Bar dataKey="budget" name="Budget" fill="rgba(240,234,214,0.12)" radius={[0, 3, 3, 0]} barSize={12} />
+              <Bar dataKey="avg" name="Avg spend" fill={C.spent} radius={[0, 3, 3, 0]} barSize={12} />
+              <Bar dataKey="budget" name="Budget" fill={C.border} radius={[0, 3, 3, 0]} barSize={12} />
             </ComposedChart>
           </ResponsiveContainer>
 
           {offenders.length > 0 && (
             <>
-              <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', my: 2.5 }} />
+              <Divider sx={{ borderColor: C.hoverStrong, my: 2.5 }} />
               <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary', mb: 1.5 }}>
                 Most often over budget
               </Typography>
               <Stack spacing={1.5}>
-                {offenders.map(d => {
-                  const typeEntry = typeMap[d.type] || { color: '#a0a0a0', icon: null }
+                {(showAllOffenders ? offenders : offenders.slice(0, 3)).map(d => {
+                  const typeEntry = typeMap[d.type] || { color: C.dimText, icon: null }
                   const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
-                  const freqColor = d.frequency_pct >= 66 ? '#e07c7c' : d.frequency_pct >= 33 ? '#f0c040' : '#8fb996'
+                  const freqColor = d.frequency_pct >= 66 ? C.overBudget : d.frequency_pct >= 33 ? C.atRisk : C.onTrack
                   return (
                     <Box
                       key={d.type}
                       sx={{ px: 2, py: 1.5, borderRadius: 2, bgcolor: 'rgba(240,234,214,0.03)', border: '1px solid rgba(240,234,214,0.07)' }}
                     >
-                      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" mb={1} gap={0.5}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1} flexWrap="wrap" gap={1}>
                         <Stack direction="row" alignItems="center" gap={0.75}>
                           {IconComp && <IconComp sx={{ fontSize: 18, color: typeEntry.color }} />}
                           <Typography variant="body1" sx={{ fontWeight: 500, color: 'text.primary' }}>{d.type}</Typography>
@@ -325,7 +339,7 @@ function BudgetPerformanceSection({ months }) {
                           <Typography variant="body2" color="text.secondary">
                             {d.months_over}/{d.months_total} months over
                           </Typography>
-                          <Typography variant="body2" sx={{ color: '#e07c7c', fontWeight: 600 }}>
+                          <Typography variant="body2" sx={{ color: C.overBudget, fontWeight: 600 }}>
                             +${d.avg_overage.toFixed(0)} avg
                           </Typography>
                         </Stack>
@@ -333,12 +347,15 @@ function BudgetPerformanceSection({ months }) {
                       <LinearProgress
                         variant="determinate"
                         value={d.frequency_pct}
-                        sx={{ height: 5, borderRadius: 2.5, bgcolor: 'rgba(240,234,214,0.08)',
+                        sx={{ height: 5, borderRadius: 2.5, bgcolor: C.hoverStrong,
                           '& .MuiLinearProgress-bar': { bgcolor: freqColor, borderRadius: 2.5 } }}
                       />
                     </Box>
                   )
                 })}
+                {offenders.length > 3 && (
+                  <ShowMoreToggle shown={showAllOffenders} total={offenders.length} label="offenders" onToggle={() => setShowAllOffenders(v => !v)} />
+                )}
               </Stack>
             </>
           )}
@@ -351,6 +368,7 @@ function BudgetPerformanceSection({ months }) {
 // ─── Outliers Section ─────────────────────────────────────────────────────────
 
 function OutliersSection({ months }) {
+  const C = useC()
   const { typeMap } = useExpenseTypes()
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -367,10 +385,10 @@ function OutliersSection({ months }) {
   return (
     <Paper
       elevation={0}
-      sx={{ bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)', borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
+      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
     >
       <Stack direction="row" alignItems="flex-start" gap={1} mb={0.5}>
-        <WarningAmberIcon sx={{ fontSize: 20, color: '#f0c040', mt: '2px' }} />
+        <WarningAmberIcon sx={{ fontSize: 20, color: C.atRisk, mt: '2px' }} />
         <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', fontSize: { xs: '1rem', sm: '1.1rem' } }}>
           Unusual Expenses
         </Typography>
@@ -388,38 +406,56 @@ function OutliersSection({ months }) {
       ) : (
         <Stack spacing={1.5}>
           {(showAllOutliers ? data : data.slice(0, 3)).map(e => {
-            const typeEntry = typeMap[e.type] || { color: '#a0a0a0' }
-            const severity = e.z_score >= 3 ? '#e07c7c' : e.z_score >= 2 ? '#f0c040' : '#82b4e0'
+            const typeEntry = typeMap[e.type] || { color: C.dimText }
+            const severity = e.z_score >= 3 ? C.overBudget : e.z_score >= 2 ? C.atRisk : C.spent
+            const typChipSx = { fontSize: '0.72rem', height: 22, bgcolor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44` }
+            const pctChipSx = { fontSize: '0.72rem', height: 22, bgcolor: severity, color: C.surface, fontWeight: 700 }
             return (
               <Box
                 key={e.id}
                 sx={{ px: 2, py: 1.5, borderRadius: 2, border: '1px solid rgba(240,234,214,0.07)', bgcolor: 'rgba(240,234,214,0.02)' }}
               >
-                <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} mb={0.5}>
-                  <Typography variant="body2" fontWeight={600} sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                    {e.name}
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700} sx={{ color: 'text.primary', flexShrink: 0 }}>
-                    ${e.amount.toFixed(2)}
-                  </Typography>
+                {/* Desktop: name on top row (left-aligned), chip+date below — avoids fixed-width spacing */}
+                <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="body1" sx={{ fontWeight: 500, color: 'text.primary', wordBreak: 'break-word' }}>
+                      {e.name}
+                    </Typography>
+                    <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
+                      <Chip label={e.type} size="small" sx={typChipSx} />
+                      <Typography variant="body2" color="text.secondary">
+                        {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)} in this category
+                      </Typography>
+                    </Stack>
+                  </Box>
+                  <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
+                    <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                      ${e.amount.toFixed(2)}
+                    </Typography>
+                    <Chip label={`+${e.pct_above_avg}%`} size="small" sx={pctChipSx} />
+                  </Stack>
                 </Stack>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Stack direction="row" alignItems="center" gap={1} sx={{ minWidth: 0, flex: 1 }}>
-                    <Chip
-                      label={e.type}
-                      size="small"
-                      sx={{ fontSize: '0.7rem', height: 20, bgcolor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44`, flexShrink: 0 }}
-                    />
-                    <Typography variant="caption" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+
+                {/* Mobile: ExpenseList-style card — name+amount row, then chip+date row */}
+                <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+                    <Typography variant="body2" fontWeight={600} sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
+                      {e.name}
+                    </Typography>
+                    <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0 }}>
+                      <Typography variant="body2" fontWeight={700} sx={{ color: 'text.primary' }}>
+                        ${e.amount.toFixed(2)}
+                      </Typography>
+                      <Chip label={`+${e.pct_above_avg}%`} size="small" sx={pctChipSx} />
+                    </Stack>
+                  </Stack>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                    <Chip label={e.type} size="small" sx={typChipSx} />
+                    <Typography variant="caption" color="text.secondary">
                       {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)}
                     </Typography>
                   </Stack>
-                  <Chip
-                    label={`+${e.pct_above_avg}%`}
-                    size="small"
-                    sx={{ fontSize: '0.72rem', height: 22, bgcolor: severity, color: '#22252e', fontWeight: 700, flexShrink: 0, ml: 1 }}
-                  />
-                </Stack>
+                </Box>
               </Box>
             )
           })}
@@ -435,6 +471,7 @@ function OutliersSection({ months }) {
 // ─── Month-over-Month Section ─────────────────────────────────────────────────
 
 function MonthOverMonthSection({ months }) {
+  const C = useC()
   const [data, setData] = useState([])
 
   useEffect(() => {
@@ -447,7 +484,7 @@ function MonthOverMonthSection({ months }) {
   return (
     <Paper
       elevation={0}
-      sx={{ bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)', borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3, mb: 3 }}
+      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3, mb: 3 }}
     >
       <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5, fontSize: { xs: '1rem', sm: '1.1rem' } }}>
         Monthly Trends
@@ -465,7 +502,7 @@ function MonthOverMonthSection({ months }) {
               key={d.month}
               label={`${shortMonth(d.month)} ${up ? '+' : ''}${d.mom_change_pct.toFixed(1)}%`}
               size="small"
-              sx={{ fontSize: '0.75rem', height: 24, color: up ? '#e07c7c' : '#8fb996', borderColor: up ? '#e07c7c' : '#8fb996' }}
+              sx={{ fontSize: '0.75rem', height: 24, color: up ? C.overBudget : C.onTrack, borderColor: up ? C.overBudget : C.onTrack }}
               variant="outlined"
             />
           )
@@ -477,21 +514,25 @@ function MonthOverMonthSection({ months }) {
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(240,234,214,0.06)" />
-            <XAxis dataKey="label" tick={{ fill: '#c0c0c0', fontSize: 12 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#a0a0a0', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+            <CartesianGrid strokeDasharray="3 3" stroke={C.gridLine} />
+            <XAxis dataKey="label" tick={{ fill: C.tickLight, fontSize: 12 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: C.dimText, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
             <Tooltip
-              contentStyle={{ background: '#2c2f3a', border: '1px solid rgba(240,234,214,0.12)', borderRadius: 8, fontSize: 13 }}
-              labelStyle={{ color: '#f0ead6' }}
+              contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }}
+              labelStyle={{ color: C.warmText }}
               formatter={(val, name) => [`$${Number(val).toFixed(2)}`, name]}
             />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#a0a0a0' }} />
-            <Bar dataKey="total_spent" name="Spent" fill="#82b4e0" radius={[3, 3, 0, 0]} />
-            <Line type="monotone" dataKey="total_income" name="Income" stroke="#80cbc4" strokeWidth={2} dot={{ r: 3, fill: '#80cbc4' }} />
-            <Line type="monotone" dataKey="net" name="Net" stroke="#8fb996" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2, fill: '#8fb996' }} />
+            <Legend wrapperStyle={{ fontSize: 12, color: C.dimText }} />
+            <Bar dataKey="total_spent" name="Spent" fill={C.netPositive} radius={[3, 3, 0, 0]} >
+              {chartData.map(entry => (
+                <Cell key={entry.id} fill={entry.net > 0 ? C.netPositive : C.netNegative}/>
+              ))}
+            </Bar>
+            <Line type="monotone" dataKey="total_income" name="Income" stroke={C.income} strokeWidth={2} dot={{ r: 3, fill: C.income }} />
+            <Line type="monotone" dataKey="net" name="Net" stroke={C.netLine} strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2, fill: C.netLine }} />
             {avgSpent > 0 && (
-              <ReferenceLine y={avgSpent} stroke="rgba(240,234,214,0.3)" strokeDasharray="4 4"
-                label={{ value: 'avg', fill: '#a0a0a0', fontSize: 11, position: 'insideTopRight' }} />
+              <ReferenceLine y={avgSpent} stroke={C.borderStrong} strokeDasharray="4 4"
+                label={{ value: 'avg', fill: C.dimText, fontSize: 11, position: 'insideTopRight' }} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -503,6 +544,7 @@ function MonthOverMonthSection({ months }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
+  const toggleSx = useToggleSx()
   const [pacingMonth, setPacingMonth] = useState(currentMonth())
   const [historyMonths, setHistoryMonths] = useState(6)
 

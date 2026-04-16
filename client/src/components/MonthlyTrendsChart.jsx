@@ -8,11 +8,9 @@ import {
 } from 'recharts'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
+import { useC } from '../colors'
 
 const MONTH_OPTIONS = [6, 12, 24]
-const INCOME_COLOR = '#80cbc4'
-const TICK = { fill: 'rgba(240, 234, 214, 0.55)', fontSize: 12 }
-const AXIS_LINE = { stroke: 'rgba(240, 234, 214, 0.12)' }
 
 function shortLabel(m) {
   const [y, mo] = m.split('-').map(Number)
@@ -30,6 +28,7 @@ function currentMonth() {
 }
 
 function CustomTooltip({ active, payload, label, totalBudget, activeType, expenseTypes }) {
+  const C = useC()
   if (!active || !payload?.length) return null
   const entry = payload[0]?.payload
   if (!entry) return null
@@ -44,8 +43,8 @@ function CustomTooltip({ active, payload, label, totalBudget, activeType, expens
 
   return (
     <Box sx={{
-      bgcolor: '#22252e',
-      border: '1px solid rgba(240,234,214,0.12)',
+      bgcolor: C.surface,
+      border: `1px solid ${C.border}`,
       borderRadius: 1,
       px: 1.5,
       py: 1,
@@ -70,7 +69,7 @@ function CustomTooltip({ active, payload, label, totalBudget, activeType, expens
         Total: ${activeType !== 'All' ? (entry[activeType] ?? 0).toFixed(2) : totalSpent.toFixed(2)}
       </Typography>
       {income > 0 && (
-        <Typography variant="caption" sx={{ display: 'block', color: INCOME_COLOR, mt: 0.25 }}>
+        <Typography variant="caption" sx={{ display: 'block', color: C.income, mt: 0.25 }}>
           Income: ${income.toFixed(2)}
         </Typography>
       )}
@@ -84,6 +83,10 @@ function CustomTooltip({ active, payload, label, totalBudget, activeType, expens
 }
 
 export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeType = 'All', onTypeChange, activeMacro, onMacroChange }) {
+  const C = useC()
+  const INCOME_COLOR = C.income
+  const TICK = { fill: C.muted, fontSize: 12 }
+  const AXIS_LINE = { stroke: C.border }
   const { expenseTypes, macroMap } = useExpenseTypes()
   const [monthsToShow, setMonthsToShow] = useState(6)
   const [chartData, setChartData] = useState([])
@@ -177,7 +180,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
       elevation={0}
       sx={{
         bgcolor: 'background.paper',
-        border: '1px solid rgba(240, 234, 214, 0.12)',
+        border: `1px solid ${C.border}`,
         borderRadius: 2,
         p: { xs: 2, sm: 3 },
         mb: 3,
@@ -261,7 +264,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                   x={props.x}
                   y={props.y + 10}
                   textAnchor="middle"
-                  fill={isFuture ? 'rgba(240,234,214,0.3)' : TICK.fill}
+                  fill={isFuture ? C.borderStrong : TICK.fill}
                   fontSize={TICK.fontSize}
                 >
                   {props.payload.value}
@@ -281,8 +284,8 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           {(() => {
             const isTypeFilter = activeType !== 'All' && activeType !== 'Income'
             const refColor = isTypeFilter
-              ? (expenseTypes.find(t => t.name === activeType)?.color ?? 'rgba(240,234,214,0.3)')
-              : 'rgba(240, 234, 214, 0.3)'
+              ? (expenseTypes.find(t => t.name === activeType)?.color ?? C.borderStrong)
+              : C.borderStrong
             const refBudget = isTypeFilter ? (budgetByType[activeType] ?? 0) : totalBudget
             if (refBudget <= 0) return null
             // When overrides exist, render as a varying Line; otherwise use a flat ReferenceLine
@@ -322,7 +325,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                 />
               )
             }}
-            cursor={{ fill: 'rgba(240,234,214,0.04)' }}
+            cursor={{ fill: C.hover }}
           />
 
           {/* Expense type bars — stacked when All; single bar when filtered */}
@@ -362,8 +365,8 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           {hasOverrides && (() => {
             const isTypeFilter = activeType !== 'All' && activeType !== 'Income'
             const refColor = isTypeFilter
-              ? (expenseTypes.find(t => t.name === activeType)?.color ?? 'rgba(240,234,214,0.5)')
-              : 'rgba(240, 234, 214, 0.5)'
+              ? (expenseTypes.find(t => t.name === activeType)?.color ?? C.muted)
+              : C.muted
             const refBudget = isTypeFilter ? (budgetByType[activeType] ?? 0) : totalBudget
             if (refBudget <= 0) return null
             return (
@@ -376,6 +379,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                 dot={false}
                 activeDot={false}
                 connectNulls
+                label={{value: 'Budget', fontSize: 11, position: 'insideTopRight'}}
               />
             )
           })()}

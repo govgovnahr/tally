@@ -19,13 +19,15 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import api from '../api.js'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
+import { useC } from '../colors'
 import SpendingChart from './SpendingChart.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
 
 
 const CARD_LIMIT = 9
 
-export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTypeChange, activeMacro, onMacroChange }) {
+export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTypeChange, activeMacro, onMacroChange, hideHeader = false, defaultCollapsed = false }) {
+  const C = useC()
   const { typeMap } = useExpenseTypes()
   const [summary, setSummary] = useState([])
   const [budgets, setBudgets] = useState({})
@@ -36,7 +38,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [editingIncome, setEditingIncome] = useState(null)
   const [showAllCards, setShowAllCards] = useState(false)
-  const [categoriesOpen, setCategoriesOpen] = useState(true)
+  const [categoriesOpen, setCategoriesOpen] = useState(!defaultCollapsed)
 
   const fetchData = useCallback(() => {
     Promise.all([
@@ -78,149 +80,151 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
       elevation={0}
       sx={{
         bgcolor: 'background.paper',
-        border: '1px solid rgba(240, 234, 214, 0.12)',
         borderRadius: 2,
         p: { xs: 2, sm: 3 },
         mb: 3,
       }}
     >
-      {/* Header row */}
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1 }}>
-            ${totalSpent.toFixed(2)}
-          </Typography>
-          {totalBudget > 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              of ${totalBudget.toFixed(2)} budget
-            </Typography>
-          )}
-          {totalProjected != null && totalBudget > 0 && (
-            <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
-              ${totalProjected.toFixed(2)} projected
-            </Typography>
-          )}
-        </Box>
-        {totalBudget > 0 && (
-          <Box sx={{ pt: 0.5, textAlign: 'right' }}>
-            <Typography
-              variant="h6"
-              sx={{ fontWeight: 700, color: grandOver ? 'error.main' : 'primary.main', lineHeight: 1.2 }}
-            >
-              {grandOver
-                ? `$${(totalSpent - totalBudget).toFixed(2)} over budget`
-                : `$${(totalBudget - totalSpent).toFixed(2)} remaining`}
-            </Typography>
-            {totalProjected != null && (
-              <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
-                {projectedOver
-                  ? `$${(totalProjected - totalBudget).toFixed(2)} proj. over`
-                  : `$${(totalBudget - totalProjected).toFixed(2)} proj. remaining`}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </Stack>
-
-      {/* Income / Net row */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap">
-        <Stack direction="row" gap={3} flexWrap="wrap">
-          <Box>
-            <Typography variant="caption" color="text.secondary">Income</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 600, color: hasIncome ? '#80cbc4' : 'text.secondary' }}>
-              ${totalIncome.toFixed(2)}
-            </Typography>
-          </Box>
-          {hasIncome && (
-            <Box>
-              <Typography variant="caption" color="text.secondary">Net</Typography>
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                {net >= 0
-                  ? <TrendingUpIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                  : <TrendingDownIcon sx={{ fontSize: 16, color: 'error.main' }} />
-                }
-                <Typography
-                  variant="body1"
-                  sx={{ fontWeight: 600, color: net >= 0 ? 'primary.main' : 'error.main' }}
-                >
-                  {net >= 0 ? '+' : '−'}${Math.abs(net).toFixed(2)}
-                </Typography>
-              </Stack>
-            </Box>
-          )}
-        </Stack>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={() => { setEditingIncome(null); setShowIncomeForm(true) }}
-          sx={{ fontWeight: 600, flexShrink: 0, borderColor: '#80cbc4', color: '#80cbc4',
-            '&:hover': { borderColor: '#80cbc4', bgcolor: 'rgba(128,203,196,0.08)' } }}
-        >
-          Add Income
-        </Button>
-      </Stack>
-
-      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', mb: 3 }} />
-
-      {/* Macrocategory summary cards */}
-      {macroSummary.length > 0 && (
+      {!hideHeader && (
         <>
-          <Stack direction="row" flexWrap="wrap" gap={2} mb={2}>
-            {macroSummary.map(m => {
-              const isSelected = activeMacro === m.id
-              const hasBudget = m.budget_limit > 0
-              const over = hasBudget && m.total > m.budget_limit
-              const pct = hasBudget ? Math.min((m.total / m.budget_limit) * 100, 100) : null
-              return (
-                <Card
-                  key={m.id}
-                  elevation={0}
-                  onClick={() => onMacroChange?.(isSelected ? null : m.id)}
-                  sx={{
-                    bgcolor: isSelected ? 'rgba(240,234,214,0.06)' : '#2c2f3a',
-                    border: isSelected ? `1px solid ${m.color}` : '1px solid rgba(240,234,214,0.1)',
-                    borderTop: `3px solid ${m.color}`,
-                    borderRadius: 2,
-                    minWidth: { xs: 0, sm: 160 },
-                    flex: { xs: '1 1 100%', sm: '1 1 160px' },
-                    cursor: 'pointer',
-                    transition: 'background-color 0.15s, border-color 0.15s',
-                    '&:hover': { bgcolor: 'rgba(240,234,214,0.06)' },
-                  }}
-                >
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                      {m.name}
+          {/* Header row */}
+          <Box sx={{
+            background: `linear-gradient(160deg, ${C.surfaceAlt} 0%, transparent 100%)`,
+            borderRadius: 2,
+            p: 2.5,
+            mb: 3,
+          }}>
+            <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3}>
+              <Box>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1 }}>
+                  ${totalSpent.toFixed(2)}
+                </Typography>
+                {totalBudget > 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    of ${totalBudget.toFixed(2)} budget
+                  </Typography>
+                )}
+                {totalProjected != null && totalBudget > 0 && (
+                  <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
+                    ${totalProjected.toFixed(2)} projected
+                  </Typography>
+                )}
+              </Box>
+              {totalBudget > 0 && (
+                <Box sx={{ pt: 0.5, textAlign: 'right' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: grandOver ? 'error.main' : 'primary.main', lineHeight: 1.2 }}>
+                    {grandOver
+                      ? `$${(totalSpent - totalBudget).toFixed(2)} over budget`
+                      : `$${(totalBudget - totalSpent).toFixed(2)} remaining`}
+                  </Typography>
+                  {totalProjected != null && (
+                    <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
+                      {projectedOver
+                        ? `$${(totalProjected - totalBudget).toFixed(2)} proj. over`
+                        : `$${(totalBudget - totalProjected).toFixed(2)} proj. remaining`}
                     </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 700, color: over ? 'error.main' : m.color, lineHeight: 1.2, mb: 0.5 }}>
-                      ${m.total.toFixed(2)}
-                      {hasBudget && (
-                        <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
-                          {' '}/ ${m.budget_limit.toFixed(0)}
-                        </Typography>
-                      )}
+                  )}
+                </Box>
+              )}
+            </Stack>
+          </Box>
+
+          {/* Income / Net row */}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap">
+            <Stack direction="row" gap={3} flexWrap="wrap">
+              <Box>
+                <Typography variant="caption" color="text.secondary">Income</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: hasIncome ? C.income : 'text.secondary' }}>
+                  ${totalIncome.toFixed(2)}
+                </Typography>
+              </Box>
+              {hasIncome && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Net</Typography>
+                  <Stack direction="row" alignItems="center" gap={0.5}>
+                    {net >= 0
+                      ? <TrendingUpIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                      : <TrendingDownIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                    }
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: net >= 0 ? 'primary.main' : 'error.main' }}>
+                      {net >= 0 ? '+' : '−'}${Math.abs(net).toFixed(2)}
                     </Typography>
-                    {pct !== null && (
-                      <LinearProgress
-                        variant="determinate"
-                        value={pct}
-                        sx={{
-                          height: 4, borderRadius: 2, mb: 0.75,
-                          bgcolor: 'rgba(240,234,214,0.08)',
-                          '& .MuiLinearProgress-bar': { bgcolor: over ? 'error.main' : m.color, borderRadius: 2 },
-                        }}
-                      />
-                    )}
-                    <Typography variant="caption" color="text.secondary">
-                      {m.count} {m.count === 1 ? 'expense' : 'expenses'}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => { setEditingIncome(null); setShowIncomeForm(true) }}
+              sx={{ fontWeight: 600, flexShrink: 0, borderColor: C.incomeButtonBg, color: C.incomeButtonBg,
+                '&:hover': { borderColor: C.incomeButtonBg, bgcolor: C.incomeButtonHoverBg } }}
+            >
+              Add Income
+            </Button>
           </Stack>
-          <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', mb: 3 }} />
+
+          <Divider sx={{ borderColor: C.hoverStrong, mb: 3 }} />
+
+          {/* Macrocategory summary cards */}
+          {macroSummary.length > 0 && (
+            <>
+              <Stack direction="row" flexWrap="wrap" gap={2} mb={2}>
+                {macroSummary.map(m => {
+                  const isSelected = activeMacro === m.id
+                  const hasBudget = m.budget_limit > 0
+                  const over = hasBudget && m.total > m.budget_limit
+                  const pct = hasBudget ? Math.min((m.total / m.budget_limit) * 100, 100) : null
+                  return (
+                    <Card
+                      key={m.id}
+                      elevation={0}
+                      onClick={() => onMacroChange?.(isSelected ? null : m.id)}
+                      sx={{
+                        bgcolor: isSelected ? `${m.color}${C.cardTintSelectedAlpha}` : `${m.color}${C.cardTintAlpha}`,
+                        border: isSelected ? `1.5px solid ${m.color}` : `1px solid ${m.color}${C.cardBorderAlpha}`,
+                        minWidth: { xs: 0, sm: 160 },
+                        flex: { xs: '1 1 100%', sm: '1 1 160px' },
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s, border-color 0.15s',
+                        '&:hover': { bgcolor: C.hoverMed },
+                      }}
+                    >
+                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                          {m.name}
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700, color: over ? 'error.main' : m.color, lineHeight: 1.2, mb: 0.5 }}>
+                          ${m.total.toFixed(2)}
+                          {hasBudget && (
+                            <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
+                              {' '}/ ${m.budget_limit.toFixed(0)}
+                            </Typography>
+                          )}
+                        </Typography>
+                        {pct !== null && (
+                          <LinearProgress
+                            variant="determinate"
+                            value={pct}
+                            sx={{
+                              height: 4, borderRadius: 2, mb: 0.75,
+                              bgcolor: C.hoverStrong,
+                              '& .MuiLinearProgress-bar': { bgcolor: over ? 'error.main' : m.color, borderRadius: 2 },
+                            }}
+                          />
+                        )}
+                        <Typography variant="caption" color="text.secondary">
+                          {m.count} {m.count === 1 ? 'expense' : 'expenses'}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </Stack>
+              <Divider sx={{ borderColor: C.hoverStrong, mb: 3 }} />
+            </>
+          )}
         </>
       )}
 
@@ -248,7 +252,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
           const pctB = budgets[b.type] > 0 ? b.total / budgets[b.type] : -1
           return pctB - pctA
         }).slice(0, (showAllCards || activeMacro) ? undefined : CARD_LIMIT).map(s => {
-          const typeEntry = typeMap[s.type] || { color: '#a0a0a0', icon: null }
+          const typeEntry = typeMap[s.type] || { color: C.dimText, icon: null }
           const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
           const limit = budgets[s.type]
           const pct = limit > 0 ? Math.min((s.total / limit) * 100, 100) : null
@@ -261,17 +265,13 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
               elevation={0}
               onClick={() => onTypeChange?.(isSelected ? 'All' : s.type)}
               sx={{
-                bgcolor: isSelected ? 'rgba(240,234,214,0.06)' : '#2c2f3a',
-                border: isSelected
-                  ? `1px solid ${typeEntry.color}`
-                  : '1px solid rgba(240, 234, 214, 0.1)',
-                borderTop: `3px solid ${typeEntry.color}`,
-                borderRadius: 2,
-                minWidth: { xs: 0, sm: 150 },
-                flex: { xs: '1 1 100%', sm: '1 1 150px' },
+                bgcolor: isSelected ? `${typeEntry.color}${C.cardTintSelectedAlpha}` : `${typeEntry.color}${C.cardTintAlpha}`,
+                border: isSelected ? `1.5px solid ${typeEntry.color}` : `1px solid ${typeEntry.color}${C.cardBorderAlpha}`,
+                minWidth: { xs: 0, sm: 300 },
+                flex: { xs: '1 1 100%', sm: '1 1 300px' },
                 cursor: onTypeChange ? 'pointer' : 'default',
                 transition: 'background-color 0.15s, border-color 0.15s',
-                '&:hover': onTypeChange ? { bgcolor: 'rgba(240,234,214,0.06)' } : {},
+                '&:hover': onTypeChange ? { bgcolor: C.hoverMed } : {},
               }}
             >
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -308,16 +308,16 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                 {pct !== null && (() => {
                   const pac = pacing[s.type]
                   const actuallyOver = limit > 0 && s.total > limit
-                  const solidColor = actuallyOver ? '#e07c7c' : typeEntry.color
-                  const statusColor = pac?.status === 'over_budget' ? '#e07c7c'
-                    : pac?.status === 'at_risk' ? '#f0c040'
+                  const solidColor = actuallyOver ? C.overBudget : typeEntry.color
+                  const statusColor = pac?.status === 'over_budget' ? C.overBudget
+                    : pac?.status === 'at_risk' ? C.atRisk
                     : typeEntry.color
                   const projPct = isCurrentMonth && pac?.projected_spend != null && pac.projected_spend > s.total && limit > 0
                     ? Math.min((pac.projected_spend / limit) * 100, 100)
                     : null
                   const ghostWidth = projPct !== null ? projPct - (pct ?? 0) : null
                   return (
-                    <Box sx={{ position: 'relative', height: 4, borderRadius: 2, bgcolor: 'rgba(240,234,214,0.08)', mb: 0.75, overflow: 'hidden' }}>
+                    <Box sx={{ position: 'relative', height: 4, borderRadius: 2, bgcolor: C.hoverStrong, mb: 0.75, overflow: 'hidden' }}>
                       {ghostWidth !== null && ghostWidth > 0 && (
                         <Box sx={{ position: 'absolute', top: 0, left: `${pct}%`, height: '100%', width: `${ghostWidth}%`, bgcolor: statusColor, opacity: 0.4, borderRadius: 2 }} />
                       )}
@@ -337,10 +337,10 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                       size="small"
                       sx={{
                         fontSize: '0.72rem', height: 20, fontWeight: 600,
-                        bgcolor: pacing[s.type].status === 'over_budget' ? '#e07c7c'
-                          : pacing[s.type].status === 'at_risk' ? '#f0c040'
-                          : '#8fb996',
-                        color: '#22252e',
+                        bgcolor: pacing[s.type].status === 'over_budget' ? C.overBudget
+                          : pacing[s.type].status === 'at_risk' ? C.atRisk
+                          : C.onTrack,
+                        color: C.surface,
                       }}
                     />
                   ) : over ? (
@@ -376,17 +376,6 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
             </Box>
           )}
         </Stack>
-
-        <Box sx={{ flexShrink: 0, width: { xs: '100%', md: 340 }, display: { xs: 'none', sm: 'block' } }}>
-          <SpendingChart
-            summary={[...summary].filter(s => !activeMacro || typeMap[s.type]?.macrocategory_id === activeMacro).sort((a, b) => {
-              const pctA = budgets[a.type] > 0 ? a.total / budgets[a.type] : -1
-              const pctB = budgets[b.type] > 0 ? b.total / budgets[b.type] : -1
-              return pctB - pctA
-            }).slice(0, (showAllCards || activeMacro) ? undefined : CARD_LIMIT)}
-            budgets={budgets}
-          />
-        </Box>
       </Stack>
       </Collapse>
 

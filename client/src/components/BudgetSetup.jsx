@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useC } from '../colors'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -42,6 +43,7 @@ const FEATURES = [
 // ─── Welcome ────────────────────────────────────────────────────────────────
 
 function WelcomeStep({ onStart, onSkip }) {
+  const C = useC()
   return (
     <Stack spacing={3}>
       <Stack alignItems="center" spacing={1.5}>
@@ -65,7 +67,7 @@ function WelcomeStep({ onStart, onSkip }) {
           <Box
             key={label}
             sx={{
-              border: '1px solid rgba(240,234,214,0.10)',
+              border: `1px solid ${C.borderSubtle}`,
               borderRadius: 1.5,
               p: 1.5,
               bgcolor: 'rgba(255,255,255,0.03)',
@@ -324,6 +326,7 @@ function BudgetLimitsStep({ onComplete, onSkip }) {
 const STEPS = ['income', 'budgets']
 
 export default function BudgetSetup({ onComplete }) {
+  const C = useC()
   const [phase, setPhase] = useState('welcome') // 'welcome' | 'income' | 'budgets'
 
   async function skipAll() {
@@ -355,7 +358,7 @@ export default function BudgetSetup({ onComplete }) {
         elevation={0}
         sx={{
           bgcolor: 'background.paper',
-          border: '1px solid rgba(240, 234, 214, 0.12)',
+          border: `1px solid ${C.border}`,
           borderRadius: 2,
           p: { xs: 3, sm: 4 },
           width: '100%',

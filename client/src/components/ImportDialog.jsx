@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useC } from '../colors'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
@@ -22,6 +23,7 @@ import TextField from '@mui/material/TextField'
 import CircularProgress from '@mui/material/CircularProgress'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import api from '../api.js'
+import { useMenuStyles } from '../menuStyles.js'
 import SavingsLinkModal from './SavingsLinkModal.jsx'
 
 const IMPORT_FIELDS = [
@@ -53,6 +55,8 @@ function autoMap(headers, fields) {
 }
 
 export default function ImportDialog({ defaultRecordType = 'expense', onClose, onImported }) {
+  const C = useC()
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const [step, setStep] = useState(0)
   const [file, setFile] = useState(null)
   const [headers, setHeaders] = useState([])
@@ -147,7 +151,7 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
     >
       <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
         Import {step === 0 ? 'from CSV / Excel' : step === 1 ? '— Map Columns' : '— Results'}
@@ -164,11 +168,11 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: 1.5,
-                border: '2px dashed rgba(240,234,214,0.2)',
+                border: `2px dashed ${C.borderMed}`,
                 borderRadius: 2,
                 py: 5,
                 cursor: 'pointer',
-                '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(143,185,150,0.04)' },
+                '&:hover': { borderColor: 'primary.main', bgcolor: C.dropHoverBg },
               }}
             >
               <UploadFileIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
@@ -200,9 +204,10 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
                   label="Sheet"
                   onChange={e => handleSheetChange(e.target.value)}
                   disabled={loading}
+                  {...DROPDOWN_MENU_PROPS}
                 >
                   {sheetNames.map(s => (
-                    <MenuItem key={s} value={s}>{s}</MenuItem>
+                    <MenuItem key={s} value={s} sx={DROPDOWN_ITEM_SX}>{s}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -247,10 +252,11 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
                   value={mapping[field.key] ?? ''}
                   label={`${field.label}${field.required ? ' *' : ''}`}
                   onChange={e => setMapping(prev => ({ ...prev, [field.key]: e.target.value }))}
+                  {...DROPDOWN_MENU_PROPS}
                 >
-                  <MenuItem value=""><em>{field.required ? 'Select a column' : 'Not mapped'}</em></MenuItem>
+                  <MenuItem value="" sx={DROPDOWN_ITEM_SX}><em>{field.required ? 'Select a column' : 'Not mapped'}</em></MenuItem>
                   {headers.map(h => (
-                    <MenuItem key={h} value={h}>{h || <em>(blank header)</em>}</MenuItem>
+                    <MenuItem key={h} value={h} sx={DROPDOWN_ITEM_SX}>{h || <em>(blank header)</em>}</MenuItem>
                   ))}
                 </Select>
                 {field.hint && (
@@ -292,15 +298,15 @@ export default function ImportDialog({ defaultRecordType = 'expense', onClose, o
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ color: 'text.secondary', fontWeight: 600, borderColor: 'rgba(240,234,214,0.08)' }}>Row</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', fontWeight: 600, borderColor: 'rgba(240,234,214,0.08)' }}>Reason skipped</TableCell>
+                      <TableCell sx={{ color: 'text.secondary', fontWeight: 600, borderColor: C.hoverStrong }}>Row</TableCell>
+                      <TableCell sx={{ color: 'text.secondary', fontWeight: 600, borderColor: C.hoverStrong }}>Reason skipped</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {results.errors.map((e, i) => (
                       <TableRow key={i}>
-                        <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)' }}>{e.row}</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)' }}>{e.reason}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong }}>{e.row}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong }}>{e.reason}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

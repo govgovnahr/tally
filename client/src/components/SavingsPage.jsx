@@ -34,10 +34,9 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import api from '../api.js'
 import NetSavingsChart from './NetSavingsChart.jsx'
+import { useC, palette, TYPE_PALETTE } from '../colors'
 
-const PRIMARY = '#8fb996'
-const INCOME_COLOR = '#80cbc4'
-const ONE_TIME_COLORS = ['#e8a87c', '#82b4e0', '#c49ee8', '#f0c040', '#e07c7c', '#a0a0a0']
+const ONE_TIME_COLORS = TYPE_PALETTE.slice(0, 6)
 
 function fmtMonth(ym) {
   if (!ym) return ''
@@ -68,6 +67,9 @@ function AllocationChip({ goal }) {
 // ─── Goal Cards ──────────────────────────────────────────────────────────────
 
 function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
+  const C = useC()
+  const PRIMARY = C.primary
+  const INCOME_COLOR = C.income
   const contributed = goal.monthly_contributions ?? 0
   const pct = goal.progress_pct
   const cardColor = goal.color ?? INCOME_COLOR
@@ -76,8 +78,8 @@ function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid rgba(240,234,214,0.12)',
-        borderTop: `3px solid ${cardColor}`,
+        border: `1px solid ${cardColor}${C.cardBorderAlpha}`,
+        bgcolor: `${cardColor}${C.cardTintAlpha}`,
         borderRadius: 2,
         p: 2.5,
         mb: 2,
@@ -124,7 +126,7 @@ function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
         sx={{
           height: 6,
           borderRadius: 3,
-          bgcolor: 'rgba(240,234,214,0.08)',
+          bgcolor: C.hoverStrong,
           mb: 1,
           '& .MuiLinearProgress-bar': { bgcolor: cardColor, borderRadius: 3 },
         }}
@@ -146,6 +148,8 @@ function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
 }
 
 function OneTimeGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute }) {
+  const C = useC()
+  const PRIMARY = C.primary
   const pct = goal.progress_pct
   const met = pct >= 100
 
@@ -153,8 +157,8 @@ function OneTimeGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute 
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid rgba(240,234,214,0.12)',
-        borderTop: `3px solid ${color}`,
+        border: `1px solid ${color}${C.cardBorderAlpha}`,
+        bgcolor: `${color}${C.cardTintAlpha}`,
         borderRadius: 2,
         p: 2.5,
         opacity: goal.paused ? 0.65 : 1,
@@ -170,7 +174,7 @@ function OneTimeGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute 
               <Chip
                 label={`Due ${fmtDeadline(goal.deadline)}`}
                 size="small"
-                sx={{ fontSize: '0.72rem', height: 20, color: 'text.secondary', borderColor: 'rgba(240,234,214,0.2)' }}
+                sx={{ fontSize: '0.72rem', height: 20, color: 'text.secondary', borderColor: C.borderMed }}
                 variant="outlined"
               />
             )}
@@ -208,7 +212,7 @@ function OneTimeGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute 
         sx={{
           height: 6,
           borderRadius: 3,
-          bgcolor: 'rgba(240,234,214,0.08)',
+          bgcolor: C.hoverStrong,
           mb: 1.5,
           '& .MuiLinearProgress-bar': { bgcolor: met ? PRIMARY : color, borderRadius: 3 },
         }}
@@ -246,6 +250,8 @@ function OneTimeGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute 
 // ─── Emergency Fund Goal Card ────────────────────────────────────────────────
 
 function EmergencyFundGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute }) {
+  const C = useC()
+  const PRIMARY = C.primary
   const pct = goal.progress_pct
   const met = pct >= 100
 
@@ -253,8 +259,8 @@ function EmergencyFundGoalCard({ goal, color, onEdit, onDelete, onPause, onContr
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid rgba(240,234,214,0.12)',
-        borderTop: `3px solid ${color}`,
+        border: `1px solid ${color}${C.cardBorderAlpha}`,
+        bgcolor: `${color}${C.cardTintAlpha}`,
         borderRadius: 2,
         p: 2.5,
         opacity: goal.paused ? 0.65 : 1,
@@ -305,7 +311,7 @@ function EmergencyFundGoalCard({ goal, color, onEdit, onDelete, onPause, onContr
         variant="determinate"
         value={Math.min(pct, 100)}
         sx={{
-          height: 6, borderRadius: 3, bgcolor: 'rgba(240,234,214,0.08)', mb: 1.5,
+          height: 6, borderRadius: 3, bgcolor: C.hoverStrong, mb: 1.5,
           '& .MuiLinearProgress-bar': { bgcolor: met ? PRIMARY : color, borderRadius: 3 },
         }}
       />
@@ -339,6 +345,8 @@ function EmergencyFundGoalCard({ goal, color, onEdit, onDelete, onPause, onContr
 // ─── Completed Goal Card ─────────────────────────────────────────────────────
 
 function CompletedGoalCard({ goal, color, onDelete }) {
+  const C = useC()
+  const PRIMARY = C.primary
   const byDeadline = goal.deadline && goal.deadline < new Date().toISOString().slice(0, 10)
   const displayProgress = goal.total_contributions ?? 0
   const pct = goal.progress_pct
@@ -347,8 +355,8 @@ function CompletedGoalCard({ goal, color, onDelete }) {
     <Paper
       elevation={0}
       sx={{
-        border: '1px solid rgba(240,234,214,0.08)',
-        borderTop: `3px solid ${color}`,
+        border: `1px solid ${color}${C.cardBorderAlpha}`,
+        bgcolor: `${color}${C.cardTintAlpha}`,
         borderRadius: 2,
         p: 2,
         opacity: 0.7,
@@ -393,7 +401,7 @@ function CompletedGoalCard({ goal, color, onDelete }) {
         sx={{
           height: 4,
           borderRadius: 3,
-          bgcolor: 'rgba(240,234,214,0.06)',
+          bgcolor: C.hoverMed,
           '& .MuiLinearProgress-bar': { bgcolor: pct >= 100 ? PRIMARY : color, borderRadius: 3 },
         }}
       />
@@ -404,6 +412,8 @@ function CompletedGoalCard({ goal, color, onDelete }) {
 // ─── Contribution Dialog ─────────────────────────────────────────────────────
 
 function ContributionDialog({ open, onClose, goal, onRefresh }) {
+  const C = useC()
+  const PRIMARY = C.primary
   const [amount, setAmount] = useState('')
   const [contribDate, setContribDate] = useState(new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState('')
@@ -448,7 +458,7 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
     >
       <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
         Contributions — {goal?.name}
@@ -466,7 +476,7 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
                   alignItems="center"
                   justifyContent="space-between"
                   py={0.75}
-                  sx={{ borderBottom: '1px solid rgba(240,234,214,0.08)' }}
+                  sx={{ borderBottom: `1px solid ${C.hoverStrong}` }}
                 >
                   <Stack>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>${c.amount.toFixed(2)}</Typography>
@@ -486,7 +496,7 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
             </Box>
           )}
 
-          <Divider sx={{ borderColor: 'rgba(240,234,214,0.12)' }} />
+          <Divider sx={{ borderColor: C.border }} />
 
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, display: 'block', fontWeight: 500 }}>
@@ -529,7 +539,7 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
           variant="contained"
           onClick={handleAdd}
           disabled={saving}
-          sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: '#7aaa84' } }}
+          sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover } }}
         >
           Add
         </Button>
@@ -540,9 +550,11 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
 
 // ─── Add / Edit Dialog ───────────────────────────────────────────────────────
 
-const GOAL_COLORS = ['#e8a87c', '#82b4e0', '#c49ee8', '#f0c040', '#e07c7c', '#80cbc4', '#8fb996', '#a0a0a0', '#f4a261', '#9b72cf']
+const GOAL_COLORS = [...TYPE_PALETTE.slice(0, 5), palette.teal, palette.green, palette.grey, '#f4a261', '#9b72cf']
 
 function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPriorities = [], portfolioAvg = null, otherAllocatedPct = 0 }) {
+  const C = useC()
+  const PRIMARY = C.primary
   const isEdit = !!existing
   const [goalType, setGoalType] = useState('one_time')
   const [name, setName] = useState('')
@@ -657,7 +669,7 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPri
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
     >
       <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
         {isEdit ? 'Edit Goal' : 'New Savings Goal'}
@@ -872,7 +884,7 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPri
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button variant="text" color="inherit" onClick={onClose} disabled={saving}>Cancel</Button>
-        <Button variant="contained" onClick={handleSubmit} disabled={saving} sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: '#7aaa84' } }}>
+        <Button variant="contained" onClick={handleSubmit} disabled={saving} sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover } }}>
           {isEdit ? 'Save' : 'Create'}
         </Button>
       </DialogActions>
@@ -883,13 +895,14 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPri
 // ─── Delete Confirm ──────────────────────────────────────────────────────────
 
 function DeleteConfirmDialog({ open, onClose, onConfirm, goalName }) {
+  const C = useC()
   return (
     <Dialog
       open={open}
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
     >
       <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>Delete goal?</DialogTitle>
       <DialogContent>
@@ -908,6 +921,8 @@ function DeleteConfirmDialog({ open, onClose, onConfirm, goalName }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function SavingsPage() {
+  const C = useC()
+  const PRIMARY = C.primary
   const [goals, setGoals] = useState([])
   const [monthlyTarget, setMonthlyTarget] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -972,7 +987,7 @@ export default function SavingsPage() {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => { setEditingGoal(null); setDialogOpen(true) }}
-          sx={{ fontWeight: 600, bgcolor: PRIMARY, '&:hover': { bgcolor: '#7aaa84' }, flexShrink: 0 }}
+          sx={{ fontWeight: 600, bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover }, flexShrink: 0 }}
         >
           Add Goal
         </Button>
@@ -1027,7 +1042,7 @@ export default function SavingsPage() {
           sx={{
             mt: 3,
             bgcolor: 'transparent',
-            border: '1px solid rgba(240,234,214,0.12)',
+            border: `1px solid ${C.border}`,
             borderRadius: '8px !important',
             '&:before': { display: 'none' },
           }}
@@ -1066,7 +1081,7 @@ export default function SavingsPage() {
         <Paper
           elevation={0}
           sx={{
-            border: '1px solid rgba(240,234,214,0.12)',
+            border: `1px solid ${C.border}`,
             borderRadius: 2,
             py: 8,
             textAlign: 'center',

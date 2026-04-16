@@ -17,8 +17,8 @@ import Chip from '@mui/material/Chip'
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import api from '../api.js'
-
-const PRIMARY = '#8fb996'
+import { useC } from '../colors'
+import { useMenuStyles } from '../menuStyles.js'
 
 // Returns the goal to auto-assign to:
 // 1. Lowest priority number among prioritized goals
@@ -40,6 +40,9 @@ function autoLabel(defaultGoal) {
 // onClose: dismiss without saving
 // onDone: called after assignments are saved
 export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
+  const C = useC()
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
+  const PRIMARY = C.primary
   const [goals, setGoals] = useState([])
   const [defaultGoal, setDefaultGoal] = useState(null)
   const [assignments, setAssignments] = useState({})
@@ -119,7 +122,7 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
     >
       <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
         Assign Savings Transactions
@@ -153,7 +156,7 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
               <Box
                 key={exp.id}
                 sx={{
-                  border: `1px solid ${a.auto ? `${PRIMARY}40` : 'rgba(240,234,214,0.12)'}`,
+                  border: `1px solid ${a.auto ? `${PRIMARY}40` : C.border}`,
                   borderRadius: 1.5,
                   p: 1.5,
                   transition: 'border-color 0.15s',
@@ -173,11 +176,12 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
                     value={selectValue}
                     label="Assign to goal"
                     onChange={e => handleSelectChange(exp.id, e.target.value)}
+                    {...DROPDOWN_MENU_PROPS}
                   >
                     {goals.map(g => (
-                      <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>
+                      <MenuItem key={g.id} value={g.id} sx={DROPDOWN_ITEM_SX}>{g.name}</MenuItem>
                     ))}
-                    <MenuItem value="new">+ Create new goal…</MenuItem>
+                    <MenuItem value="new" sx={DROPDOWN_ITEM_SX}>+ Create new goal…</MenuItem>
                   </Select>
                 </FormControl>
 
@@ -226,7 +230,7 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
           variant="contained"
           onClick={handleConfirm}
           disabled={saving}
-          sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: '#7aaa84' } }}
+          sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover } }}
         >
           {saving ? 'Saving…' : `Assign ${expenses.length}`}
         </Button>

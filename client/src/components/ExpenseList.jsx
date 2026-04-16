@@ -38,8 +38,7 @@ import AddExpenseForm from './AddExpenseForm.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
 import ImportDialog from './ImportDialog.jsx'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
-
-const INCOME_COLOR = '#80cbc4'
+import { useC } from '../colors'
 
 function formatDate(dateStr) {
   const [year, month, day] = dateStr.split('-')
@@ -54,6 +53,8 @@ function formatMonthLabel(m) {
 }
 
 export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange }) {
+  const C = useC()
+  const INCOME_COLOR = C.income
   const { typeNames, typeMap, macroMap } = useExpenseTypes()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
@@ -186,7 +187,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       elevation={0}
       sx={{
         bgcolor: 'background.paper',
-        border: '1px solid rgba(240, 234, 214, 0.12)',
+        border: `1px solid ${C.border}`,
         borderRadius: 2,
         overflow: 'hidden',
       }}
@@ -225,7 +226,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               color="primary"
               startIcon={<AddIcon />}
               onClick={() => setShowIncomeForm(true)}
-              sx={{ fontWeight: 600, bgcolor: INCOME_COLOR, '&:hover': { bgcolor: '#5fa8a2' } }}
+              sx={{ fontWeight: 600, bgcolor: INCOME_COLOR, '&:hover': { bgcolor: C.incomeButtonHover } }}
             >
               Add Income
             </Button>
@@ -267,7 +268,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       </Stack>
 
       {/* Type filter tabs */}
-      <Box ref={tabsRef} sx={{ borderBottom: '1px solid rgba(240, 234, 214, 0.12)', px: 1 }}>
+      <Box ref={tabsRef} sx={{ borderBottom: `1px solid ${C.border}`, px: 1 }}>
         <Tabs
           value={activeType}
           onChange={(_, val) => handleTypeChange(val)}
@@ -278,8 +279,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               height: 2,
               backgroundColor:
                 activeType === 'Income' ? INCOME_COLOR
-                : activeType !== 'All' ? (typeMap[activeType]?.color ?? '#8fb996')
-                : '#8fb996',
+                : activeType !== 'All' ? (typeMap[activeType]?.color ?? C.primary)
+                : C.primary,
             },
           }}
           sx={{
@@ -307,7 +308,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       </Box>
 
       {/* Search */}
-      <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid rgba(240,234,214,0.08)' }}>
+      <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${C.hoverStrong}` }}>
         <TextField
           size="small"
           placeholder="Search by name…"
@@ -333,8 +334,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
           sx={{
             '& .MuiOutlinedInput-root': {
               fontSize: '0.85rem',
-              '& fieldset': { borderColor: 'rgba(240,234,214,0.15)' },
-              '&:hover fieldset': { borderColor: 'rgba(240,234,214,0.3)' },
+              '& fieldset': { borderColor: C.borderLight },
+              '&:hover fieldset': { borderColor: C.borderStrong },
             },
           }}
         />
@@ -359,11 +360,11 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               sx={{
                 px: 2,
                 py: 1.5,
-                borderBottom: '1px solid rgba(240,234,214,0.08)',
+                borderBottom: `1px solid ${C.hoverStrong}`,
                 cursor: 'pointer',
                 userSelect: 'none',
-                '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' },
-                '&:active': { bgcolor: 'rgba(240,234,214,0.06)' },
+                '&:hover': { bgcolor: C.subtleBg },
+                '&:active': { bgcolor: C.hoverMed },
               }}
             >
               <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
@@ -377,7 +378,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                   </Typography>
                   {row.is_recurring === 1 && <RepeatIcon sx={{ fontSize: 13, color: 'text.secondary', flexShrink: 0 }} />}
                 </Stack>
-                <Typography variant="body2" fontWeight={600} sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || '#a0a0a0', flexShrink: 0 }}>
+                <Typography variant="body2" fontWeight={600} sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || C.dimText, flexShrink: 0 }}>
                   ${row.amount.toFixed(2)}
                 </Typography>
               </Stack>
@@ -386,7 +387,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                   label={isIncome ? 'Income' : row.type}
                   variant="outlined"
                   size="small"
-                  sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || '#a0a0a0', borderColor: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || '#a0a0a0', fontSize: '0.7rem', height: 20 }}
+                  sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || C.dimText, borderColor: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || C.dimText, fontSize: '0.7rem', height: 20 }}
                 />
                 <Typography variant="caption" color="text.secondary">
                   {formatDate(row.date)}
@@ -401,7 +402,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
           <Table size="small" sx={{ minWidth: 480 }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
                   <TableSortLabel
                     active={sortBy === 'name'}
                     direction={sortBy === 'name' ? sortDir : 'asc'}
@@ -411,10 +412,10 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                     Name
                   </TableSortLabel>
                 </TableCell>
-                <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
                   {isIncome ? 'Source' : 'Type'}
                 </TableCell>
-                <TableCell sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
                   <TableSortLabel
                     active={sortBy === 'date'}
                     direction={sortBy === 'date' ? sortDir : 'asc'}
@@ -424,7 +425,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                     Date
                   </TableSortLabel>
                 </TableCell>
-                <TableCell align="right" sx={{ color: 'text.secondary', borderColor: 'rgba(240,234,214,0.08)', fontWeight: 600 }}>
+                <TableCell align="right" sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
                   <TableSortLabel
                     active={sortBy === 'amount'}
                     direction={sortBy === 'amount' ? sortDir : 'asc'}
@@ -434,7 +435,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                     Amount
                   </TableSortLabel>
                 </TableCell>
-                <TableCell sx={{ borderColor: 'rgba(240,234,214,0.08)', width: 80 }} />
+                <TableCell sx={{ borderColor: C.hoverStrong, width: 80 }} />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -442,7 +443,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                 ? incomes.map(inc => (
                   <TableRow
                     key={inc.id}
-                    sx={{ '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' }, '& td': { borderColor: 'rgba(240,234,214,0.08)' } }}
+                    sx={{ '&:hover': { bgcolor: C.subtleBg }, '& td': { borderColor: C.hoverStrong } }}
                   >
                     <TableCell sx={{ color: 'text.primary' }}>
                       <Stack direction="row" alignItems="center" gap={0.75}>
@@ -483,7 +484,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                 : expenses.map(e => (
                   <TableRow
                     key={e.id}
-                    sx={{ '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' }, '& td': { borderColor: 'rgba(240,234,214,0.08)' } }}
+                    sx={{ '&:hover': { bgcolor: C.subtleBg }, '& td': { borderColor: C.hoverStrong } }}
                   >
                     <TableCell sx={{ color: 'text.primary' }}>
                       <Stack direction="row" alignItems="center" gap={0.75}>
@@ -499,8 +500,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                         variant="outlined"
                         size="small"
                         sx={{
-                          color: typeMap[e.type]?.color || '#a0a0a0',
-                          borderColor: typeMap[e.type]?.color || '#a0a0a0',
+                          color: typeMap[e.type]?.color || C.dimText,
+                          borderColor: typeMap[e.type]?.color || C.dimText,
                           fontSize: '0.75rem',
                           height: 22,
                         }}
@@ -570,7 +571,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         onClose={() => setShowClearConfirm(false)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+        PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
       >
         <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
           {month ? `Clear ${formatMonthLabel(month)}?` : 'Clear all transactions?'}
@@ -596,7 +597,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         onClose={() => setDetailItem(null)}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { bgcolor: 'background.paper', border: '1px solid rgba(240,234,214,0.12)' } }}
+        PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
       >
         <DialogTitle sx={{ pb: 1 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -608,7 +609,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
             </IconButton>
           </Stack>
         </DialogTitle>
-        <Divider sx={{ borderColor: 'rgba(240,234,214,0.12)' }} />
+        <Divider sx={{ borderColor: C.border }} />
         <DialogContent sx={{ pt: 2 }}>
           <Stack gap={1.5}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -629,8 +630,8 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                   variant="outlined"
                   size="small"
                   sx={{
-                    color: typeMap[detailItem?.type]?.color || '#a0a0a0',
-                    borderColor: typeMap[detailItem?.type]?.color || '#a0a0a0',
+                    color: typeMap[detailItem?.type]?.color || C.dimText,
+                    borderColor: typeMap[detailItem?.type]?.color || C.dimText,
                     fontSize: '0.75rem',
                     height: 22,
                   }}
@@ -654,7 +655,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
             )}
           </Stack>
         </DialogContent>
-        <Divider sx={{ borderColor: 'rgba(240,234,214,0.12)' }} />
+        <Divider sx={{ borderColor: C.border }} />
         <DialogActions sx={{ px: 2, py: 1.5, justifyContent: 'space-between' }}>
           <Button
             variant="outlined"
@@ -676,7 +677,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               else setEditingExpense(detailItem)
               setDetailItem(null)
             }}
-            sx={detailIsIncome ? { bgcolor: INCOME_COLOR, '&:hover': { bgcolor: '#5fa8a2' } } : {}}
+            sx={detailIsIncome ? { bgcolor: INCOME_COLOR, '&:hover': { bgcolor: C.incomeButtonHover } } : {}}
           >
             Edit
           </Button>

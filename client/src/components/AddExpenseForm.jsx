@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useC } from '../colors'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -8,18 +9,20 @@ import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
-import FormControlLabel from '@mui/material/FormControlLabel'
-import Checkbox from '@mui/material/Checkbox'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import Stack from '@mui/material/Stack'
 import api from '../api.js'
+import { useMenuStyles } from '../menuStyles.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import SavingsLinkModal from './SavingsLinkModal.jsx'
+import PolishedCheckbox from './PolishedCheckbox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
 
 export default function AddExpenseForm({ onClose, onAdded, expense }) {
+  const C = useC()
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const { typeNames } = useExpenseTypes()
   const isEditing = Boolean(expense)
   const [form, setForm] = useState({
@@ -114,7 +117,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
       PaperProps={{
         sx: {
           bgcolor: 'background.paper',
-          border: '1px solid rgba(240, 234, 214, 0.12)',
+          border: `1px solid ${C.border}`,
         },
       }}
     >
@@ -154,9 +157,10 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
                 value={form.type}
                 onChange={handleChange}
                 label="Type"
+                {...DROPDOWN_MENU_PROPS}
               >
                 {typeNames.map(t => (
-                  <MenuItem key={t} value={t}>{t}</MenuItem>
+                  <MenuItem key={t} value={t} sx={DROPDOWN_ITEM_SX}>{t}</MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -171,34 +175,20 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
               variant="outlined"
               InputLabelProps={{ shrink: true }}
             />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isRecurring}
-                  onChange={e => setIsRecurring(e.target.checked)}
-                  color="primary"
-                  size="small"
-                />
-              }
+            <PolishedCheckbox
+              checked={isRecurring}
+              onChange={setIsRecurring}
               label="Recurring monthly expense"
-              sx={{ color: 'text.secondary' }}
             />
             {isEditing && (
               <>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={rememberRule}
-                      onChange={e => {
-                        setRememberRule(e.target.checked)
-                        if (e.target.checked) setRulePattern(cleanPattern(form.name))
-                      }}
-                      color="primary"
-                      size="small"
-                    />
-                  }
+                <PolishedCheckbox
+                  checked={rememberRule}
+                  onChange={v => {
+                    setRememberRule(v)
+                    if (v) setRulePattern(cleanPattern(form.name))
+                  }}
                   label="Learn from this edit"
-                  sx={{ color: 'text.secondary' }}
                 />
                 {rememberRule && (
                   <TextField

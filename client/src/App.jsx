@@ -1,13 +1,15 @@
 import { useState, useCallback, useEffect } from 'react'
-import AppBar from '@mui/material/AppBar'
-import Toolbar from '@mui/material/Toolbar'
-import Tabs from '@mui/material/Tabs'
-import Tab from '@mui/material/Tab'
+import { ThemeProvider } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
+import Stack from '@mui/material/Stack'
+import IconButton from '@mui/material/IconButton'
+import ButtonBase from '@mui/material/ButtonBase'
 import BottomNavigation from '@mui/material/BottomNavigation'
 import BottomNavigationAction from '@mui/material/BottomNavigationAction'
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
+import LightModeIcon from '@mui/icons-material/LightMode'
+import DarkModeIcon from '@mui/icons-material/DarkMode'
 import HomeIcon from '@mui/icons-material/Home'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
@@ -15,27 +17,35 @@ import SavingsIcon from '@mui/icons-material/Savings'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import api from './api.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
-import SummaryBar from './components/SummaryBar.jsx'
+import { ColorsProvider, useC } from './colors'
+import { createAppTheme } from './theme.js'
 import ExpenseList from './components/ExpenseList.jsx'
-import MonthlyTrendsChart from './components/MonthlyTrendsChart.jsx'
 import BudgetSetup from './components/BudgetSetup.jsx'
 import BudgetGoals from './components/BudgetGoals.jsx'
 import SavingsPage from './components/SavingsPage.jsx'
-import MonthSelector from './components/MonthSelector.jsx'
 import AnalysisPage from './components/AnalysisPage.jsx'
+import DashboardPage from './components/DashboardPage.jsx'
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
 }
 
-function AppContent() {
+const NAV_ITEMS = [
+  { value: 'home',         label: 'Overview',    icon: <HomeIcon /> },
+  { value: 'analysis',     label: 'Analysis',    icon: <BarChartIcon /> },
+  { value: 'savings',      label: 'Savings',     icon: <SavingsIcon /> },
+  { value: 'budgets',      label: 'Budgets',     icon: <AccountBalanceIcon /> },
+  { value: 'all-expenses', label: 'Expenses',    icon: <ReceiptLongIcon /> },
+
+]
+
+function AppContent({ mode, onToggleMode }) {
+  const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
   const [refreshKey, setRefreshKey] = useState(0)
-  const [budgetsReady, setBudgetsReady] = useState(null) // null = loading
+  const [budgetsReady, setBudgetsReady] = useState(null)
   const [page, setPage] = useState('home')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
-  const [activeType, setActiveType] = useState('All')
-  const [activeMacro, setActiveMacro] = useState(null)
 
   useEffect(() => {
     api.get('/budgets').then(res => {
@@ -55,41 +65,133 @@ function AppContent() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar
-        position="static"
-        elevation={0}
+      {/* ── Desktop top nav ─────────────────────────────── */}
+      <Box
+        component="header"
         sx={{
-          bgcolor: '#22252e',
-          borderBottom: '1px solid rgba(240, 234, 214, 0.12)',
+          display: { xs: 'none', sm: 'flex' },
+          alignItems: 'center',
+          bgcolor: C.surface,
+          borderBottom: `1px solid ${C.border}`,
+          px: 3,
+          height: 64,
+          position: 'sticky',
+          top: 0,
+          zIndex: 1100,
+          gap: 3,
         }}
       >
-        <Toolbar sx={{ gap: 2, px: { xs: 1, sm: 2 } }}>
-          <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
+        {/* Logo */}
+        <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: '10px',
+              bgcolor: C.primary,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <SavingsIcon sx={{ fontSize: 16, color: '#fff' }} />
+          </Box>
           <Typography
-            variant="h6"
-            sx={{ fontWeight: 600, color: 'text.primary', flexGrow: 0, mr: { xs: 0, sm: 2 } }}
+            sx={{
+              fontWeight: 800,
+              fontSize: '1rem',
+              color: 'text.primary',
+              letterSpacing: '-0.02em',
+            }}
           >
-            Budget Tracker
+            Budget
           </Typography>
-          <Tabs
-            value={page}
-            onChange={(_, val) => setPage(val)}
-            textColor="inherit"
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-            TabIndicatorProps={{ style: { backgroundColor: '#8fb996' } }}
-            sx={{ display: { xs: 'none', sm: 'flex' } }}
+        </Stack>
+
+        {/* Nav tabs */}
+        <Stack direction="row" gap={0.5} sx={{ flex: 1 }}>
+          {NAV_ITEMS.map(item => {
+            const active = page === item.value
+            return (
+              <ButtonBase
+                key={item.value}
+                onClick={() => setPage(item.value)}
+                sx={{
+                  px: 2,
+                  py: 0.75,
+                  borderRadius: '100px',
+                  fontSize: '0.875rem',
+                  fontWeight: active ? 700 : 500,
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  color: active ? C.primary : 'text.secondary',
+                  bgcolor: active ? C.primaryTint : 'transparent',
+                  transition: 'all 0.15s',
+                  '&:hover': {
+                    bgcolor: active ? C.primaryTint : C.hover,
+                    color: active ? C.primary : 'text.primary',
+                  },
+                }}
+              >
+                {item.label}
+              </ButtonBase>
+            )
+          })}
+        </Stack>
+
+        {/* Mode toggle */}
+        <IconButton
+          size="small"
+          onClick={onToggleMode}
+          sx={{
+            color: 'text.secondary',
+            '&:hover': { color: C.primary, bgcolor: C.primaryTint },
+            borderRadius: '8px',
+          }}
+        >
+          {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+
+      {/* ── Mobile top bar ───────────────────────────────── */}
+      <Box
+        sx={{
+          display: { xs: 'flex', sm: 'none' },
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          bgcolor: C.surface,
+          borderBottom: `1px solid ${C.border}`,
+          px: 2,
+          height: 52,
+        }}
+      >
+        <Stack direction="row" alignItems="center" gap={1}>
+          <Box
+            sx={{
+              width: 30,
+              height: 30,
+              borderRadius: '9px',
+              bgcolor: C.primary,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            <Tab label="Overview" value="home" sx={{ color: page === 'home' ? 'primary.main' : 'text.secondary' }} />
-            <Tab label="All Expenses" value="all-expenses" sx={{ color: page === 'all-expenses' ? 'primary.main' : 'text.secondary' }} />
-            <Tab label="Budget Goals" value="budgets" sx={{ color: page === 'budgets' ? 'primary.main' : 'text.secondary' }} />
-            <Tab label="Savings" value="savings" sx={{ color: page === 'savings' ? 'primary.main' : 'text.secondary' }} />
-            <Tab label="Analysis" value="analysis" sx={{ color: page === 'analysis' ? 'primary.main' : 'text.secondary' }} />
-          </Tabs>
-        </Toolbar>
-      </AppBar>
-      {/* Mobile bottom navigation */}
+            <SavingsIcon sx={{ fontSize: 14, color: '#fff' }} />
+          </Box>
+          <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: 'text.primary', letterSpacing: '-0.02em' }}>
+            Budget
+          </Typography>
+        </Stack>
+        <IconButton
+          size="small"
+          onClick={onToggleMode}
+          sx={{ color: 'text.secondary', borderRadius: '8px' }}
+        >
+          {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+
+      {/* ── Mobile bottom navigation ──────────────────────── */}
       <BottomNavigation
         value={page}
         onChange={(_, val) => setPage(val)}
@@ -100,85 +202,90 @@ function AppContent() {
           left: 0,
           right: 0,
           zIndex: 1100,
-          bgcolor: '#22252e',
-          borderTop: '1px solid rgba(240,234,214,0.12)',
-          '& .MuiBottomNavigationAction-root': { color: 'text.disabled', minWidth: 0, px: 0.5 },
-          '& .Mui-selected': { color: 'primary.main' },
-          '& .MuiBottomNavigationAction-label': { fontSize: '0.65rem' },
+          bgcolor: C.surface,
+          borderTop: `1px solid ${C.border}`,
+          height: 60,
+          '& .MuiBottomNavigationAction-root': {
+            color: 'text.disabled',
+            minWidth: 0,
+            px: 0.5,
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          },
+          '& .Mui-selected': { color: C.primary },
+          '& .MuiBottomNavigationAction-label': {
+            fontSize: '0.65rem !important',
+            fontWeight: 600,
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          },
+          '& .MuiBottomNavigationAction-label.Mui-selected': {
+            fontSize: '0.65rem !important',
+          },
         }}
       >
-        <BottomNavigationAction label="Home" value="home" icon={<HomeIcon />} />
-        <BottomNavigationAction label="Expenses" value="all-expenses" icon={<ReceiptLongIcon />} />
-        <BottomNavigationAction label="Budgets" value="budgets" icon={<AccountBalanceIcon />} />
-        <BottomNavigationAction label="Savings" value="savings" icon={<SavingsIcon />} />
-        <BottomNavigationAction label="Analysis" value="analysis" icon={<BarChartIcon />} />
+        {NAV_ITEMS.map(item => (
+          <BottomNavigationAction
+            key={item.value}
+            label={item.label}
+            value={item.value}
+            icon={item.icon}
+          />
+        ))}
       </BottomNavigation>
 
+      {/* ── Page content ─────────────────────────────────── */}
       <Box
         component="main"
         sx={{
           maxWidth: 1100,
           mx: 'auto',
           px: { xs: 2, sm: 3 },
-          py: 3,
+          py: { xs: 2.5, sm: 3 },
           pb: { xs: 10, sm: 3 },
         }}
       >
         {page === 'home' && (
-          <>
-            <MonthSelector
-              selectedMonth={selectedMonth}
-              onMonthChange={setSelectedMonth}
-              refreshKey={refreshKey}
-            />
-            <SummaryBar
-              refreshKey={refreshKey}
-              selectedMonth={selectedMonth}
-              activeType={activeType}
-              onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
-              activeMacro={activeMacro}
-              onMacroChange={m => { setActiveMacro(m); setActiveType('All') }}
-            />
-            <MonthlyTrendsChart
-              refreshKey={refreshKey}
-              selectedMonth={selectedMonth}
-              activeType={activeType}
-              onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
-              activeMacro={activeMacro}
-              onMacroChange={m => { setActiveMacro(m); setActiveType('All') }}
-            />
-            <ExpenseList
-              refreshKey={refreshKey}
-              onRefresh={refresh}
-              month={selectedMonth}
-              activeType={activeType}
-              onTypeChange={t => { setActiveType(t); setActiveMacro(null) }}
-              activeMacro={activeMacro}
-              onMacroChange={m => { setActiveMacro(m); setActiveType('All') }}
-            />
-          </>
+          <DashboardPage
+            selectedMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
+            refreshKey={refreshKey}
+            onRefresh={refresh}
+            onNavigate={setPage}
+          />
         )}
-        {page === 'all-expenses' && (
-          <ExpenseList refreshKey={refreshKey} onRefresh={refresh} />
-        )}
-        {page === 'budgets' && (
-          <BudgetGoals onSaved={refresh} />
+        {page === 'analysis' && (
+          <AnalysisPage />
         )}
         {page === 'savings' && (
           <SavingsPage />
         )}
-        {page === 'analysis' && (
-          <AnalysisPage />
+        {page === 'budgets' && (
+          <BudgetGoals onSaved={refresh} />
+        )}
+        {page === 'all-expenses' && (
+          <ExpenseList refreshKey={refreshKey} onRefresh={refresh} />
         )}
       </Box>
     </Box>
   )
 }
 
-export default function App() {
+function ThemedApp() {
+  const [mode, setMode] = useState('dark')
+  const theme = createAppTheme(mode)
+  const toggleMode = () => setMode(m => m === 'dark' ? 'light' : 'dark')
+
   return (
-    <ExpenseTypesProvider>
-      <AppContent />
-    </ExpenseTypesProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <ColorsProvider mode={mode}>
+        <ExpenseTypesProvider>
+          <AppContent mode={mode} onToggleMode={toggleMode} />
+        </ExpenseTypesProvider>
+      </ColorsProvider>
+    </ThemeProvider>
   )
+}
+
+export default function App() {
+  return <ThemedApp />
 }

@@ -20,9 +20,6 @@ import Divider from '@mui/material/Divider'
 import Checkbox from '@mui/material/Checkbox'
 import Collapse from '@mui/material/Collapse'
 import Chip from '@mui/material/Chip'
-import Card from '@mui/material/Card'
-import CardContent from '@mui/material/CardContent'
-import LinearProgress from '@mui/material/LinearProgress'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import AddIcon from '@mui/icons-material/Add'
@@ -33,15 +30,12 @@ import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY, ICON_OPTIONS } from '../expenseTypes.js'
 import ImportBudgetsDialog from './ImportBudgetsDialog.jsx'
-import { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } from '../menuStyles.js'
+import { useMenuStyles } from '../menuStyles.js'
+import { useC, TYPE_PALETTE } from '../colors'
 
 // ─── Shared constants ────────────────────────────────────────────────────────
 
-const PRESET_COLORS = [
-  '#e8a87c', '#82b4e0', '#c49ee8', '#f0c040', '#80cbc4', '#a0a0a0',
-  '#ef9a9a', '#90caf9', '#a5d6a7', '#ffcc80', '#ce93d8', '#f48fb1',
-  '#ff8a65', '#4db6ac', '#7986cb', '#aed581',
-]
+const PRESET_COLORS = TYPE_PALETTE
 
 // ─── Category form dialog (add / edit) ───────────────────────────────────────
 
@@ -65,6 +59,7 @@ function ColorSwatch({ color, selected, onClick }) {
 }
 
 function CategoryFormDialog({ open, onClose, onSaved, existing }) {
+  const C = useC()
   const isEditing = Boolean(existing)
   const [name, setName] = useState(existing?.name ?? '')
   const [color, setColor] = useState(existing?.color ?? PRESET_COLORS[0])
@@ -98,7 +93,7 @@ function CategoryFormDialog({ open, onClose, onSaved, existing }) {
       fullWidth
       maxWidth="xs"
       PaperProps={{
-        sx: { bgcolor: 'background.paper', border: '1px solid rgba(240, 234, 214, 0.12)' },
+        sx: { bgcolor: 'background.paper' },
       }}
     >
       <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
@@ -135,9 +130,9 @@ function CategoryFormDialog({ open, onClose, onSaved, existing }) {
                         cursor: 'pointer',
                         border: icon === key
                           ? `2px solid ${color}`
-                          : '2px solid rgba(240,234,214,0.12)',
-                        bgcolor: icon === key ? 'rgba(240,234,214,0.06)' : 'transparent',
-                        '&:hover': { bgcolor: 'rgba(240,234,214,0.06)' },
+                          : `2px solid ${C.border}`,
+                        bgcolor: icon === key ? C.hoverMed : 'transparent',
+                        '&:hover': { bgcolor: C.hoverMed },
                       }}
                     >
                       <Icon sx={{ fontSize: 19, color: icon === key ? color : 'text.secondary' }} />
@@ -162,7 +157,7 @@ function CategoryFormDialog({ open, onClose, onSaved, existing }) {
                     height: 26,
                     borderRadius: '50%',
                     bgcolor: color,
-                    border: '1px solid rgba(240,234,214,0.2)',
+                    border: `1px solid ${C.borderMed}`,
                     flexShrink: 0,
                   }}
                 />
@@ -194,6 +189,7 @@ function CategoryFormDialog({ open, onClose, onSaved, existing }) {
 // ─── Delete confirmation dialog ───────────────────────────────────────────────
 
 function DeleteDialog({ open, onClose, onDeleted, type, otherTypes }) {
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const [reassignTo, setReassignTo] = useState('')
   const [error, setError] = useState('')
   const [needsReassign, setNeedsReassign] = useState(false)
@@ -226,7 +222,7 @@ function DeleteDialog({ open, onClose, onDeleted, type, otherTypes }) {
       maxWidth="xs"
       fullWidth
       PaperProps={{
-        sx: { bgcolor: 'background.paper', border: '1px solid rgba(240, 234, 214, 0.12)' },
+        sx: { bgcolor: 'background.paper' },
       }}
     >
       <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
@@ -248,9 +244,10 @@ function DeleteDialog({ open, onClose, onDeleted, type, otherTypes }) {
                   value={reassignTo}
                   onChange={e => setReassignTo(e.target.value)}
                   label="Reassign expenses to"
+                  {...DROPDOWN_MENU_PROPS}
                 >
                   {otherTypes.map(t => (
-                    <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
+                    <MenuItem key={t.id} value={t.id} sx={DROPDOWN_ITEM_SX}>{t.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -283,40 +280,37 @@ function currentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-function monthsAhead(count) {
+function buildOverrideMonthOptions() {
   const result = []
   const now = new Date()
-  let y = now.getFullYear()
-  let m = now.getMonth() - 1  // start 2 months back
-  if (m <= 0) { m += 12; y -= 1 }
-  for (let i = 0; i <= count + 2; i++) {
+  let y = now.getFullYear(), m = now.getMonth() - 10
+  while (m <= 0) { m += 12; y-- }
+  for (let i = 0; i < 14; i++) {
     const key = `${y}-${String(m).padStart(2, '0')}`
-    const label = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-    result.push({ key, label })
-    m++
-    if (m > 12) { m = 1; y++ }
+    result.push({ key, label: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }) })
+    if (++m > 12) { m = 1; y++ }
   }
   return result
 }
+const OVERRIDE_MONTH_OPTIONS = buildOverrideMonthOptions()
 
-function MonthlyOverrides({ expenseTypes, defaultLimits }) {
-  const SELECTABLE_MONTHS = monthsAhead(12)
+function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
+  const C = useC()
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [open, setOpen] = useState(false)
-  const [selectedMonth, setSelectedMonth] = useState(SELECTABLE_MONTHS[3]?.key ?? SELECTABLE_MONTHS[0].key)
-  const [enabled, setEnabled] = useState({})   // typeName → bool
-  const [overrideLimits, setOverrideLimits] = useState({})  // typeName → string value
-  const [overrideMonths, setOverrideMonths] = useState([])  // months with any override
-  const [savedOverrides, setSavedOverrides] = useState(new Set())  // typenames persisted in DB for selectedMonth
+  const [enabled, setEnabled] = useState({})
+  const [overrideLimits, setOverrideLimits] = useState({})
+  const [savedOverrides, setSavedOverrides] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
 
-  // Fetch list of months that have overrides
-  useEffect(() => {
-    api.get('/budgets/monthly-overrides').then(r => setOverrideMonths(r.data)).catch(() => {})
-  }, [saved])
+  // All months that have any override (for past-months section)
+  const [overrideMonths, setOverrideMonths] = useState([])
+  const [expandedPastMonth, setExpandedPastMonth] = useState(null)
+  const [pastMonthData, setPastMonthData] = useState({})  // month → [{type, monthly_limit}]
 
-  // Load overrides for selected month
   useEffect(() => {
     setSaved(false)
     api.get('/budgets/monthly-overrides', { params: { month: selectedMonth } }).then(r => {
@@ -331,7 +325,23 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
       setOverrideLimits(newLimits)
       setSavedOverrides(new Set(Object.keys(existing)))
     }).catch(() => {})
-  }, [selectedMonth, expenseTypes])
+  }, [expenseTypes, selectedMonth])
+
+  useEffect(() => {
+    api.get('/budgets/monthly-overrides').then(r => setOverrideMonths(r.data)).catch(() => {})
+  }, [saved])
+
+  const otherMonths = overrideMonths.filter(m => m !== selectedMonth).sort((a, b) => b.localeCompare(a))
+
+  function expandPastMonth(month) {
+    if (expandedPastMonth === month) { setExpandedPastMonth(null); return }
+    setExpandedPastMonth(month)
+    if (!pastMonthData[month]) {
+      api.get('/budgets/monthly-overrides', { params: { month } })
+        .then(r => setPastMonthData(prev => ({ ...prev, [month]: r.data })))
+        .catch(() => {})
+    }
+  }
 
   async function handleSave() {
     const budgets = expenseTypes
@@ -343,6 +353,8 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
     try {
       await api.post('/budgets/monthly-overrides', { month: selectedMonth, budgets })
       setSaved(true)
+      setSavedOverrides(new Set(budgets.map(b => b.type)))
+      onChanged?.()
     } catch {
       setSaveError('Failed to save. Please try again.')
     } finally {
@@ -356,7 +368,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
       setSavedOverrides(prev => { const next = new Set(prev); next.delete(typeName); return next })
       setEnabled(prev => ({ ...prev, [typeName]: false }))
       setOverrideLimits(prev => ({ ...prev, [typeName]: defaultLimits[typeName] ?? '' }))
-      setSaved(true)
+      onChanged?.()
     } catch {
       setSaveError('Failed to delete override.')
     }
@@ -367,12 +379,12 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
     setSaveError('')
     try {
       await api.delete(`/budgets/monthly-overrides/${selectedMonth}`)
-      // Clear all enabled states
       const newEnabled = Object.fromEntries(expenseTypes.map(t => [t.name, false]))
       const newLimits = Object.fromEntries(expenseTypes.map(t => [t.name, defaultLimits[t.name] ?? '']))
       setEnabled(newEnabled)
       setOverrideLimits(newLimits)
-      setSaved(true)
+      setSavedOverrides(new Set())
+      onChanged?.()
     } catch {
       setSaveError('Failed to reset.')
     } finally {
@@ -380,13 +392,12 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
     }
   }
 
-  const hasExistingOverride = overrideMonths.includes(selectedMonth)
+  const hasExistingOverride = savedOverrides.size > 0
 
   return (
     <Box>
-      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', my: 3 }} />
+      <Divider sx={{ borderColor: C.hoverStrong, my: 3 }} />
 
-      {/* Collapsible header */}
       <Stack
         direction="row"
         alignItems="center"
@@ -399,15 +410,15 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
             Monthly Overrides
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Set different budget limits for a specific month.
+            Override budget limits for any month.
           </Typography>
         </Box>
         <Stack direction="row" alignItems="center" gap={1}>
-          {overrideMonths.length > 0 && (
+          {savedOverrides.size > 0 && (
             <Chip
-              label={`${overrideMonths.length} month${overrideMonths.length > 1 ? 's' : ''}`}
+              label={`${savedOverrides.size} override${savedOverrides.size > 1 ? 's' : ''}`}
               size="small"
-              sx={{ bgcolor: 'rgba(240,234,214,0.08)', color: 'text.secondary', fontSize: '0.8rem' }}
+              sx={{ bgcolor: C.hoverStrong, color: 'text.secondary', fontSize: '0.8rem' }}
             />
           )}
           <IconButton size="small" sx={{ color: 'text.secondary' }}>
@@ -419,7 +430,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
       <Collapse in={open}>
         <Stack spacing={2.5}>
           {/* Month selector */}
-          <FormControl size="small" sx={{ width: 220 }}>
+          <FormControl size="small" sx={{ maxWidth: 240 }}>
             <InputLabel>Month</InputLabel>
             <Select
               value={selectedMonth}
@@ -427,20 +438,18 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
               label="Month"
               {...DROPDOWN_MENU_PROPS}
             >
-              {SELECTABLE_MONTHS.map(({ key, label }) => (
+              {OVERRIDE_MONTH_OPTIONS.map(({ key, label }) => (
                 <MenuItem key={key} value={key} sx={DROPDOWN_ITEM_SX}>
-                  <Stack direction="row" alignItems="center" gap={1}>
-                    {label}
-                    {overrideMonths.includes(key) && (
-                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0 }} />
-                    )}
-                  </Stack>
+                  {label}
+                  {key === currentMonth() && (
+                    <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.disabled' }}>current</Typography>
+                  )}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
-          {/* Per-category override rows */}
+          {/* Override rows for selected month */}
           <Stack spacing={0.75}>
             {expenseTypes.map(t => {
               const IconComp = ICON_REGISTRY[t.icon]
@@ -454,9 +463,9 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
                     px: 1.5,
                     py: 0.75,
                     borderRadius: 1.5,
-                    border: '1px solid rgba(240,234,214,0.08)',
+                    border: `1px solid ${C.hoverStrong}`,
                     opacity: enabled[t.name] ? 1 : 0.55,
-                    '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' },
+                    '&:hover': { bgcolor: C.subtleBg },
                   }}
                 >
                   <Checkbox
@@ -513,21 +522,13 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
 
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             {hasExistingOverride ? (
-              <Button
-                variant="text"
-                color="error"
-                size="small"
-                onClick={handleReset}
-                disabled={saving}
-              >
+              <Button variant="text" color="error" size="small" onClick={handleReset} disabled={saving}>
                 Reset to defaults
               </Button>
             ) : <Box />}
             <Stack direction="row" alignItems="center" gap={2}>
               {saved && (
-                <Typography variant="body2" sx={{ color: 'primary.main' }}>
-                  {hasExistingOverride ? 'Reset!' : 'Saved!'}
-                </Typography>
+                <Typography variant="body2" sx={{ color: 'primary.main' }}>Saved!</Typography>
               )}
               <Button
                 variant="contained"
@@ -536,10 +537,88 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
                 disabled={saving}
                 sx={{ fontWeight: 600 }}
               >
-                {saving ? 'Saving…' : 'Save Monthly Overrides'}
+                {saving ? 'Saving…' : 'Save Overrides'}
               </Button>
             </Stack>
           </Stack>
+
+          {/* Past months */}
+          {otherMonths.length > 0 && (
+            <Box>
+              <Divider sx={{ borderColor: C.hoverStrong, mb: 2 }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', mb: 1.5 }}>
+                Other Months
+              </Typography>
+              <Stack spacing={0.75}>
+                {otherMonths.map(month => {
+                  const label = new Date(month + '-02').toLocaleString('en-US', { month: 'long', year: 'numeric' })
+                  const isExpanded = expandedPastMonth === month
+                  const data = pastMonthData[month]
+                  return (
+                    <Box key={month}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        justifyContent="space-between"
+                        onClick={() => expandPastMonth(month)}
+                        sx={{
+                          px: 1.5, py: 0.75, borderRadius: 1.5,
+                          border: `1px solid ${C.hoverStrong}`,
+                          cursor: 'pointer',
+                          '&:hover': { bgcolor: C.subtleBg },
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
+                          {label}
+                        </Typography>
+                        <Stack direction="row" alignItems="center" gap={1}>
+                          {data && (
+                            <Chip
+                              label={`${data.length} override${data.length !== 1 ? 's' : ''}`}
+                              size="small"
+                              sx={{ bgcolor: C.hoverStrong, color: 'text.secondary', fontSize: '0.75rem' }}
+                            />
+                          )}
+                          <IconButton size="small" sx={{ color: 'text.secondary', p: 0.25 }}>
+                            {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                          </IconButton>
+                        </Stack>
+                      </Stack>
+                      <Collapse in={isExpanded}>
+                        <Stack spacing={0.5} sx={{ pt: 0.75, pl: 1 }}>
+                          {data === undefined && (
+                            <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>Loading…</Typography>
+                          )}
+                          {data?.map(b => {
+                            const t = expenseTypes.find(et => et.name === b.type)
+                            const IconComp = t ? ICON_REGISTRY[t.icon] : null
+                            return (
+                              <Stack key={b.type} direction="row" alignItems="center" spacing={1.5}
+                                sx={{ px: 1.5, py: 0.4 }}>
+                                {t && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />}
+                                {IconComp && <IconComp sx={{ fontSize: 16, color: t.color, flexShrink: 0 }} />}
+                                <Typography variant="body2" sx={{ color: 'text.primary', flexGrow: 1 }}>
+                                  {b.type}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  ${b.monthly_limit.toFixed(0)}
+                                  {defaultLimits[b.type] && (
+                                    <Box component="span" sx={{ color: 'text.disabled' }}>
+                                      {' '}/ default ${parseFloat(defaultLimits[b.type]).toFixed(0)}
+                                    </Box>
+                                  )}
+                                </Typography>
+                              </Stack>
+                            )
+                          })}
+                        </Stack>
+                      </Collapse>
+                    </Box>
+                  )
+                })}
+              </Stack>
+            </Box>
+          )}
         </Stack>
       </Collapse>
     </Box>
@@ -549,6 +628,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits }) {
 // ─── Macrocategory management section ────────────────────────────────────────
 
 function MacrocategoryManager() {
+  const C = useC()
   const { macrocategories, reloadMacros } = useExpenseTypes()
   const [open, setOpen] = useState(false)
   const [newName, setNewName] = useState('')
@@ -595,7 +675,7 @@ function MacrocategoryManager() {
 
   return (
     <Box>
-      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', my: 3 }} />
+      <Divider sx={{ borderColor: C.hoverStrong, my: 3 }} />
       <Stack direction="row" alignItems="center" justifyContent="space-between"
         onClick={() => setOpen(o => !o)}
         sx={{ cursor: 'pointer', userSelect: 'none', mb: open ? 2 : 0 }}>
@@ -606,7 +686,7 @@ function MacrocategoryManager() {
         <Stack direction="row" alignItems="center" gap={1}>
           {macrocategories.length > 0 && (
             <Chip label={macrocategories.length} size="small"
-              sx={{ bgcolor: 'rgba(240,234,214,0.08)', color: 'text.secondary', fontSize: '0.8rem' }} />
+              sx={{ bgcolor: C.hoverStrong, color: 'text.secondary', fontSize: '0.8rem' }} />
           )}
           <IconButton size="small" sx={{ color: 'text.secondary' }}>
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -619,7 +699,7 @@ function MacrocategoryManager() {
           {/* Existing macrocategories */}
           {macrocategories.map(m => editTarget?.id === m.id ? (
             <Stack key={m.id} direction="row" alignItems="center" gap={1.5}
-              sx={{ px: 1.5, py: 1, borderRadius: 1.5, border: `1px solid ${m.color}`, bgcolor: 'rgba(240,234,214,0.03)' }}>
+              sx={{ px: 1.5, py: 1, borderRadius: 1.5, border: `1px solid ${m.color}`, bgcolor: C.subtleBg }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: editColor, flexShrink: 0 }} />
               <TextField size="small" value={editName} onChange={e => setEditName(e.target.value)}
                 sx={{ flex: 1 }} autoFocus />
@@ -637,8 +717,8 @@ function MacrocategoryManager() {
             </Stack>
           ) : (
             <Stack key={m.id} direction="row" alignItems="center" gap={1.5}
-              sx={{ px: 1.5, py: 0.75, borderRadius: 1.5, border: '1px solid rgba(240,234,214,0.08)',
-                '&:hover': { bgcolor: 'rgba(240,234,214,0.03)' } }}>
+              sx={{ px: 1.5, py: 0.75, borderRadius: 1.5, border: `1px solid ${C.hoverStrong}`,
+                '&:hover': { bgcolor: C.subtleBg } }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: m.color, flexShrink: 0 }} />
               <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1 }}>{m.name}</Typography>
               {m.budget_limit > 0 && (
@@ -658,7 +738,7 @@ function MacrocategoryManager() {
 
           {/* Add new */}
           <Stack direction="row" alignItems="center" gap={1.5}
-            sx={{ px: 1.5, py: 1, borderRadius: 1.5, border: '1px dashed rgba(240,234,214,0.2)' }}>
+            sx={{ px: 1.5, py: 1, borderRadius: 1.5, border: `1px dashed ${C.borderMed}` }}>
             <TextField size="small" placeholder="Group name" value={newName}
               onChange={e => { setNewName(e.target.value); setError('') }} sx={{ flex: 1 }} />
             <TextField size="small" value={newBudget} onChange={e => setNewBudget(e.target.value)}
@@ -680,55 +760,46 @@ function MacrocategoryManager() {
   )
 }
 
-const STATUS_COLORS = {
-  on_track: '#8fb996',
-  at_risk: '#f0c040',
-  over_budget: '#e07c7c',
-  no_budget: 'rgba(240,234,214,0.15)',
-}
-
 export default function BudgetGoals({ onSaved }) {
-  const { expenseTypes, reloadTypes, macrocategories, macroMap, reloadMacros } = useExpenseTypes()
+  const C = useC()
+  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
+  const { expenseTypes, reloadTypes, macrocategories } = useExpenseTypes()
   const [limits, setLimits] = useState({})
-  const [effectiveLimits, setEffectiveLimits] = useState({})
-  const [spending, setSpending] = useState({})
-  const [pacing, setPacing] = useState({})
+  const [currentOverrides, setCurrentOverrides] = useState({})  // typeName → monthly_limit
+  const [overrideRefresh, setOverrideRefresh] = useState(0)
   const [loadingBudgets, setLoadingBudgets] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saved, setSaved] = useState(false)
 
   const [defaultsOpen, setDefaultsOpen] = useState(true)
-  const [showAllCategories, setShowAllCategories] = useState(false)
-  const [expandedGroups, setExpandedGroups] = useState(new Set())
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+
+  const currentMonthShort = new Date().toLocaleString('en-US', { month: 'short' })
 
   // Reload budget limits whenever the type list changes (renames, adds, deletes)
   useEffect(() => {
     if (expenseTypes.length === 0) return
     setLoadingBudgets(true)
     setSaved(false)
-    Promise.all([
-      api.get('/budgets'),
-      api.get('/budgets/effective', { params: { month: currentMonth() } }),
-      api.get('/expenses/summary', { params: { month: currentMonth() } }),
-      api.get('/analysis/pacing', { params: { month: currentMonth() } }),
-    ]).then(([budgetsRes, effectiveRes, summaryRes, pacingRes]) => {
+    api.get('/budgets').then(budgetsRes => {
       const fromApi = Object.fromEntries(
         budgetsRes.data.map(b => [b.type, b.monthly_limit > 0 ? String(b.monthly_limit) : ''])
       )
       const defaults = Object.fromEntries(expenseTypes.map(t => [t.name, '']))
       setLimits({ ...defaults, ...fromApi })
-      setEffectiveLimits(Object.fromEntries(
-        effectiveRes.data.map(b => [b.type, b.monthly_limit > 0 ? b.monthly_limit : null])
-      ))
-      setSpending(Object.fromEntries(summaryRes.data.map(r => [r.type, r.total])))
-      setPacing(Object.fromEntries((pacingRes.data.categories ?? []).map(c => [c.type, c])))
     }).finally(() => setLoadingBudgets(false))
   }, [expenseTypes])
+
+  // Fetch current month overrides to annotate Default Limits rows
+  useEffect(() => {
+    api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
+      .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))
+      .catch(() => {})
+  }, [overrideRefresh, expenseTypes])
 
   function handleLimitChange(typeName, value) {
     setLimits(prev => ({ ...prev, [typeName]: value }))
@@ -771,7 +842,6 @@ export default function BudgetGoals({ onSaved }) {
       elevation={0}
       sx={{
         bgcolor: 'background.paper',
-        border: '1px solid rgba(240, 234, 214, 0.12)',
         borderRadius: 2,
         p: { xs: 3, sm: 4 },
       }}
@@ -780,10 +850,10 @@ export default function BudgetGoals({ onSaved }) {
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
-            Budget Goals
+            Settings
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Set monthly limits and manage your spending categories.
+            Manage spending categories and budget limits.
           </Typography>
         </Box>
         <Stack direction="row" gap={1} flexWrap="wrap">
@@ -792,7 +862,7 @@ export default function BudgetGoals({ onSaved }) {
             color="inherit"
             startIcon={<FileUploadIcon />}
             onClick={() => setImportOpen(true)}
-            sx={{ fontWeight: 600, flexShrink: 0, color: 'text.secondary', borderColor: 'rgba(240,234,214,0.2)' }}
+            sx={{ fontWeight: 600, flexShrink: 0, color: 'text.secondary', borderColor: C.borderMed }}
             size="small"
           >
             Import
@@ -810,7 +880,7 @@ export default function BudgetGoals({ onSaved }) {
         </Stack>
       </Stack>
 
-      <Divider sx={{ borderColor: 'rgba(240,234,214,0.08)', mt: 2.5 }} />
+      <Divider sx={{ borderColor: C.hoverStrong, mt: 2.5 }} />
 
       {/* Default limits sub-header (collapsible) */}
       <Stack
@@ -833,118 +903,79 @@ export default function BudgetGoals({ onSaved }) {
         </IconButton>
       </Stack>
 
-      {/* Category cards */}
+      {/* Category rows */}
       <Collapse in={defaultsOpen}>
       {loadingBudgets ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>Loading…</Typography>
       ) : (
         <form onSubmit={handleSaveBudgets}>
           {(() => {
-            const CARD_LIMIT = 4
-            const sorted = expenseTypes
-
-            function renderCard(t) {
+            function renderRow(t) {
               const IconComp = ICON_REGISTRY[t.icon]
-              const spent = spending[t.name] ?? 0
-              const limit = effectiveLimits[t.name] ?? parseFloat(limits[t.name])
-              const hasLimit = !isNaN(limit) && limit > 0
-              const over = hasLimit && spent > limit
-              const pct = hasLimit ? Math.min((spent / limit) * 100, 100) : null
+              const hasOverride = currentOverrides[t.name] != null
+              const overrideContent = hasOverride ? (
+                <>
+                  <Box component="span" sx={{ color: 'primary.main' }}>
+                    {currentMonthShort} Override: ${Number(currentOverrides[t.name]).toFixed(0)}
+                  </Box>
+                  {limits[t.name] && ` | Default: $${parseFloat(limits[t.name]).toFixed(0)}`}
+                </>
+              ) : null
+              const inputField = (
+                <TextField
+                  type="number"
+                  placeholder="No limit"
+                  value={limits[t.name] ?? ''}
+                  onChange={e => handleLimitChange(t.name, e.target.value)}
+                  size="small"
+                  InputProps={{
+                    startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>$</Typography>,
+                  }}
+                  inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right', width: 70 } }}
+                  sx={{ width: 120, flexShrink: 0 }}
+                />
+              )
               return (
-                <Card
+                <Box
                   key={t.id}
-                  elevation={0}
                   sx={{
-                    bgcolor: '#2c2f3a',
-                    border: '1px solid rgba(240,234,214,0.1)',
-                    borderTop: `3px solid ${t.color}`,
-                    borderRadius: 2,
-                    minWidth: 200,
-                    flex: '1 1 200px',
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 1.5,
+                    border: `1px solid ${C.hoverStrong}`,
+                    '&:hover': { bgcolor: C.subtleBg },
                   }}
                 >
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-                      <Stack direction="row" alignItems="center" gap={0.75}>
-                        {IconComp && <IconComp sx={{ fontSize: 18, color: t.color }} />}
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                          {t.name}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row">
-                        <IconButton size="small" onClick={() => { setEditTarget(t); setFormOpen(true) }}
-                          title="Edit category" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, p: 0.25 }}>
-                          <EditOutlinedIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
-                        {t.name !== 'Other' && (
-                          <IconButton size="small" onClick={() => setDeleteTarget(t)}
-                            title="Delete category" sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' }, p: 0.25 }}>
-                            <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                          </IconButton>
-                        )}
-                      </Stack>
-                    </Stack>
-
-                    {hasLimit && (
-                      <>
-                        <Stack direction="row" alignItems="baseline" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="body2" sx={{ color: over ? 'error.main' : 'text.secondary' }}>
-                            ${spent.toFixed(2)} spent
-                          </Typography>
-                          {over ? (
-                            <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
-                              +${(spent - limit).toFixed(2)} over
-                            </Typography>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">/ ${limit.toFixed(0)}</Typography>
-                          )}
-                        </Stack>
-                        <LinearProgress variant="determinate" value={pct}
-                          sx={{ height: 4, borderRadius: 2, mb: 1.5, bgcolor: 'rgba(240,234,214,0.08)',
-                            '& .MuiLinearProgress-bar': { bgcolor: over ? 'error.main' : t.color, borderRadius: 2 } }} />
-                      </>
+                  {/* Desktop: single row with all elements */}
+                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />
+                    {IconComp && <IconComp sx={{ fontSize: 18, color: t.color, flexShrink: 0 }} />}
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1, minWidth: 0 }}>
+                      {t.name}
+                    </Typography>
+                    {hasOverride && (
+                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        {overrideContent}
+                      </Typography>
                     )}
-
-                    {pacing[t.name]?.projected_spend != null && (
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.75}>
-                        <Typography variant="body2" color="text.secondary">
-                          → ${pacing[t.name].projected_spend.toFixed(2)} projected
-                        </Typography>
-                        <Chip
-                          label={pacing[t.name].status.replace('_', ' ')}
-                          size="small"
-                          sx={{ fontSize: '0.72rem', height: 20, bgcolor: STATUS_COLORS[pacing[t.name].status], color: '#22252e', fontWeight: 600 }}
-                        />
-                      </Stack>
-                    )}
-
-                    <TextField
-                      type="number" placeholder="No limit" value={limits[t.name] ?? ''}
-                      onChange={e => handleLimitChange(t.name, e.target.value)}
-                      size="small" fullWidth
-                      InputProps={{ startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>$</Typography> }}
-                      inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right' } }}
-                      sx={{ mb: macrocategories.length > 0 ? 1 : 0 }}
-                    />
-
-                    {/* Macrocategory assignment */}
                     {macrocategories.length > 0 && (
-                      <FormControl fullWidth size="small">
+                      <FormControl size="small" sx={{ minWidth: 120 }}>
                         <Select
                           value={t.macrocategory_id ?? ''}
                           onChange={async e => {
-                            const newMacroId = e.target.value || null
                             await api.put(`/expense-types/${t.id}`, {
-                              name: t.name, color: t.color, icon: t.icon, macrocategory_id: newMacroId,
+                              name: t.name, color: t.color, icon: t.icon,
+                              macrocategory_id: e.target.value || null,
                             })
                             await reloadTypes()
                           }}
                           displayEmpty
                           sx={{ fontSize: '0.75rem', color: 'text.secondary' }}
+                          {...DROPDOWN_MENU_PROPS}
                         >
-                          <MenuItem value=""><em style={{ fontSize: '0.75rem' }}>— No group —</em></MenuItem>
+                          <MenuItem value="" sx={{ ...DROPDOWN_ITEM_SX, fontSize: '0.75rem' }}><em>— No group —</em></MenuItem>
                           {macrocategories.map(m => (
-                            <MenuItem key={m.id} value={m.id} sx={{ fontSize: '0.75rem' }}>
+                            <MenuItem key={m.id} value={m.id} sx={{ ...DROPDOWN_ITEM_SX, fontSize: '0.75rem' }}>
                               <Stack direction="row" alignItems="center" gap={1}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: m.color, flexShrink: 0 }} />
                                 {m.name}
@@ -954,48 +985,67 @@ export default function BudgetGoals({ onSaved }) {
                         </Select>
                       </FormControl>
                     )}
-                  </CardContent>
-                </Card>
+                    {inputField}
+                    <IconButton size="small" onClick={() => { setEditTarget(t); setFormOpen(true) }}
+                      sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, p: 0.5 }}>
+                      <EditOutlinedIcon fontSize="small" />
+                    </IconButton>
+                    {t.name !== 'Other' && (
+                      <IconButton size="small" onClick={() => setDeleteTarget(t)}
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' }, p: 0.5 }}>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Stack>
+
+                  {/* Mobile: row 1 = name + edit/delete, row 2 = input + override */}
+                  <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                    <Stack direction="row" alignItems="center" gap={1}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />
+                      {IconComp && <IconComp sx={{ fontSize: 18, color: t.color, flexShrink: 0 }} />}
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {t.name}
+                      </Typography>
+                      <IconButton size="small" onClick={() => { setEditTarget(t); setFormOpen(true) }}
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, p: 0.5 }}>
+                        <EditOutlinedIcon fontSize="small" />
+                      </IconButton>
+                      {t.name !== 'Other' && (
+                        <IconButton size="small" onClick={() => setDeleteTarget(t)}
+                          sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' }, p: 0.5 }}>
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Stack>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ mt: 0.75 }}>
+                      {inputField}
+                      {hasOverride && (
+                        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right', minWidth: 0 }}>
+                          {overrideContent}
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Box>
+                </Box>
               )
             }
 
             if (macrocategories.length > 0) {
-              // Group cards by macrocategory, limit per group
               const grouped = {}
               macrocategories.forEach(m => { grouped[m.id] = [] })
               const ungrouped = []
-              sorted.forEach(t => {
+              expenseTypes.forEach(t => {
                 if (t.macrocategory_id && grouped[t.macrocategory_id]) {
                   grouped[t.macrocategory_id].push(t)
                 } else {
                   ungrouped.push(t)
                 }
               })
-              function groupToggle(key, list) {
-                if (list.length <= CARD_LIMIT) return null
-                const expanded = expandedGroups.has(key)
-                return (
-                  <Box sx={{ mt: 1, mb: 1 }}>
-                    <Box
-                      onClick={() => setExpandedGroups(prev => {
-                        const next = new Set(prev)
-                        expanded ? next.delete(key) : next.add(key)
-                        return next
-                      })}
-                      sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-                    >
-                      <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                        {expanded ? 'Show less ↑' : `Show all ${list.length} ↓`}
-                      </Typography>
-                    </Box>
-                  </Box>
-                )
-              }
               return (
-                <Box mb={3}>
+                <Box mb={2}>
                   {macrocategories.map(m => grouped[m.id].length > 0 && (
-                    <Box key={m.id} mb={3}>
-                      <Stack direction="row" alignItems="center" gap={1} mb={1.5}>
+                    <Box key={m.id} mb={2}>
+                      <Stack direction="row" alignItems="center" gap={1} mb={1}>
                         <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: m.color }} />
                         <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem' }}>
                           {m.name}
@@ -1004,53 +1054,35 @@ export default function BudgetGoals({ onSaved }) {
                           <Typography variant="body2" color="text.secondary">— ${m.budget_limit.toFixed(0)} ceiling</Typography>
                         )}
                       </Stack>
-                      <Stack direction="row" flexWrap="wrap" gap={2}>
-                        {(expandedGroups.has(m.id) ? grouped[m.id] : grouped[m.id].slice(0, CARD_LIMIT)).map(renderCard)}
+                      <Stack spacing={0.75}>
+                        {grouped[m.id].map(renderRow)}
                       </Stack>
-                      {groupToggle(m.id, grouped[m.id])}
                     </Box>
                   ))}
                   {ungrouped.length > 0 && (
-                    <Box mb={3}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem', mb: 1.5 }}>
+                    <Box mb={2}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem', mb: 1 }}>
                         Ungrouped
                       </Typography>
-                      <Stack direction="row" flexWrap="wrap" gap={2}>
-                        {(expandedGroups.has('ungrouped') ? ungrouped : ungrouped.slice(0, CARD_LIMIT)).map(renderCard)}
+                      <Stack spacing={0.75}>
+                        {ungrouped.map(renderRow)}
                       </Stack>
-                      {groupToggle('ungrouped', ungrouped)}
                     </Box>
                   )}
                 </Box>
               )
             }
 
-            // No macrocategories: flat list with show-all toggle
-            const visible = showAllCategories ? sorted : sorted.slice(0, CARD_LIMIT)
             return (
-              <>
-                <Stack direction="row" flexWrap="wrap" gap={2} mb={3}>
-                  {visible.map(renderCard)}
-                </Stack>
-                {sorted.length > CARD_LIMIT && (
-                  <Box sx={{ mb: 3 }}>
-                    <Box
-                      onClick={() => setShowAllCategories(v => !v)}
-                      sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-                    >
-                      <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                        {showAllCategories ? 'Show less ↑' : `Show all ${sorted.length} categories ↓`}
-                      </Typography>
-                    </Box>
-                  </Box>
-                )}
-              </>
+              <Stack spacing={0.75} mb={3}>
+                {expenseTypes.map(renderRow)}
+              </Stack>
             )
           })()}
 
           {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
 
-          <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={2}>
+          <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={2} mt={2}>
             {saved && (
               <Typography variant="body2" sx={{ color: 'primary.main' }}>
                 Changes saved!
@@ -1071,7 +1103,11 @@ export default function BudgetGoals({ onSaved }) {
       </Collapse>
 
       {/* Monthly overrides */}
-      <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} />
+      <MonthlyOverrides
+        expenseTypes={expenseTypes}
+        defaultLimits={limits}
+        onChanged={() => setOverrideRefresh(s => s + 1)}
+      />
 
       {/* Macrocategory management */}
       <MacrocategoryManager />

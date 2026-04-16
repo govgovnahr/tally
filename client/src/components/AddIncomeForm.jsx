@@ -1,19 +1,20 @@
 import { useState } from 'react'
+import { useC } from '../colors'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
-import FormControlLabel from '@mui/material/FormControlLabel'
-import Checkbox from '@mui/material/Checkbox'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import Stack from '@mui/material/Stack'
 import api from '../api.js'
+import PolishedCheckbox from './PolishedCheckbox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
 
 export default function AddIncomeForm({ onClose, onAdded, income }) {
+  const C = useC()
   const isEditing = Boolean(income)
   const [form, setForm] = useState({
     name: income?.name ?? '',
@@ -65,7 +66,7 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
       PaperProps={{
         sx: {
           bgcolor: 'background.paper',
-          border: '1px solid rgba(240, 234, 214, 0.12)',
+          border: `1px solid ${C.border}`,
         },
       }}
     >
@@ -109,17 +110,11 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
               variant="outlined"
               InputLabelProps={{ shrink: true }}
             />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isRecurring}
-                  onChange={e => setIsRecurring(e.target.checked)}
-                  color="primary"
-                  size="small"
-                />
-              }
+            <PolishedCheckbox
+              checked={isRecurring}
+              onChange={setIsRecurring}
               label="Recurring monthly income"
-              sx={{ color: 'text.secondary' }}
+              accentColor={C.income}
             />
             {error && (
               <Alert severity="error" sx={{ py: 0.5 }}>
@@ -135,8 +130,8 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
           <Button
             type="submit"
             variant="contained"
-            color="primary"
             disabled={loading}
+            sx={{ bgcolor: C.income, '&:hover': { bgcolor: C.incomeButtonHover }, color: '#000' }}
           >
             {loading ? (isEditing ? 'Saving…' : 'Adding…') : (isEditing ? 'Save Changes' : 'Add Income')}
           </Button>

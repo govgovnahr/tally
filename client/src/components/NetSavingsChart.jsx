@@ -7,14 +7,10 @@ import {
   ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import api from '../api.js'
+import { useC } from '../colors'
 
 const PAST_MONTHS = 6
 const FUTURE_MONTHS = 3
-const NET_POS_COLOR = '#8fb996'
-const NET_NEG_COLOR = '#e07c7c'
-const GOAL_COLOR = '#80cbc4'
-const TICK = { fill: 'rgba(240, 234, 214, 0.55)', fontSize: 12 }
-const AXIS_LINE = { stroke: 'rgba(240, 234, 214, 0.12)' }
 
 function shortLabel(m) {
   const [y, mo] = m.split('-').map(Number)
@@ -39,6 +35,10 @@ function addMonthsStr(ym, n) {
 }
 
 function CustomTooltip({ active, payload, monthlyTarget }) {
+  const C = useC()
+  const NET_POS_COLOR = C.onTrack
+  const NET_NEG_COLOR = C.overBudget
+  const GOAL_COLOR = C.income
   if (!active || !payload?.length) return null
   const entry = payload[0]?.payload
   if (!entry) return null
@@ -46,8 +46,8 @@ function CustomTooltip({ active, payload, monthlyTarget }) {
   const isPos = net >= 0
   return (
     <Box sx={{
-      bgcolor: '#22252e',
-      border: '1px solid rgba(240,234,214,0.12)',
+      bgcolor: C.surface,
+      border: `1px solid ${C.border}`,
       borderRadius: 1,
       px: 1.5,
       py: 1,
@@ -83,6 +83,12 @@ function CustomTooltip({ active, payload, monthlyTarget }) {
 }
 
 export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] }) {
+  const C = useC()
+  const NET_POS_COLOR = C.onTrack
+  const NET_NEG_COLOR = C.overBudget
+  const GOAL_COLOR = C.income
+  const TICK = { fill: C.muted, fontSize: 12 }
+  const AXIS_LINE = { stroke: C.border }
   const [historicalData, setHistoricalData] = useState([])
   const cur = currentMonth()
 
@@ -129,7 +135,7 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
       elevation={0}
       sx={{
         bgcolor: 'background.paper',
-        border: '1px solid rgba(240, 234, 214, 0.12)',
+        border: `1px solid ${C.border}`,
         borderRadius: 2,
         p: 2.5,
         mb: 3,
@@ -151,7 +157,7 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
                   x={x} y={y + 12}
                   textAnchor="middle"
                   fontSize={12}
-                  fill={entry?.isFuture ? 'rgba(240,234,214,0.3)' : 'rgba(240,234,214,0.55)'}
+                  fill={entry?.isFuture ? C.borderStrong : C.muted}
                 >
                   {entry?.isFuture ? `~${payload.value}` : payload.value}
                 </text>
@@ -166,8 +172,8 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
             domain={[-domainPad, domainPad]}
             width={52}
           />
-          <Tooltip content={<CustomTooltip monthlyTarget={monthlyTarget} />} cursor={{ fill: 'rgba(240,234,214,0.04)' }} />
-          <ReferenceLine y={0} stroke="rgba(240,234,214,0.2)" strokeWidth={1} />
+          <Tooltip content={<CustomTooltip monthlyTarget={monthlyTarget} />} cursor={{ fill: C.hover }} />
+          <ReferenceLine y={0} stroke={C.refLine} strokeWidth={1} />
           {monthlyTarget != null && monthlyTarget > 0 && (
             <ReferenceLine
               y={monthlyTarget}
@@ -184,10 +190,10 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
               <ReferenceLine
                 key={g.id}
                 x={entry.label}
-                stroke={g.color ?? '#a0a0a0'}
+                stroke={g.color ?? C.dimText}
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
-                label={{ value: g.name, position: 'insideTopLeft', fill: g.color ?? '#a0a0a0', fontSize: 10 }}
+                label={{ value: g.name, position: 'insideTopLeft', fill: g.color ?? C.dimText, fontSize: 10 }}
               />
             )
           })}

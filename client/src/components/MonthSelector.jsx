@@ -11,7 +11,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import api from '../api.js'
-import { DROPDOWN_PAPER_SX, DROPDOWN_ITEM_SX } from '../menuStyles.js'
+import { useMenuStyles } from '../menuStyles.js'
+import { useC } from '../colors'
 
 function currentMonth() {
   const now = new Date()
@@ -29,6 +30,8 @@ function shortMonth(m) {
 }
 
 export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey }) {
+  const C = useC()
+  const { DROPDOWN_PAPER_SX, DROPDOWN_ITEM_SX } = useMenuStyles()
   const [availableMonths, setAvailableMonths] = useState([])
   const [menuAnchor, setMenuAnchor] = useState(null)
   const cur = currentMonth()
@@ -68,10 +71,10 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
           disabled={!hasPrev}
           sx={{
             color: 'text.secondary',
-            border: '1px solid rgba(240,234,214,0.15)',
+            border: `1px solid ${C.borderLight}`,
             borderRadius: 1.5,
             p: 0.5,
-            '&:hover': { color: 'text.primary', borderColor: 'rgba(240,234,214,0.35)', bgcolor: 'rgba(240,234,214,0.04)' },
+            '&:hover': { color: 'text.primary', borderColor: C.borderHover, bgcolor: C.hover },
             '&.Mui-disabled': { opacity: 0.2 },
           }}
         >
@@ -90,7 +93,7 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
             borderRadius: 1.5,
             px: 1,
             py: 0.5,
-            '&:hover': { bgcolor: 'rgba(240,234,214,0.04)' },
+            '&:hover': { bgcolor: C.hover },
           }}
         >
           <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', lineHeight: 1 }}>
@@ -104,10 +107,10 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
           disabled={!hasNext}
           sx={{
             color: 'text.secondary',
-            border: '1px solid rgba(240,234,214,0.15)',
+            border: `1px solid ${C.borderLight}`,
             borderRadius: 1.5,
             p: 0.5,
-            '&:hover': { color: 'text.primary', borderColor: 'rgba(240,234,214,0.35)', bgcolor: 'rgba(240,234,214,0.04)' },
+            '&:hover': { color: 'text.primary', borderColor: C.borderHover, bgcolor: C.hover },
             '&.Mui-disabled': { opacity: 0.2 },
           }}
         >
@@ -123,8 +126,8 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
               fontSize: '0.7rem',
               letterSpacing: '0.04em',
               color: 'text.secondary',
-              bgcolor: 'rgba(240,234,214,0.06)',
-              border: '1px solid rgba(240,234,214,0.15)',
+              bgcolor: C.hoverMed,
+              border: `1px solid ${C.borderLight}`,
             }}
           />
         )}
@@ -147,7 +150,7 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
         slotProps={{ paper: { sx: { ...DROPDOWN_PAPER_SX, minWidth: 200 } } }}
       >
         {years.map((year, yi) => [
-          yi > 0 && <Divider key={`div-${year}`} sx={{ borderColor: 'rgba(240,234,214,0.08)' }} />,
+          yi > 0 && <Divider key={`div-${year}`} sx={{ borderColor: C.hoverStrong }} />,
           <Typography
             key={`year-${year}`}
             variant="caption"

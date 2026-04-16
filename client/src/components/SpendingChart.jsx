@@ -4,23 +4,21 @@ import {
   BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
-
-const TICK = { fill: 'rgba(240, 234, 214, 0.55)', fontSize: 12 }
-const AXIS_LINE = { stroke: 'rgba(240, 234, 214, 0.12)' }
-const OVER_COLOR = '#e07c7c'
+import { useC } from '../colors'
 
 function formatDollar(v) {
   return `$${v.toLocaleString()}`
 }
 
 function CustomTooltip({ active, payload, label }) {
+  const C = useC()
   if (!active || !payload?.length) return null
   const spent = payload.find(p => p.dataKey === 'spent')
   const budget = payload.find(p => p.dataKey === 'budget')
   return (
     <Box sx={{
-      bgcolor: '#22252e',
-      border: '1px solid rgba(240,234,214,0.12)',
+      bgcolor: C.surface,
+      border: `1px solid ${C.border}`,
       borderRadius: 1,
       px: 1.5,
       py: 1,
@@ -43,6 +41,10 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function SpendingChart({ summary, budgets }) {
+  const C = useC()
+  const TICK = { fill: C.muted, fontSize: 12 }
+  const AXIS_LINE = { stroke: C.border }
+  const OVER_COLOR = C.overBudget
   const { expenseTypes } = useExpenseTypes()
 
   if (Object.keys(budgets).length === 0) return null
@@ -91,10 +93,10 @@ export default function SpendingChart({ summary, budgets }) {
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(240,234,214,0.04)' }} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: C.hover }} />
           <Bar dataKey="budget" name="budget" radius={[0, 3, 3, 0]} maxBarSize={10}>
             {chartData.map(entry => (
-              <Cell key={entry.type} fill="rgba(240,234,214,0.12)" />
+              <Cell key={entry.type} fill={C.border} />
             ))}
           </Bar>
           <Bar dataKey="spent" name="spent" radius={[0, 3, 3, 0]} maxBarSize={10}>
