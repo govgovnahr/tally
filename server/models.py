@@ -54,6 +54,7 @@ class Income:
     created_at: str
     is_recurring: int = 0
     user_id: str = None
+    credit_type: str = None
 
 
 class NewIncome(BaseModel):
@@ -61,6 +62,7 @@ class NewIncome(BaseModel):
     amount: float
     date: str
     is_recurring: int = 0
+    credit_type: Optional[str] = None
 
 
 @dataclass

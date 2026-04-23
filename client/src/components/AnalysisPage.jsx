@@ -1,22 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
-import Stack from '@mui/material/Stack'
-import Chip from '@mui/material/Chip'
-import LinearProgress from '@mui/material/LinearProgress'
-import Divider from '@mui/material/Divider'
-import IconButton from '@mui/material/IconButton'
-import MenuItem from '@mui/material/MenuItem'
-import Select from '@mui/material/Select'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import ToggleButton from '@mui/material/ToggleButton'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
-import TrendingFlatIcon from '@mui/icons-material/TrendingFlat'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import { startTransition } from 'react'
+import { TrendingUp, TrendingDown, Minus, TriangleAlert, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -31,12 +15,12 @@ import {
   Cell
 } from 'recharts'
 import api from '../api.js'
-import { useMenuStyles } from '../menuStyles.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import MonthSelector from './MonthSelector.jsx'
 import { useC } from '../colors'
 import AddExpenseForm from './AddExpenseForm.jsx'
+import { Card } from 'glasscn-ui'
 
 function currentMonth() {
   const now = new Date()
@@ -65,15 +49,17 @@ function monthsFromNow(ym) {
 }
 
 const STATUS_LABELS = {
-  on_track: 'On track',
-  at_risk: 'At risk',
+  well_under:  'Under budget',
+  on_track:    'On track',
+  at_risk:     'At risk',
   over_budget: 'Over budget',
-  no_budget: 'No budget',
+  no_budget:   'No budget',
 }
 
 function useStatusColors() {
   const C = useC()
   return {
+    well_under:  C.nearGoal,
     on_track:    C.onTrack,
     at_risk:     C.atRisk,
     over_budget: C.overBudget,
@@ -81,43 +67,59 @@ function useStatusColors() {
   }
 }
 
-function useToggleSx() {
-  const C = useC()
-  return {
-    '& .MuiToggleButton-root': {
-      color: 'text.secondary',
-      borderColor: C.borderLight,
-      fontSize: '0.8rem',
-      py: 0.75,
-      px: 1.5,
-      minHeight: 36,
-      '&.Mui-selected': { color: 'primary.main', bgcolor: C.primaryTint },
-    },
-  }
-}
-
-function StatusChip({ status }) {
+function StatusBadge({ status }) {
   const C = useC()
   const STATUS_COLORS = useStatusColors()
   return (
-    <Chip
-      label={STATUS_LABELS[status]}
-      size="small"
-      sx={{ fontSize: '0.72rem', height: 22, bgcolor: STATUS_COLORS[status], color: C.surface, fontWeight: 600, flexShrink: 0 }}
-    />
+    <span
+      className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+      style={{ backgroundColor: STATUS_COLORS[status], color: '#fff' }}
+    >
+      {STATUS_LABELS[status]}
+    </span>
+  )
+}
+
+function ToggleGroup({ value, onChange, options }) {
+  const C = useC()
+  return (
+    <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderLight}` }}>
+      {options.map(({ label, val }) => {
+        const active = value === val
+        return (
+          <button
+            key={val}
+            type="button"
+            onClick={() => onChange(val)}
+            className="text-xs font-medium px-3 py-1.5 bg-transparent border-none cursor-pointer transition-colors duration-150 font-[inherit]"
+            style={{
+              color: active ? C.primary : C.muted,
+              backgroundColor: active ? C.primaryTint : 'transparent',
+            }}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
 function ShowMoreToggle({ shown, total, label, onToggle }) {
+  const C = useC()
+  function handleClick() {
+    if (document.startViewTransition) document.startViewTransition(() => startTransition(onToggle))
+    else startTransition(onToggle)
+  }
   return (
-    <Box
-      onClick={onToggle}
-      sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+    <button
+      type="button"
+      onClick={handleClick}
+      className="min-h-[40px] flex items-center text-sm bg-transparent border-none cursor-pointer font-[inherit]"
+      style={{ color: C.muted }}
     >
-      <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-        {shown ? 'Show less ↑' : `Show all ${total} ${label} ↓`}
-      </Typography>
-    </Box>
+      {shown ? 'Show less ↑' : `Show all ${total} ${label} ↓`}
+    </button>
   )
 }
 
@@ -126,7 +128,6 @@ function ShowMoreToggle({ shown, total, label, onToggle }) {
 function PacingSection({ month, onMonthChange }) {
   const C = useC()
   const STATUS_COLORS = useStatusColors()
-  const toggleSx = useToggleSx()
   const { typeMap } = useExpenseTypes()
   const [lookbackMonths, setLookbackMonths] = useState(3)
   const [data, setData] = useState(null)
@@ -143,70 +144,56 @@ function PacingSection({ month, onMonthChange }) {
   const isPast = data && !data.is_current_month && !isFuture
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 } }}
-    >
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={2.5} flexWrap="wrap" gap={2}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', fontSize: { xs: '1rem', sm: '1.1rem' } }}>
-            Budget Pacing
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+    <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6">
+      <div className="flex items-start justify-between flex-wrap gap-4 mb-5">
+        <div>
+          <h2 className="text-base sm:text-lg font-semibold" style={{ color: C.warmText }}>Budget Pacing</h2>
+          <p className="text-sm mt-0.5" style={{ color: C.muted }}>
             {isPast
               ? 'Actual spend vs budget for this month'
               : 'Projected end-of-month spend using historical daily rate'}
-          </Typography>
-        </Box>
-        <Stack direction="row" alignItems="center" gap={2} flexWrap="wrap">
+          </p>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap">
           {data && !isFuture && (
-            <Typography variant="body2" color="text.secondary">
+            <span className="text-sm" style={{ color: C.muted }}>
               Day {data.days_elapsed} of {data.days_in_month}
-            </Typography>
+            </span>
           )}
           {!isPast && (
-            <Stack direction="row" alignItems="center" gap={1}>
-              <Typography variant="body2" color="text.secondary">History:</Typography>
-              <ToggleButtonGroup
+            <div className="flex items-center gap-2">
+              <span className="text-sm" style={{ color: C.muted }}>History:</span>
+              <ToggleGroup
                 value={lookbackMonths}
-                exclusive
-                onChange={(_, v) => { if (v) setLookbackMonths(v) }}
-                size="small"
-                sx={toggleSx}
-              >
-                <ToggleButton value={1}>1M</ToggleButton>
-                <ToggleButton value={3}>3M</ToggleButton>
-                <ToggleButton value={6}>6M</ToggleButton>
-              </ToggleButtonGroup>
-            </Stack>
+                onChange={v => setLookbackMonths(v)}
+                options={[{ label: '1M', val: 1 }, { label: '3M', val: 3 }, { label: '6M', val: 6 }]}
+              />
+            </div>
           )}
-        </Stack>
-      </Stack>
+        </div>
+      </div>
 
-      <MonthSelector selectedMonth={month} onMonthChange={onMonthChange} refreshKey={0} />
+      <MonthSelector selectedMonth={month} onMonthChange={onMonthChange} refreshKey={0} big={false} />
 
       {isFuture ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-          Select a past or current month to see pacing.
-        </Typography>
+        <p className="text-sm py-4" style={{ color: C.muted }}>Select a past or current month to see pacing.</p>
       ) : !data ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>Loading…</Typography>
+        <p className="text-sm py-4" style={{ color: C.muted }}>Loading…</p>
       ) : data.categories.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-          No expenses recorded for this month.
-        </Typography>
+        <p className="text-sm py-4" style={{ color: C.muted }}>No expenses recorded for this month.</p>
       ) : (
-        <Stack spacing={2} mt={1.5}>
+        <div className="flex flex-col gap-5 mt-4">
           {[...data.categories]
             .filter(c => c.spent > 0 || c.projected_spend != null)
             .sort((a, b) => {
-              const order = { over_budget: 0, at_risk: 1, on_track: 2, no_budget: 3 }
+              const order = { over_budget: 0, at_risk: 1, on_track: 2, well_under: 3, no_budget: 4 }
               return (order[a.status] ?? 4) - (order[b.status] ?? 4)
             })
             .slice(0, showAllPacing ? undefined : 3)
             .map(cat => {
               const typeEntry = typeMap[cat.type] || { color: C.dimText, icon: null }
               const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
+              const catColor = C.adaptColor(typeEntry.color)
               const statusColor = STATUS_COLORS[cat.status]
               const actuallyOver = cat.budget_limit && cat.spent > cat.budget_limit
               const spentPct = cat.budget_limit
@@ -218,49 +205,40 @@ function PacingSection({ month, onMonthChange }) {
               const ghostWidth = projPct !== null && spentPct !== null ? projPct - spentPct : null
 
               return (
-                <Box key={cat.type}>
-                  <Stack
-                    direction={{ xs: 'column', sm: 'row' }}
-                    alignItems={{ xs: 'flex-start', sm: 'center' }}
-                    justifyContent="space-between"
-                    gap={{ xs: 0.5, sm: 1 }}
-                    mb={0.75}
-                  >
-                    <Stack direction="row" alignItems="center" gap={0.75}>
-                      {IconComp && <IconComp sx={{ fontSize: 18, color: typeEntry.color }} />}
-                      <Typography variant="body1" sx={{ color: 'text.primary', fontWeight: 500 }}>{cat.type}</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
-                      <Typography variant="body2" color="text.secondary">
-                        <strong style={{ color: 'inherit' }}>${cat.spent.toFixed(2)}</strong> spent
+                <div key={cat.type} style={{ viewTransitionName: `vt-pacing-${cat.type.replace(/[^a-zA-Z0-9]/g, '-')}` }}>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      {IconComp && <IconComp style={{ fontSize: 18, color: catColor }} />}
+                      <span className="text-sm font-medium" style={{ color: C.warmText }}>{cat.type}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-sm" style={{ color: C.muted }}>
+                        <strong style={{ color: C.warmText }}>${cat.spent.toFixed(2)}</strong> spent
                         {!isPast && cat.projected_spend != null && (
-                          <> · <strong>${cat.projected_spend.toFixed(2)}</strong> projected</>
+                          <> · <strong style={{ color: C.warmText }}>${cat.projected_spend.toFixed(2)}</strong> projected</>
                         )}
                         {cat.budget_limit ? ` / $${cat.budget_limit.toFixed(0)} budget` : ''}
-                      </Typography>
+                      </span>
                       {!isPast && cat.status !== 'no_budget' && (
-                        <StatusChip status={cat.status} />
+                        <StatusBadge status={cat.status} />
                       )}
-                    </Stack>
-                  </Stack>
-                  <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: C.hoverStrong, overflow: 'hidden' }}>
+                    </div>
+                  </div>
+                  <div className="relative h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: C.hoverStrong }}>
                     {ghostWidth !== null && ghostWidth > 0 && (
-                      <Box sx={{
-                        position: 'absolute', top: 0, left: `${spentPct}%`,
-                        height: '100%', width: `${ghostWidth}%`,
-                        bgcolor: statusColor, opacity: 0.4, borderRadius: 3,
-                      }} />
+                      <div
+                        className="absolute top-0 h-full rounded-full"
+                        style={{ left: `${spentPct}%`, width: `${ghostWidth}%`, backgroundColor: statusColor, opacity: 0.4 }}
+                      />
                     )}
                     {spentPct !== null && (
-                      <Box sx={{
-                        position: 'absolute', top: 0, left: 0, height: '100%',
-                        width: `${spentPct}%`,
-                        bgcolor: actuallyOver ? C.overBudget : typeEntry.color,
-                        borderRadius: 3,
-                      }} />
+                      <div
+                        className="absolute top-0 left-0 h-full rounded-full"
+                        style={{ width: `${spentPct}%`, backgroundColor: actuallyOver ? C.overBudget : catColor }}
+                      />
                     )}
-                  </Box>
-                </Box>
+                  </div>
+                </div>
               )
             })}
           {(() => {
@@ -269,9 +247,9 @@ function PacingSection({ month, onMonthChange }) {
               <ShowMoreToggle shown={showAllPacing} total={total} label="categories" onToggle={() => setShowAllPacing(v => !v)} />
             ) : null
           })()}
-        </Stack>
+        </div>
       )}
-    </Paper>
+    </Card>
   )
 }
 
@@ -279,14 +257,15 @@ function PacingSection({ month, onMonthChange }) {
 
 function BudgetPerformanceSection({ months }) {
   const C = useC()
-  const TREND_ICON = {
-    up:   <TrendingUpIcon sx={{ fontSize: 16, color: C.trendUp }} />,
-    down: <TrendingDownIcon sx={{ fontSize: 16, color: C.trendDown }} />,
-    flat: <TrendingFlatIcon sx={{ fontSize: 16, color: 'text.disabled' }} />,
-  }
   const { typeMap } = useExpenseTypes()
   const [data, setData] = useState([])
   const [showAllOffenders, setShowAllOffenders] = useState(false)
+
+  const TREND_ICON = {
+    up:   <TrendingUp size={16} style={{ color: C.trendUp }} />,
+    down: <TrendingDown size={16} style={{ color: C.trendDown }} />,
+    flat: <Minus size={16} style={{ color: C.dimText }} />,
+  }
 
   useEffect(() => {
     setShowAllOffenders(false)
@@ -301,19 +280,12 @@ function BudgetPerformanceSection({ months }) {
   const offenders = data.filter(d => d.months_over > 0 && d.budget_limit)
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
-    >
-      <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5, fontSize: { xs: '1rem', sm: '1.1rem' } }}>
-        Budget Performance
-      </Typography>
-      <Typography variant="body2" color="text.secondary" mb={2.5}>
-        Average monthly spend vs budget over the selected period
-      </Typography>
+    <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6 mt-4">
+      <h2 className="text-base sm:text-lg font-semibold mb-0.5" style={{ color: C.warmText }}>Budget Performance</h2>
+      <p className="text-sm mb-5" style={{ color: C.muted }}>Average monthly spend vs budget over the selected period</p>
 
       {data.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">No expense data.</Typography>
+        <p className="text-sm" style={{ color: C.muted }}>No expense data.</p>
       ) : (
         <>
           <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 30)}>
@@ -333,53 +305,46 @@ function BudgetPerformanceSection({ months }) {
 
           {offenders.length > 0 && (
             <>
-              <Divider sx={{ borderColor: C.hoverStrong, my: 2.5 }} />
-              <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary', mb: 1.5 }}>
-                Most often over budget
-              </Typography>
-              <Stack spacing={1.5}>
+              <div className="h-px my-5" style={{ backgroundColor: C.hoverStrong }} />
+              <h3 className="text-sm font-semibold mb-3" style={{ color: C.warmText }}>Most often over budget</h3>
+              <div className="flex flex-col gap-3">
                 {(showAllOffenders ? offenders : offenders.slice(0, 3)).map(d => {
                   const typeEntry = typeMap[d.type] || { color: C.dimText, icon: null }
                   const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
+                  const catColor = C.adaptColor(typeEntry.color)
                   const freqColor = d.frequency_pct >= 66 ? C.overBudget : d.frequency_pct >= 33 ? C.atRisk : C.onTrack
                   return (
-                    <Box
+                    <div
                       key={d.type}
-                      sx={{ px: 2, py: 1.5, borderRadius: 2, bgcolor: 'rgba(240,234,214,0.03)', border: '1px solid rgba(240,234,214,0.07)' }}
+                      className="px-4 py-3 rounded-xl"
+                      style={{ backgroundColor: C.subtleBg, border: `1px solid ${C.border}`, viewTransitionName: `vt-offender-${d.type.replace(/[^a-zA-Z0-9]/g, '-')}` }}
                     >
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1} flexWrap="wrap" gap={1}>
-                        <Stack direction="row" alignItems="center" gap={0.75}>
-                          {IconComp && <IconComp sx={{ fontSize: 18, color: typeEntry.color }} />}
-                          <Typography variant="body1" sx={{ fontWeight: 500, color: 'text.primary' }}>{d.type}</Typography>
+                      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          {IconComp && <IconComp style={{ fontSize: 18, color: catColor }} />}
+                          <span className="text-sm font-medium" style={{ color: C.warmText }}>{d.type}</span>
                           {TREND_ICON[d.trend]}
-                        </Stack>
-                        <Stack direction="row" alignItems="center" gap={2}>
-                          <Typography variant="body2" color="text.secondary">
-                            {d.months_over}/{d.months_total} months over
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: C.overBudget, fontWeight: 600 }}>
-                            +${d.avg_overage.toFixed(0)} avg
-                          </Typography>
-                        </Stack>
-                      </Stack>
-                      <LinearProgress
-                        variant="determinate"
-                        value={d.frequency_pct}
-                        sx={{ height: 5, borderRadius: 2.5, bgcolor: C.hoverStrong,
-                          '& .MuiLinearProgress-bar': { bgcolor: freqColor, borderRadius: 2.5 } }}
-                      />
-                    </Box>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm" style={{ color: C.muted }}>{d.months_over}/{d.months_total} months over</span>
+                          <span className="text-sm font-semibold" style={{ color: C.overBudget }}>+${d.avg_overage.toFixed(0)} avg</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full" style={{ backgroundColor: C.hoverStrong }}>
+                        <div className="h-full rounded-full" style={{ width: `${d.frequency_pct}%`, backgroundColor: freqColor }} />
+                      </div>
+                    </div>
                   )
                 })}
                 {offenders.length > 3 && (
                   <ShowMoreToggle shown={showAllOffenders} total={offenders.length} label="offenders" onToggle={() => setShowAllOffenders(v => !v)} />
                 )}
-              </Stack>
+              </div>
             </>
           )}
         </>
       )}
-    </Paper>
+    </Card>
   )
 }
 
@@ -387,7 +352,6 @@ function BudgetPerformanceSection({ months }) {
 
 function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
   const C = useC()
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const { typeMap } = useExpenseTypes()
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -431,143 +395,160 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
 
   return (
     <>
-    <Paper
-      ref={sectionRef}
-      elevation={0}
-      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3 }}
-    >
-      <Stack direction="row" alignItems="flex-start" gap={1} mb={0.5}>
-        <WarningAmberIcon sx={{ fontSize: 20, color: C.atRisk, mt: '2px' }} />
-        <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', fontSize: { xs: '1rem', sm: '1.1rem' } }}>
-          Unusual Expenses
-        </Typography>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" mb={2}>
-        Individual expenses significantly above their category average
-      </Typography>
-        {data.length > 0 && (                                                                                                                                                         
-          <Stack direction="row" gap={1.5} mb={2} flexWrap="wrap">                                                                                                                    
-            {availableMonths.length > 1 && (                                                                                                                                          
-              <Select
-                size="small"
+      <Card
+        ref={sectionRef}
+        variant="glass"
+        blur="xl"
+        className="rounded-xl p-4 sm:p-6 mt-4"
+      >
+        <div className="flex items-start gap-2 mb-0.5">
+          <TriangleAlert size={20} className="flex-shrink-0 mt-0.5" style={{ color: C.atRisk }} />
+          <h2 className="text-base sm:text-lg font-semibold" style={{ color: C.warmText }}>Unusual Expenses</h2>
+        </div>
+        <p className="text-sm mb-4" style={{ color: C.muted }}>
+          Individual expenses significantly above their category average
+        </p>
+
+        {data.length > 0 && (
+          <div className="flex gap-3 mb-4 flex-wrap">
+            {availableMonths.length > 1 && (
+              <select
                 value={filterMonth}
-                displayEmpty
                 onChange={e => {
                   setFilterMonth(e.target.value)
                   if (!e.target.value) onClearDefaultMonth?.()
                 }}
-                sx={{ fontSize: '0.8rem', minWidth: 160 }}
-                {...DROPDOWN_MENU_PROPS}
+                className="h-9 rounded-lg border px-3 text-sm bg-transparent"
+                style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 160 }}
               >
-                <MenuItem value="" sx={DROPDOWN_ITEM_SX}>All months</MenuItem>
+                <option value="">All months</option>
                 {availableMonths.map(m => (
-                  <MenuItem key={m} value={m} sx={DROPDOWN_ITEM_SX}>{fmtMonth(m)}</MenuItem>
+                  <option key={m} value={m}>{fmtMonth(m)}</option>
                 ))}
-              </Select>
+              </select>
             )}
-            <Stack direction="row" alignItems="center" gap={0.5}>
-              <Select
-                size="small"
+            <div className="flex items-center gap-2">
+              <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                sx={{ fontSize: '0.8rem', minWidth: 140 }}
-                {...DROPDOWN_MENU_PROPS}
+                className="h-9 rounded-lg border px-3 text-sm bg-transparent"
+                style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 140 }}
               >
-                <MenuItem value="date" sx={DROPDOWN_ITEM_SX}>Date</MenuItem>
-                <MenuItem value="amount" sx={DROPDOWN_ITEM_SX}>Amount</MenuItem>
-                <MenuItem value="pct" sx={DROPDOWN_ITEM_SX}>Anomaly %</MenuItem>
-              </Select>
-              <IconButton
-                size="small"
-                onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-                sx={{ border: `1px solid`, borderColor: 'divider', borderRadius: 1, p: 0.5 }}
+                <option value="date">Date</option>
+                <option value="amount">Amount</option>
+                <option value="pct">Anomaly %</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const update = () => setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+                  if (document.startViewTransition) document.startViewTransition(() => startTransition(update))
+                  else startTransition(update)
+                }}
+                className="h-9 w-9 flex items-center justify-center rounded-lg border bg-transparent cursor-pointer"
+                style={{ borderColor: C.borderLight, color: C.muted }}
               >
-                {sortDir === 'desc'
-                  ? <ArrowDownwardIcon sx={{ fontSize: 16 }} />
-                  : <ArrowUpwardIcon sx={{ fontSize: 16 }} />}
-              </IconButton>
-            </Stack>                                                                                                                                                                 
-          </Stack>                                               
-        )}   
-      {loading ? (
-        <Typography variant="body2" color="text.secondary">Loading…</Typography>
-      ) : sorted.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          {data.length === 0
-            ? 'No unusual expenses detected in the selected period. Need at least 3 expenses per category to compute.'
-            : `No unusual expenses in ${fmtMonth(filterMonth)}.`}
-        </Typography>
-      ) : (
-        <Stack spacing={1.5}>
-          {(showAllOutliers ? sorted : sorted.slice(0, 3)).map(e => {
-            const typeEntry = typeMap[e.type] || { color: C.dimText }
-            const severity = e.z_score >= 3 ? C.overBudget : e.z_score >= 2 ? C.atRisk : C.spent
-            const typChipSx = { fontSize: '0.72rem', height: 22, bgcolor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44` }
-            const pctChipSx = { fontSize: '0.72rem', height: 22, bgcolor: severity, color: C.surface, fontWeight: 700 }
-            return (
-              <Box
-                key={e.id}
-                onClick={() => setEditingExpense(e)}
-                sx={{ px: 2, py: 1.5, borderRadius: 2, border: '1px solid rgba(240,234,214,0.07)', bgcolor: 'rgba(240,234,214,0.02)', cursor: 'pointer', '&:hover': { bgcolor: `${typeEntry.color}66`, borderColor: 'rgba(240,234,214,0.18)' }, transition: 'background-color 0.15s, border-color 0.15s' }}
-              >
-                {/* Desktop: name on top row (left-aligned), chip+date below — avoids fixed-width spacing */}
-                <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2} sx={{ display: { xs: 'none', sm: 'flex' } }}>
-                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 500, color: 'text.primary', wordBreak: 'break-word' }}>
-                      {e.name}
-                    </Typography>
-                    <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
-                      <Chip label={e.type} size="small" sx={typChipSx} />
-                      <Typography variant="body2" color="text.secondary">
-                        {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)} in this category
-                      </Typography>
-                    </Stack>
-                  </Box>
-                  <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                      ${e.amount.toFixed(2)}
-                    </Typography>
-                    <Chip label={`+${e.pct_above_avg}%`} size="small" sx={pctChipSx} />
-                  </Stack>
-                </Stack>
+                <span style={{ viewTransitionName: 'outlier-sort-arrow', display: 'inline-flex' }}>
+                  {sortDir === 'desc' ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
 
-                {/* Mobile: ExpenseList-style card — name+amount row, then chip+date row */}
-                <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
-                    <Typography variant="body2" fontWeight={600} sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
-                      {e.name}
-                    </Typography>
-                    <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0 }}>
-                      <Typography variant="body2" fontWeight={700} sx={{ color: 'text.primary' }}>
-                        ${e.amount.toFixed(2)}
-                      </Typography>
-                      <Chip label={`+${e.pct_above_avg}%`} size="small" sx={pctChipSx} />
-                    </Stack>
-                  </Stack>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
-                    <Chip label={e.type} size="small" sx={typChipSx} />
-                    <Typography variant="caption" color="text.secondary">
-                      {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)}
-                    </Typography>
-                  </Stack>
-                </Box>
-              </Box>
-            )
-          })}
-          {sorted.length > 3 && (
-            <ShowMoreToggle shown={showAllOutliers} total={sorted.length} label="expenses" onToggle={() => setShowAllOutliers(v => !v)} />
-          )}
-        </Stack>
+        {loading ? (
+          <p className="text-sm" style={{ color: C.muted }}>Loading…</p>
+        ) : sorted.length === 0 ? (
+          <p className="text-sm" style={{ color: C.muted }}>
+            {data.length === 0
+              ? 'No unusual expenses detected in the selected period. Need at least 3 expenses per category to compute.'
+              : `No unusual expenses in ${fmtMonth(filterMonth)}.`}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {(showAllOutliers ? sorted : sorted.slice(0, 3)).map(e => {
+              const typeEntry = typeMap[e.type] || { color: C.dimText }
+              const catColor = C.adaptColor(typeEntry.color)
+              const severity = e.z_score >= 3 ? C.overBudget : e.z_score >= 2 ? C.atRisk : C.spent
+              return (
+                <div
+                  key={e.id}
+                  onClick={() => setEditingExpense(e)}
+                  className="px-4 py-3 rounded-xl cursor-pointer transition-colors duration-150"
+                  style={{ border: `1px solid ${C.border}`, backgroundColor: C.subtleBg, viewTransitionName: `vt-outlier-${e.id}` }}
+                  onMouseEnter={ev => { ev.currentTarget.style.backgroundColor = `${catColor}18`; ev.currentTarget.style.borderColor = C.borderMed }}
+                  onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = C.subtleBg; ev.currentTarget.style.borderColor = C.border }}
+                >
+                  {/* Desktop */}
+                  <div className="hidden sm:flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium break-words" style={{ color: C.warmText }}>{e.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span
+                          className="text-[11px] px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: `${catColor}22`, color: catColor, border: `1px solid ${catColor}44` }}
+                        >
+                          {e.type}
+                        </span>
+                        <span className="text-sm" style={{ color: C.muted }}>
+                          {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)} in this category
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold" style={{ color: C.warmText }}>${e.amount.toFixed(2)}</span>
+                      <span
+                        className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: severity, color: '#fff' }}
+                      >
+                        +{e.pct_above_avg}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mobile */}
+                  <div className="sm:hidden">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold truncate flex-shrink" style={{ color: C.warmText }}>{e.name}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-sm font-bold" style={{ color: C.warmText }}>${e.amount.toFixed(2)}</span>
+                        <span
+                          className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: severity, color: '#fff' }}
+                        >
+                          +{e.pct_above_avg}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span
+                        className="text-[11px] px-1.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44` }}
+                      >
+                        {e.type}
+                      </span>
+                      <span className="text-xs" style={{ color: C.muted }}>
+                        {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {sorted.length > 3 && (
+              <ShowMoreToggle shown={showAllOutliers} total={sorted.length} label="expenses" onToggle={() => setShowAllOutliers(v => !v)} />
+            )}
+          </div>
+        )}
+      </Card>
+      {editingExpense && (
+        <AddExpenseForm
+          expense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onAdded={() => { setEditingExpense(null); fetchOutliers() }}
+        />
       )}
-    </Paper>
-    {editingExpense && (
-      <AddExpenseForm
-        expense={editingExpense}
-        onClose={() => setEditingExpense(null)}
-        onAdded={() => { setEditingExpense(null); fetchOutliers() }}
-      />
-    )}
-  </>
+    </>
   )
 }
 
@@ -585,35 +566,28 @@ function MonthOverMonthSection({ months }) {
   const avgSpent = data.length > 0 ? data.reduce((s, d) => s + d.total_spent, 0) / data.length : 0
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ bgcolor: 'background.paper', border: `1px solid ${C.border}`, borderRadius: 2, p: { xs: 2, sm: 3 }, mt: 3, mb: 3 }}
-    >
-      <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5, fontSize: { xs: '1rem', sm: '1.1rem' } }}>
-        Monthly Trends
-      </Typography>
-      <Typography variant="body2" color="text.secondary" mb={2}>
-        Total spending, income, and net by month
-      </Typography>
+    <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6 mt-4 mb-4">
+      <h2 className="text-base sm:text-lg font-semibold mb-0.5" style={{ color: C.warmText }}>Monthly Trends</h2>
+      <p className="text-sm mb-4" style={{ color: C.muted }}>Total spending, income, and net by month</p>
 
-      <Stack direction="row" flexWrap="wrap" gap={1} mb={2}>
+      <div className="flex flex-wrap gap-2 mb-4">
         {data.map(d => {
           if (d.mom_change_pct === null) return null
           const up = d.mom_change_pct > 0
           return (
-            <Chip
+            <span
               key={d.month}
-              label={`${shortMonth(d.month)} ${up ? '+' : ''}${d.mom_change_pct.toFixed(1)}%`}
-              size="small"
-              sx={{ fontSize: '0.75rem', height: 24, color: up ? C.overBudget : C.onTrack, borderColor: up ? C.overBudget : C.onTrack }}
-              variant="outlined"
-            />
+              className="text-xs px-2 py-0.5 rounded-full border"
+              style={{ color: up ? C.overBudget : C.onTrack, borderColor: up ? C.overBudget : C.onTrack }}
+            >
+              {shortMonth(d.month)} {up ? '+' : ''}{d.mom_change_pct.toFixed(1)}%
+            </span>
           )
         })}
-      </Stack>
+      </div>
 
       {data.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">No data.</Typography>
+        <p className="text-sm" style={{ color: C.muted }}>No data.</p>
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
@@ -626,9 +600,9 @@ function MonthOverMonthSection({ months }) {
               formatter={(val, name) => [`$${Number(val).toFixed(2)}`, name]}
             />
             <Legend wrapperStyle={{ fontSize: 12, color: C.dimText }} />
-            <Bar dataKey="total_spent" name="Spent" fill={C.netPositive} radius={[3, 3, 0, 0]} >
+            <Bar dataKey="total_spent" name="Spent" fill={C.netPositive} radius={[3, 3, 0, 0]}>
               {chartData.map(entry => (
-                <Cell key={entry.id} fill={entry.net > 0 ? C.netPositive : C.netNegative}/>
+                <Cell key={entry.id} fill={entry.net > 0 ? C.netPositive : C.netNegative} />
               ))}
             </Bar>
             <Line type="monotone" dataKey="total_income" name="Income" stroke={C.income} strokeWidth={2} dot={{ r: 3, fill: C.income }} />
@@ -640,45 +614,35 @@ function MonthOverMonthSection({ months }) {
           </ComposedChart>
         </ResponsiveContainer>
       )}
-    </Paper>
+    </Card>
   )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AnalysisPage({ outlierMonth, onClearOutlierMonth }) {
-  const toggleSx = useToggleSx()
+  const C = useC()
   const [pacingMonth, setPacingMonth] = useState(currentMonth())
   const [historyMonths, setHistoryMonths] = useState(6)
 
   return (
-    <Box>
-      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" mb={3} gap={2}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', fontSize: { xs: '1.2rem', sm: '1.4rem' } }}>
-            Spending Analysis
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-            Pacing, budget performance, outliers, and trends
-          </Typography>
-        </Box>
-        <ToggleButtonGroup
+    <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: C.warmText }}>Spending Analysis</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.muted }}>Pacing, budget performance, outliers, and trends</p>
+        </div>
+        <ToggleGroup
           value={historyMonths}
-          exclusive
-          onChange={(_, v) => { if (v) setHistoryMonths(v) }}
-          size="small"
-          sx={toggleSx}
-        >
-          <ToggleButton value={3}>3M</ToggleButton>
-          <ToggleButton value={6}>6M</ToggleButton>
-          <ToggleButton value={12}>12M</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
+          onChange={v => setHistoryMonths(v)}
+          options={[{ label: '3M', val: 3 }, { label: '6M', val: 6 }, { label: '12M', val: 12 }]}
+        />
+      </div>
 
       <PacingSection month={pacingMonth} onMonthChange={setPacingMonth} />
       <BudgetPerformanceSection months={historyMonths} />
       <OutliersSection months={historyMonths} defaultMonth={outlierMonth} onClearDefaultMonth={onClearOutlierMonth} />
       <MonthOverMonthSection months={historyMonths} />
-    </Box>
+    </div>
   )
 }

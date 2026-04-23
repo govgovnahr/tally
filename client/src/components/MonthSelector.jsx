@@ -1,17 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
-import Box from '@mui/material/Box'
-import IconButton from '@mui/material/IconButton'
-import Typography from '@mui/material/Typography'
-import Stack from '@mui/material/Stack'
-import Chip from '@mui/material/Chip'
-import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import Divider from '@mui/material/Divider'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import api from '../api.js'
-import { useMenuStyles } from '../menuStyles.js'
 import { useC } from '../colors'
 
 function currentMonth() {
@@ -29,11 +18,11 @@ function shortMonth(m) {
   return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'short' })
 }
 
-export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey }) {
+export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey, big }) {
   const C = useC()
-  const { DROPDOWN_PAPER_SX, DROPDOWN_ITEM_SX } = useMenuStyles()
   const [availableMonths, setAvailableMonths] = useState([])
-  const [menuAnchor, setMenuAnchor] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const dropdownRef = useRef(null)
   const cur = currentMonth()
 
   useEffect(() => {
@@ -43,13 +32,23 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
     })
   }, [refreshKey])
 
+  useEffect(() => {
+    if (!menuOpen) return
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
   const idx = availableMonths.indexOf(selectedMonth)
   const hasPrev = idx > 0
   const hasNext = idx !== -1 && idx < availableMonths.length - 1
   const isFuture = selectedMonth > cur
   const isToday = selectedMonth === cur
 
-  // Group months by year, most recent year first
   const byYear = availableMonths.reduceRight((acc, m) => {
     const y = m.split('-')[0]
     if (!acc[y]) acc[y] = []
@@ -58,123 +57,114 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
   }, {})
   const years = Object.keys(byYear).sort((a, b) => b - a)
 
-  function handleMenuSelect(m) {
-    setMenuAnchor(null)
-    onMonthChange(m)
-  }
-
   return (
-    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
-      <Stack direction="row" alignItems="center" gap={1}>
-        <IconButton
-          onClick={() => onMonthChange(availableMonths[idx - 1])}
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => hasPrev && onMonthChange(availableMonths[idx - 1])}
           disabled={!hasPrev}
-          sx={{
-            color: 'text.secondary',
-            border: `1px solid ${C.borderLight}`,
-            borderRadius: 1.5,
-            p: 0.5,
-            '&:hover': { color: 'text.primary', borderColor: C.borderHover, bgcolor: C.hover },
-            '&.Mui-disabled': { opacity: 0.2 },
-          }}
+          className="p-1.5 rounded-xl border transition-colors duration-150 disabled:opacity-20 cursor-pointer bg-transparent"
+          style={{ borderColor: C.borderLight, color: C.muted }}
         >
-          <ChevronLeftIcon fontSize="small" />
-        </IconButton>
+          <ChevronLeft size={16} />
+        </button>
 
-        <Stack
-          direction="row"
-          alignItems="center"
-          gap={0.25}
-          onClick={e => setMenuAnchor(e.currentTarget)}
-          sx={{
-            minWidth: 180,
-            justifyContent: 'center',
-            cursor: 'pointer',
-            borderRadius: 1.5,
-            px: 1,
-            py: 0.5,
-            '&:hover': { bgcolor: C.hover },
-          }}
-        >
-          <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', lineHeight: 1 }}>
-            {formatMonthLabel(selectedMonth)}
-          </Typography>
-          <ExpandMoreIcon sx={{ fontSize: 18, color: 'text.disabled', mt: '1px' }} />
-        </Stack>
+        <div ref={dropdownRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen(v => !v)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl transition-colors duration-150 cursor-pointer border-none min-w-[180px] justify-center"
+            style={{ backgroundColor: menuOpen ? C.hover : 'transparent' }}
+          >
+            <span
+              className={`${big ? 'text-2xl' : 'text-lg'} font-semibold leading-none`}
+            >
+              {formatMonthLabel(selectedMonth)}
+            </span>
+            <ChevronDown size={16} style={{ color: C.dimText, marginTop: 1 }} />
+          </button>
 
-        <IconButton
-          onClick={() => onMonthChange(availableMonths[idx + 1])}
+          {menuOpen && (
+            <div
+              className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 rounded-2xl overflow-y-auto shadow-2xl py-1.5"
+              style={{
+                backgroundColor: C.surface,
+                border: `1px solid ${C.border}`,
+                minWidth: 200,
+                maxHeight: 360,
+              }}
+            >
+              {years.map((year, yi) => (
+                <div key={year}>
+                  {yi > 0 && <div className="h-px mx-3 my-1" style={{ backgroundColor: C.hoverStrong }} />}
+                  <div
+                    className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest"
+                    style={{ color: C.dimText }}
+                  >
+                    {year}
+                  </div>
+                  {byYear[year].map(m => {
+                    const isSelected = m === selectedMonth
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => { setMenuOpen(false); onMonthChange(m) }}
+                        className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors duration-100 border-none cursor-pointer"
+                        style={{
+                          backgroundColor: isSelected ? C.menuSelected : 'transparent',
+                          color: isSelected ? C.primary : C.warmText,
+                          fontWeight: isSelected ? 700 : 400,
+                        }}
+                      >
+                        {shortMonth(m)}
+                        {m === cur && (
+                          <span className="text-xs" style={{ color: C.dimText }}>current</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => hasNext && onMonthChange(availableMonths[idx + 1])}
           disabled={!hasNext}
-          sx={{
-            color: 'text.secondary',
-            border: `1px solid ${C.borderLight}`,
-            borderRadius: 1.5,
-            p: 0.5,
-            '&:hover': { color: 'text.primary', borderColor: C.borderHover, bgcolor: C.hover },
-            '&.Mui-disabled': { opacity: 0.2 },
-          }}
+          className="p-1.5 rounded-xl border transition-colors duration-150 disabled:opacity-20 cursor-pointer bg-transparent"
+          style={{ borderColor: C.borderLight, color: C.muted }}
         >
-          <ChevronRightIcon fontSize="small" />
-        </IconButton>
+          <ChevronRight size={16} />
+        </button>
 
         {isFuture && (
-          <Chip
-            label="projection"
-            size="small"
-            sx={{
-              height: 20,
-              fontSize: '0.7rem',
-              letterSpacing: '0.04em',
-              color: 'text.secondary',
-              bgcolor: C.hoverMed,
+          <span
+            className="text-[10px] font-medium tracking-wider px-2 py-0.5 rounded-full"
+            style={{
+              color: C.muted,
+              backgroundColor: C.hoverMed,
               border: `1px solid ${C.borderLight}`,
             }}
-          />
+          >
+            projection
+          </span>
         )}
-      </Stack>
+      </div>
 
       {!isToday && (
-        <Typography
-          variant="caption"
+        <button
+          type="button"
           onClick={() => onMonthChange(cur)}
-          sx={{ color: 'text.disabled', cursor: 'pointer', '&:hover': { color: 'text.secondary' } }}
+          className="text-xs bg-transparent border-none cursor-pointer font-[inherit] transition-colors duration-150"
+          style={{ color: C.dimText }}
         >
           Back to current month
-        </Typography>
+        </button>
       )}
-
-      <Menu
-        anchorEl={menuAnchor}
-        open={!!menuAnchor}
-        onClose={() => setMenuAnchor(null)}
-        slotProps={{ paper: { sx: { ...DROPDOWN_PAPER_SX, minWidth: 200 } } }}
-      >
-        {years.map((year, yi) => [
-          yi > 0 && <Divider key={`div-${year}`} sx={{ borderColor: C.hoverStrong }} />,
-          <Typography
-            key={`year-${year}`}
-            variant="caption"
-            sx={{ display: 'block', px: 2, pt: 1, pb: 0.5, color: 'text.disabled', fontWeight: 600, letterSpacing: '0.06em' }}
-          >
-            {year}
-          </Typography>,
-          ...byYear[year].map(m => (
-            <MenuItem
-              key={m}
-              selected={m === selectedMonth}
-              onClick={() => handleMenuSelect(m)}
-              sx={DROPDOWN_ITEM_SX}
-            >
-              {shortMonth(m)}
-              {m === cur && (
-                <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.disabled' }}>
-                  current
-                </Typography>
-              )}
-            </MenuItem>
-          ))
-        ])}
-      </Menu>
-    </Stack>
+    </div>
   )
 }

@@ -1,28 +1,41 @@
 import { useState, useEffect, useRef } from 'react'
 import { useC } from '../colors'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import TextField from '@mui/material/TextField'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import Button from '@mui/material/Button'
-import Alert from '@mui/material/Alert'
-import Stack from '@mui/material/Stack'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import api from '../api.js'
-import { useMenuStyles } from '../menuStyles.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import SavingsLinkModal from './SavingsLinkModal.jsx'
 import PolishedCheckbox from './PolishedCheckbox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
 
+function FieldGroup({ label, children }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-medium">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function ErrorMsg({ msg }) {
+  const C = useC()
+  if (!msg) return null
+  return (
+    <div
+      className="text-sm px-3 py-2 rounded-lg"
+      style={{ backgroundColor: `${C.overBudget}18`, border: `1px solid ${C.overBudget}40`, color: C.overBudget }}
+    >
+      {msg}
+    </div>
+  )
+}
+
 export default function AddExpenseForm({ onClose, onAdded, expense }) {
   const C = useC()
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const { typeNames } = useExpenseTypes()
   const isEditing = Boolean(expense)
   const [form, setForm] = useState({
@@ -37,7 +50,6 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [savingsExpense, setSavingsExpense] = useState(null)
-  // Track whether the type was set by auto-categorization (vs manually by the user)
   const typeAutoSet = useRef(!isEditing)
   const debounceTimer = useRef(null)
 
@@ -109,121 +121,89 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
   }
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      PaperProps={{
-        sx: {
-          bgcolor: 'background.paper',
-          border: `1px solid ${C.border}`,
-        },
-      }}
-    >
-      <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
-        {isEditing ? 'Edit Expense' : 'Add Expense'}
-      </DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent sx={{ pt: 1 }}>
-          <Stack spacing={2.5}>
-            <TextField
+    <Dialog open onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <FieldGroup label="Name">
+            <Input
               name="name"
-              label="Name"
               placeholder="e.g. Groceries"
               value={form.name}
               onChange={handleChange}
               autoFocus
-              fullWidth
-              size="small"
-              variant="outlined"
             />
-            <TextField
+          </FieldGroup>
+          <FieldGroup label="Amount ($)">
+            <Input
               name="amount"
-              label="Amount ($)"
               type="number"
-              inputProps={{ min: '0.01', step: '0.01' }}
+              min="0.01"
+              step="0.01"
               placeholder="0.00"
               value={form.amount}
               onChange={handleChange}
-              fullWidth
-              size="small"
-              variant="outlined"
             />
-            <FormControl fullWidth size="small" variant="outlined">
-              <InputLabel>Type</InputLabel>
-              <Select
-                name="type"
-                value={form.type}
-                onChange={handleChange}
-                label="Type"
-                {...DROPDOWN_MENU_PROPS}
-              >
-                {typeNames.map(t => (
-                  <MenuItem key={t} value={t} sx={DROPDOWN_ITEM_SX}>{t}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
+          </FieldGroup>
+          <FieldGroup label="Type">
+            <select
+              name="type"
+              value={form.type}
+              onChange={handleChange}
+              className="h-9 w-full rounded-lg border px-3 text-sm bg-transparent"
+              style={{ borderColor: C.borderLight, color: C.warmText }}
+            >
+              {typeNames.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </FieldGroup>
+          <FieldGroup label="Date">
+            <Input
               name="date"
-              label="Date"
               type="date"
               value={form.date}
               onChange={handleChange}
-              fullWidth
-              size="small"
-              variant="outlined"
-              InputLabelProps={{ shrink: true }}
             />
-            <PolishedCheckbox
-              checked={isRecurring}
-              onChange={setIsRecurring}
-              label="Recurring monthly expense"
-            />
-            {isEditing && (
-              <>
-                <PolishedCheckbox
-                  checked={rememberRule}
-                  onChange={v => {
-                    setRememberRule(v)
-                    if (v) setRulePattern(cleanPattern(form.name))
-                  }}
-                  label="Learn from this edit"
-                />
-                {rememberRule && (
-                  <TextField
-                    label="Auto-categorize transactions containing"
+          </FieldGroup>
+          <PolishedCheckbox
+            checked={isRecurring}
+            onChange={setIsRecurring}
+            label="Recurring monthly expense"
+          />
+          {isEditing && (
+            <>
+              <PolishedCheckbox
+                checked={rememberRule}
+                onChange={v => {
+                  setRememberRule(v)
+                  if (v) setRulePattern(cleanPattern(form.name))
+                }}
+                label="Learn from this edit"
+              />
+              {rememberRule && (
+                <FieldGroup label="Auto-categorize transactions containing">
+                  <Input
                     value={rulePattern}
                     onChange={e => setRulePattern(e.target.value)}
-                    fullWidth
-                    size="small"
-                    variant="outlined"
-                    helperText={`Transactions with "${rulePattern}" in the description will be set to: ${form.type}`}
+                    placeholder="keyword"
                   />
-                )}
-              </>
-            )}
-            {error && (
-              <Alert severity="error" sx={{ py: 0.5 }}>
-                {error}
-              </Alert>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="text" color="inherit" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            disabled={loading}
-          >
-            {loading ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Expense')}
-          </Button>
-        </DialogActions>
-      </form>
+                  <p className="text-xs" style={{ color: C.muted }}>
+                    Transactions with "{rulePattern}" will be set to: {form.type}
+                  </p>
+                </FieldGroup>
+              )}
+            </>
+          )}
+          <ErrorMsg msg={error} />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Expense')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
 
       {savingsExpense && (
         <SavingsLinkModal

@@ -1,62 +1,52 @@
 import { useState, useEffect } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
-import TextField from '@mui/material/TextField'
-import Button from '@mui/material/Button'
-import IconButton from '@mui/material/IconButton'
-import Stack from '@mui/material/Stack'
-import Alert from '@mui/material/Alert'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Tooltip from '@mui/material/Tooltip'
-import Divider from '@mui/material/Divider'
-import Checkbox from '@mui/material/Checkbox'
-import Collapse from '@mui/material/Collapse'
-import Chip from '@mui/material/Chip'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import AddIcon from '@mui/icons-material/Add'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import FileUploadIcon from '@mui/icons-material/FileUpload'
+import { ChevronDown, ChevronUp, Plus, Pencil, Trash2, Upload } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY, ICON_OPTIONS } from '../expenseTypes.js'
 import ImportBudgetsDialog from './ImportBudgetsDialog.jsx'
-import { useMenuStyles } from '../menuStyles.js'
 import { useC, TYPE_PALETTE } from '../colors'
-
-// ─── Shared constants ────────────────────────────────────────────────────────
+import { Card } from 'glasscn-ui'
 
 const PRESET_COLORS = TYPE_PALETTE
 
-// ─── Category form dialog (add / edit) ───────────────────────────────────────
+// ─── Shared ───────────────────────────────────────────────────────────────────
+
+function AlertBox({ severity, children }) {
+  const C = useC()
+  const colors = {
+    error:   { bg: `${C.overBudget}15`, border: `${C.overBudget}40`, text: C.overBudget },
+    warning: { bg: `${C.atRisk}15`, border: `${C.atRisk}40`, text: C.atRisk },
+    success: { bg: `${C.onTrack}15`, border: `${C.onTrack}40`, text: C.onTrack },
+  }
+  const s = colors[severity] ?? colors.error
+  return (
+    <div className="text-sm px-3 py-2 rounded-lg" style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}>
+      {children}
+    </div>
+  )
+}
 
 function ColorSwatch({ color, selected, onClick }) {
   return (
-    <Box
+    <div
       onClick={onClick}
-      sx={{
-        width: 26,
-        height: 26,
-        borderRadius: '50%',
-        bgcolor: color,
-        cursor: 'pointer',
+      className="cursor-pointer rounded-full transition-opacity hover:opacity-85"
+      style={{
+        width: 26, height: 26, backgroundColor: color, flexShrink: 0,
         border: selected ? '3px solid white' : '3px solid transparent',
-        boxSizing: 'border-box',
         outline: selected ? `2px solid ${color}` : 'none',
-        '&:hover': { opacity: 0.85 },
+        boxSizing: 'border-box',
       }}
     />
   )
 }
+
+// ─── Category form dialog ─────────────────────────────────────────────────────
 
 function CategoryFormDialog({ open, onClose, onSaved, existing }) {
   const C = useC()
@@ -72,13 +62,9 @@ function CategoryFormDialog({ open, onClose, onSaved, existing }) {
     if (!name.trim()) return setError('Name is required.')
     setLoading(true)
     try {
-      if (isEditing) {
-        await api.put(`/expense-types/${existing.id}`, { name: name.trim(), color, icon })
-      } else {
-        await api.post('/expense-types', { name: name.trim(), color, icon })
-      }
-      onSaved()
-      onClose()
+      if (isEditing) await api.put(`/expense-types/${existing.id}`, { name: name.trim(), color, icon })
+      else await api.post('/expense-types', { name: name.trim(), color, icon })
+      onSaved(); onClose()
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save category.')
     } finally {
@@ -87,109 +73,71 @@ function CategoryFormDialog({ open, onClose, onSaved, existing }) {
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      PaperProps={{
-        sx: { bgcolor: 'background.paper' },
-      }}
-    >
-      <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
-        {isEditing ? 'Edit Category' : 'Add Category'}
-      </DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent sx={{ pt: 1 }}>
-          <Stack spacing={2.5}>
-            <TextField
-              label="Name"
-              value={name}
-              onChange={e => { setName(e.target.value); setError('') }}
-              autoFocus
-              fullWidth
-              size="small"
-              variant="outlined"
-            />
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                Icon
-              </Typography>
-              <Stack direction="row" flexWrap="wrap" gap={1}>
-                {ICON_OPTIONS.map(({ key, Icon, label }) => (
-                  <Tooltip key={key} title={label} placement="top">
-                    <Box
-                      onClick={() => setIcon(key)}
-                      sx={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        border: icon === key
-                          ? `2px solid ${color}`
-                          : `2px solid ${C.border}`,
-                        bgcolor: icon === key ? C.hoverMed : 'transparent',
-                        '&:hover': { bgcolor: C.hoverMed },
-                      }}
-                    >
-                      <Icon sx={{ fontSize: 19, color: icon === key ? color : 'text.secondary' }} />
-                    </Box>
-                  </Tooltip>
-                ))}
-              </Stack>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                Color
-              </Typography>
-              <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                {PRESET_COLORS.map(c => (
-                  <ColorSwatch key={c} color={c} selected={color === c} onClick={() => setColor(c)} />
-                ))}
-              </Stack>
-              <Stack direction="row" alignItems="center" gap={1} mt={1.5}>
-                <Box
-                  sx={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: '50%',
-                    bgcolor: color,
-                    border: `1px solid ${C.borderMed}`,
-                    flexShrink: 0,
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? 'Edit Category' : 'Add Category'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 pt-1">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Name</label>
+            <Input autoFocus value={name} onChange={e => { setName(e.target.value); setError('') }} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs" style={{ color: C.muted }}>Icon</p>
+            <div className="flex flex-wrap gap-2">
+              {ICON_OPTIONS.map(({ key, Icon, label }) => (
+                <div
+                  key={key}
+                  title={label}
+                  onClick={() => setIcon(key)}
+                  className="flex items-center justify-center cursor-pointer rounded-lg transition-colors duration-150"
+                  style={{
+                    width: 38, height: 38,
+                    border: icon === key ? `2px solid ${color}` : `2px solid ${C.border}`,
+                    backgroundColor: icon === key ? C.hoverMed : 'transparent',
                   }}
-                />
-                <TextField
-                  size="small"
-                  value={color}
-                  onChange={e => setColor(e.target.value)}
-                  placeholder="#rrggbb"
-                  inputProps={{ maxLength: 7 }}
-                  sx={{ width: 110 }}
-                  variant="outlined"
-                />
-              </Stack>
-            </Box>
-            {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="text" color="inherit" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="contained" color="primary" disabled={loading}>
-            {loading ? 'Saving...' : (isEditing ? 'Save Changes' : 'Add Category')}
-          </Button>
-        </DialogActions>
-      </form>
+                >
+                  <Icon style={{ fontSize: 19, color: icon === key ? color : C.muted }} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs" style={{ color: C.muted }}>Color</p>
+            <div className="flex flex-wrap gap-2">
+              {PRESET_COLORS.map(c => (
+                <ColorSwatch key={c} color={c} selected={color === c} onClick={() => setColor(c)} />
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-6 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: color, border: `1px solid ${C.borderMed}` }} />
+              <Input
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                placeholder="#rrggbb"
+                maxLength={7}
+                className="w-28 text-sm"
+              />
+            </div>
+          </div>
+          {error && <AlertBox severity="error">{error}</AlertBox>}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Category'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   )
 }
 
-// ─── Delete confirmation dialog ───────────────────────────────────────────────
+// ─── Delete dialog ────────────────────────────────────────────────────────────
 
 function DeleteDialog({ open, onClose, onDeleted, type, otherTypes }) {
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
+  const C = useC()
   const [reassignTo, setReassignTo] = useState('')
   const [error, setError] = useState('')
   const [needsReassign, setNeedsReassign] = useState(false)
@@ -200,84 +148,75 @@ function DeleteDialog({ open, onClose, onDeleted, type, otherTypes }) {
     try {
       const params = reassignTo ? { reassign_to: reassignTo } : {}
       await api.delete(`/expense-types/${type.id}`, { params })
-      onDeleted()
-      onClose()
+      onDeleted(); onClose()
     } catch (err) {
       const detail = err.response?.data?.detail || ''
-      if (err.response?.status === 409) {
-        setNeedsReassign(true)
-        setError(detail)
-      } else {
-        setError(detail || 'Failed to delete category.')
-      }
+      if (err.response?.status === 409) { setNeedsReassign(true); setError(detail) }
+      else setError(detail || 'Failed to delete category.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{
-        sx: { bgcolor: 'background.paper' },
-      }}
-    >
-      <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
-        Delete "{type?.name}"?
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Delete "{type?.name}"?</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-3 pt-1">
           {!needsReassign && (
-            <Typography variant="body2" color="text.secondary">
+            <p className="text-sm" style={{ color: C.muted }}>
               This will permanently delete the category and remove its budget goal.
-            </Typography>
+            </p>
           )}
           {needsReassign && (
             <>
-              <Alert severity="warning" sx={{ py: 0.5 }}>{error}</Alert>
-              <FormControl fullWidth size="small">
-                <InputLabel>Reassign expenses to</InputLabel>
-                <Select
+              <AlertBox severity="warning">{error}</AlertBox>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Reassign expenses to</label>
+                <select
                   value={reassignTo}
                   onChange={e => setReassignTo(e.target.value)}
-                  label="Reassign expenses to"
-                  {...DROPDOWN_MENU_PROPS}
+                  className="h-9 w-full rounded-lg border px-3 text-sm bg-transparent"
+                  style={{ borderColor: C.borderLight, color: C.warmText }}
                 >
-                  {otherTypes.map(t => (
-                    <MenuItem key={t.id} value={t.id} sx={DROPDOWN_ITEM_SX}>{t.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  <option value="">Select a category</option>
+                  {otherTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
             </>
           )}
-          {error && !needsReassign && (
-            <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>
-          )}
-        </Stack>
+          {error && !needsReassign && <AlertBox severity="error">{error}</AlertBox>}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={loading || (needsReassign && !reassignTo)}>
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button variant="text" color="inherit" onClick={onClose}>Cancel</Button>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={handleDelete}
-          disabled={loading || (needsReassign && !reassignTo)}
-        >
-          {loading ? 'Deleting...' : 'Delete'}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }
 
-// ─── Monthly Overrides section ────────────────────────────────────────────────
+// ─── Monthly Overrides ────────────────────────────────────────────────────────
 
 function currentMonth() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function nextMonth() {
+  const now = new Date()
+  const y = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear()
+  const m = now.getMonth() === 11 ? 1 : now.getMonth() + 2
+  return `${y}-${String(m).padStart(2, '0')}`
+}
+
+function lastMonth() {
+  const now = new Date()
+  const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
+  const m = now.getMonth() === 0 ? 12 : now.getMonth()
+  return `${y}-${String(m).padStart(2, '0')}`
 }
 
 function buildOverrideMonthOptions() {
@@ -296,7 +235,6 @@ const OVERRIDE_MONTH_OPTIONS = buildOverrideMonthOptions()
 
 function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
   const C = useC()
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [open, setOpen] = useState(false)
   const [enabled, setEnabled] = useState({})
@@ -305,24 +243,24 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
-
-  // All months that have any override (for past-months section)
+  const [catStats, setCatStats] = useState({})
+  const [prevGoals, setPrevGoals] = useState({})
+  const [avgMonths, setAvgMonths] = useState(3)
+  const [excludeOutliers, setExcludeOutliers] = useState(false)
   const [overrideMonths, setOverrideMonths] = useState([])
   const [expandedPastMonth, setExpandedPastMonth] = useState(null)
-  const [pastMonthData, setPastMonthData] = useState({})  // month → [{type, monthly_limit}]
+  const [pastMonthData, setPastMonthData] = useState({})
 
   useEffect(() => {
     setSaved(false)
     api.get('/budgets/monthly-overrides', { params: { month: selectedMonth } }).then(r => {
       const existing = Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))
-      const newEnabled = {}
-      const newLimits = {}
+      const newEnabled = {}; const newLimits = {}
       expenseTypes.forEach(t => {
         newEnabled[t.name] = t.name in existing
         newLimits[t.name] = t.name in existing ? String(existing[t.name]) : (defaultLimits[t.name] ?? '')
       })
-      setEnabled(newEnabled)
-      setOverrideLimits(newLimits)
+      setEnabled(newEnabled); setOverrideLimits(newLimits)
       setSavedOverrides(new Set(Object.keys(existing)))
     }).catch(() => {})
   }, [expenseTypes, selectedMonth])
@@ -330,6 +268,23 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
   useEffect(() => {
     api.get('/budgets/monthly-overrides').then(r => setOverrideMonths(r.data)).catch(() => {})
   }, [saved])
+
+  const isNextMonth = selectedMonth === nextMonth()
+
+  useEffect(() => {
+    if (!isNextMonth) return
+    Promise.all([
+      api.get('/analysis/category-stats', { params: { months: avgMonths, exclude_outliers: excludeOutliers } }),
+      api.get('/budgets/effective', { params: { month: lastMonth() } }),
+    ]).then(([statsRes, goalsRes]) => {
+      const statsMap = {}
+      statsRes.data.forEach(s => { statsMap[s.type] = { avg_monthly: s.avg_monthly, last_month: s.last_month } })
+      setCatStats(statsMap)
+      const goalsMap = {}
+      goalsRes.data.forEach(b => { goalsMap[b.type] = b.monthly_limit })
+      setPrevGoals(goalsMap)
+    }).catch(() => {})
+  }, [isNextMonth, avgMonths, excludeOutliers])
 
   const otherMonths = overrideMonths.filter(m => m !== selectedMonth).sort((a, b) => b.localeCompare(a))
 
@@ -348,18 +303,12 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
       .filter(t => enabled[t.name] && overrideLimits[t.name] !== '' && Number(overrideLimits[t.name]) >= 0)
       .map(t => ({ type: t.name, monthly_limit: parseFloat(overrideLimits[t.name]) }))
     if (budgets.length === 0) { setSaveError('Enable at least one category override.'); return }
-    setSaving(true)
-    setSaveError('')
+    setSaving(true); setSaveError('')
     try {
       await api.post('/budgets/monthly-overrides', { month: selectedMonth, budgets })
-      setSaved(true)
-      setSavedOverrides(new Set(budgets.map(b => b.type)))
-      onChanged?.()
-    } catch {
-      setSaveError('Failed to save. Please try again.')
-    } finally {
-      setSaving(false)
-    }
+      setSaved(true); setSavedOverrides(new Set(budgets.map(b => b.type))); onChanged?.()
+    } catch { setSaveError('Failed to save. Please try again.') }
+    finally { setSaving(false) }
   }
 
   async function handleDeleteType(typeName) {
@@ -369,263 +318,240 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
       setEnabled(prev => ({ ...prev, [typeName]: false }))
       setOverrideLimits(prev => ({ ...prev, [typeName]: defaultLimits[typeName] ?? '' }))
       onChanged?.()
-    } catch {
-      setSaveError('Failed to delete override.')
-    }
+    } catch { setSaveError('Failed to delete override.') }
   }
 
   async function handleReset() {
-    setSaving(true)
-    setSaveError('')
+    setSaving(true); setSaveError('')
     try {
       await api.delete(`/budgets/monthly-overrides/${selectedMonth}`)
-      const newEnabled = Object.fromEntries(expenseTypes.map(t => [t.name, false]))
-      const newLimits = Object.fromEntries(expenseTypes.map(t => [t.name, defaultLimits[t.name] ?? '']))
-      setEnabled(newEnabled)
-      setOverrideLimits(newLimits)
-      setSavedOverrides(new Set())
-      onChanged?.()
-    } catch {
-      setSaveError('Failed to reset.')
-    } finally {
-      setSaving(false)
-    }
+      setEnabled(Object.fromEntries(expenseTypes.map(t => [t.name, false])))
+      setOverrideLimits(Object.fromEntries(expenseTypes.map(t => [t.name, defaultLimits[t.name] ?? ''])))
+      setSavedOverrides(new Set()); onChanged?.()
+    } catch { setSaveError('Failed to reset.') }
+    finally { setSaving(false) }
   }
 
   const hasExistingOverride = savedOverrides.size > 0
 
   return (
-    <Box>
-      <Divider sx={{ borderColor: C.hoverStrong, my: 3 }} />
-
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        onClick={() => setOpen(o => !o)}
-        sx={{ cursor: 'pointer', userSelect: 'none', mb: open ? 2 : 0 }}
-      >
-        <Box>
-          <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            Monthly Overrides
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Override budget limits for any month.
-          </Typography>
-        </Box>
-        <Stack direction="row" alignItems="center" gap={1}>
+    <div>
+      <div className="h-px my-5" style={{ backgroundColor: C.hoverStrong }} />
+      <div className="flex items-center justify-between cursor-pointer select-none"
+        style={{ marginBottom: open ? 16 : 0 }}
+        onClick={() => setOpen(o => !o)}>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: C.warmText }}>Monthly Overrides</p>
+          <p className="text-sm" style={{ color: C.muted }}>Override budget limits for any month.</p>
+        </div>
+        <div className="flex items-center gap-2">
           {savedOverrides.size > 0 && (
-            <Chip
-              label={`${savedOverrides.size} override${savedOverrides.size > 1 ? 's' : ''}`}
-              size="small"
-              sx={{ bgcolor: C.hoverStrong, color: 'text.secondary', fontSize: '0.8rem' }}
-            />
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: C.hoverStrong, color: C.muted }}>
+              {savedOverrides.size} override{savedOverrides.size > 1 ? 's' : ''}
+            </span>
           )}
-          <IconButton size="small" sx={{ color: 'text.secondary' }}>
-            {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-          </IconButton>
-        </Stack>
-      </Stack>
+          <button type="button" className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+            {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </div>
+      </div>
 
-      <Collapse in={open}>
-        <Stack spacing={2.5}>
-          {/* Month selector */}
-          <FormControl size="small" sx={{ maxWidth: 240 }}>
-            <InputLabel>Month</InputLabel>
-            <Select
+      <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: open ? '9999px' : '0px' }}>
+        <div className="flex flex-col gap-4">
+          {/* Month + options */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
               value={selectedMonth}
               onChange={e => setSelectedMonth(e.target.value)}
-              label="Month"
-              {...DROPDOWN_MENU_PROPS}
+              className="h-9 rounded-lg border px-3 text-sm bg-transparent"
+              style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 200 }}
             >
               {OVERRIDE_MONTH_OPTIONS.map(({ key, label }) => (
-                <MenuItem key={key} value={key} sx={DROPDOWN_ITEM_SX}>
-                  {label}
-                  {key === currentMonth() && (
-                    <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.disabled' }}>current</Typography>
-                  )}
-                </MenuItem>
+                <option key={key} value={key}>{label}{key === currentMonth() ? ' (current)' : ''}</option>
               ))}
-            </Select>
-          </FormControl>
+            </select>
+            {isNextMonth && (
+              <>
+                <select
+                  value={avgMonths}
+                  onChange={e => setAvgMonths(Number(e.target.value))}
+                  className="h-9 rounded-lg border px-3 text-sm bg-transparent"
+                  style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 140 }}
+                >
+                  {[3, 6, 9, 12].map(n => <option key={n} value={n}>{n} months</option>)}
+                </select>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm" style={{ color: C.muted }}>
+                  <div
+                    onClick={() => setExcludeOutliers(v => !v)}
+                    className="relative w-9 h-5 rounded-full cursor-pointer transition-colors duration-200 flex-shrink-0"
+                    style={{ backgroundColor: excludeOutliers ? C.primary : C.hoverStrong }}
+                  >
+                    <div className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200"
+                      style={{ left: excludeOutliers ? '18px' : '2px' }} />
+                  </div>
+                  Exclude outliers
+                </label>
+              </>
+            )}
+          </div>
 
-          {/* Override rows for selected month */}
-          <Stack spacing={0.75}>
+          {/* Override rows */}
+          <div className="flex flex-col gap-1.5">
             {expenseTypes.map(t => {
               const IconComp = ICON_REGISTRY[t.icon]
+              const stats = isNextMonth ? catStats[t.name] : null
+              const tColor = C.adaptColor(t.color)
               return (
-                <Stack
+                <div
                   key={t.id}
-                  direction="row"
-                  alignItems="center"
-                  spacing={1.5}
-                  sx={{
-                    px: 1.5,
-                    py: 0.75,
-                    borderRadius: 1.5,
-                    border: `1px solid ${C.hoverStrong}`,
-                    opacity: enabled[t.name] ? 1 : 0.55,
-                    '&:hover': { bgcolor: C.subtleBg },
-                  }}
+                  className="rounded-xl overflow-hidden"
+                  style={{ border: `1px solid ${C.hoverStrong}`, opacity: enabled[t.name] ? 1 : 0.55 }}
                 >
-                  <Checkbox
-                    checked={!!enabled[t.name]}
-                    onChange={e => {
-                      setEnabled(prev => ({ ...prev, [t.name]: e.target.checked }))
-                      setSaved(false)
-                    }}
-                    size="small"
-                    color="primary"
-                    sx={{ p: 0.5 }}
-                  />
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />
-                  {IconComp && <IconComp sx={{ fontSize: 19, color: t.color, flexShrink: 0 }} />}
-                  <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 500, flexGrow: 1 }}>
-                    {t.name}
-                  </Typography>
-                  {!enabled[t.name] && defaultLimits[t.name] && (
-                    <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                      default ${parseFloat(defaultLimits[t.name]).toFixed(0)}
-                    </Typography>
-                  )}
-                  <TextField
-                    type="number"
-                    placeholder="No limit"
-                    value={overrideLimits[t.name] ?? ''}
-                    onChange={e => { setOverrideLimits(prev => ({ ...prev, [t.name]: e.target.value })); setSaved(false) }}
-                    disabled={!enabled[t.name]}
-                    size="small"
-                    variant="outlined"
-                    InputProps={{
-                      startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>$</Typography>,
-                    }}
-                    inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right', width: 80 } }}
-                    sx={{ width: 130, flexShrink: 0 }}
-                  />
-                  {savedOverrides.has(t.name) && (
-                    <Tooltip title="Remove override for this month">
-                      <IconButton
-                        size="small"
+                  <div className="flex items-center gap-3 px-3 py-2"
+                    onMouseEnter={e => e.currentTarget.parentElement.style.backgroundColor = C.subtleBg}
+                    onMouseLeave={e => e.currentTarget.parentElement.style.backgroundColor = 'transparent'}>
+                    <div
+                      onClick={() => { setEnabled(prev => ({ ...prev, [t.name]: !prev[t.name] })); setSaved(false) }}
+                      className="w-4 h-4 rounded border cursor-pointer flex items-center justify-center flex-shrink-0"
+                      style={{
+                        borderColor: enabled[t.name] ? C.primary : C.borderMed,
+                        backgroundColor: enabled[t.name] ? C.primary : 'transparent',
+                      }}
+                    >
+                      {enabled[t.name] && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tColor }} />
+                    {IconComp && <IconComp style={{ fontSize: 18, color: tColor, flexShrink: 0 }} />}
+                    <span className="text-sm font-medium flex-1 min-w-0" style={{ color: C.warmText }}>{t.name}</span>
+                    {!enabled[t.name] && defaultLimits[t.name] && !isNextMonth && (
+                      <span className="text-xs flex-shrink-0" style={{ color: C.muted }}>default ${parseFloat(defaultLimits[t.name]).toFixed(0)}</span>
+                    )}
+                    <div className="relative flex-shrink-0 w-32">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
+                      <Input
+                        type="number"
+                        placeholder="No limit"
+                        value={overrideLimits[t.name] ?? ''}
+                        onChange={e => { setOverrideLimits(prev => ({ ...prev, [t.name]: e.target.value })); setSaved(false) }}
+                        disabled={!enabled[t.name]}
+                        className="pl-7 text-right h-8 text-sm"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    {savedOverrides.has(t.name) && (
+                      <button type="button" title="Remove override for this month"
                         onClick={() => handleDeleteType(t.name)}
-                        sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' }, flexShrink: 0 }}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                        className="p-1 rounded-lg bg-transparent border-none cursor-pointer flex-shrink-0 transition-colors duration-150"
+                        style={{ color: C.dimText }}
+                        onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+                        onMouseLeave={e => e.currentTarget.style.color = C.dimText}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {isNextMonth && (
+                    <div className="flex gap-6 px-4 py-2" style={{ borderTop: `1px solid ${C.hoverStrong}` }}>
+                      {[
+                        { label: `${avgMonths}-mo avg`, value: stats?.avg_monthly != null ? `$${stats.avg_monthly.toFixed(0)}` : '—' },
+                        { label: 'Prev. goal', value: prevGoals[t.name] != null ? `$${parseFloat(prevGoals[t.name]).toFixed(0)}` : '—' },
+                        { label: 'Prev. spending', value: stats?.last_month != null ? `$${stats.last_month.toFixed(0)}` : '—' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex flex-col gap-0.5">
+                          <span className="text-[10px] leading-none" style={{ color: C.dimText }}>{label}</span>
+                          <span className="text-sm font-semibold" style={{ color: C.warmText }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </Stack>
+                </div>
               )
             })}
-          </Stack>
+          </div>
 
-          {saveError && <Alert severity="error" sx={{ py: 0.5 }}>{saveError}</Alert>}
+          {saveError && <AlertBox severity="error">{saveError}</AlertBox>}
 
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <div className="flex items-center justify-between">
             {hasExistingOverride ? (
-              <Button variant="text" color="error" size="small" onClick={handleReset} disabled={saving}>
+              <Button variant="ghost" size="sm" onClick={handleReset} disabled={saving}
+                className="text-red-500 hover:text-red-600">
                 Reset to defaults
               </Button>
-            ) : <Box />}
-            <Stack direction="row" alignItems="center" gap={2}>
-              {saved && (
-                <Typography variant="body2" sx={{ color: 'primary.main' }}>Saved!</Typography>
-              )}
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleSave}
-                disabled={saving}
-                sx={{ fontWeight: 600 }}
-              >
+            ) : <div />}
+            <div className="flex items-center gap-3">
+              {saved && <span className="text-sm" style={{ color: C.primary }}>Saved!</span>}
+              <Button onClick={handleSave} disabled={saving} className="font-semibold">
                 {saving ? 'Saving…' : 'Save Overrides'}
               </Button>
-            </Stack>
-          </Stack>
+            </div>
+          </div>
 
           {/* Past months */}
           {otherMonths.length > 0 && (
-            <Box>
-              <Divider sx={{ borderColor: C.hoverStrong, mb: 2 }} />
-              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', mb: 1.5 }}>
-                Other Months
-              </Typography>
-              <Stack spacing={0.75}>
+            <div>
+              <div className="h-px mb-4" style={{ backgroundColor: C.hoverStrong }} />
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: C.muted }}>Other Months</p>
+              <div className="flex flex-col gap-2">
                 {otherMonths.map(month => {
                   const label = new Date(month + '-02').toLocaleString('en-US', { month: 'long', year: 'numeric' })
                   const isExpanded = expandedPastMonth === month
                   const data = pastMonthData[month]
                   return (
-                    <Box key={month}>
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        justifyContent="space-between"
+                    <div key={month}>
+                      <div
+                        className="flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors duration-150"
+                        style={{ border: `1px solid ${C.hoverStrong}` }}
                         onClick={() => expandPastMonth(month)}
-                        sx={{
-                          px: 1.5, py: 0.75, borderRadius: 1.5,
-                          border: `1px solid ${C.hoverStrong}`,
-                          cursor: 'pointer',
-                          '&:hover': { bgcolor: C.subtleBg },
-                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
-                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
-                          {label}
-                        </Typography>
-                        <Stack direction="row" alignItems="center" gap={1}>
+                        <span className="text-sm font-medium" style={{ color: C.warmText }}>{label}</span>
+                        <div className="flex items-center gap-2">
                           {data && (
-                            <Chip
-                              label={`${data.length} override${data.length !== 1 ? 's' : ''}`}
-                              size="small"
-                              sx={{ bgcolor: C.hoverStrong, color: 'text.secondary', fontSize: '0.75rem' }}
-                            />
+                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: C.hoverStrong, color: C.muted }}>
+                              {data.length} override{data.length !== 1 ? 's' : ''}
+                            </span>
                           )}
-                          <IconButton size="small" sx={{ color: 'text.secondary', p: 0.25 }}>
-                            {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                          </IconButton>
-                        </Stack>
-                      </Stack>
-                      <Collapse in={isExpanded}>
-                        <Stack spacing={0.5} sx={{ pt: 0.75, pl: 1 }}>
-                          {data === undefined && (
-                            <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>Loading…</Typography>
-                          )}
+                          <span style={{ color: C.muted }}>{isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
+                        </div>
+                      </div>
+                      <div className="overflow-hidden transition-all duration-200"
+                        style={{ maxHeight: isExpanded ? '9999px' : '0px' }}>
+                        <div className="flex flex-col gap-1 pt-1.5 pl-3">
+                          {data === undefined && <span className="text-xs px-3" style={{ color: C.muted }}>Loading…</span>}
                           {data?.map(b => {
-                            const t = expenseTypes.find(et => et.name === b.type)
-                            const IconComp = t ? ICON_REGISTRY[t.icon] : null
+                            const et = expenseTypes.find(x => x.name === b.type)
+                            const IconComp = et ? ICON_REGISTRY[et.icon] : null
+                            const etColor = et ? C.adaptColor(et.color) : C.dimText
                             return (
-                              <Stack key={b.type} direction="row" alignItems="center" spacing={1.5}
-                                sx={{ px: 1.5, py: 0.4 }}>
-                                {t && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />}
-                                {IconComp && <IconComp sx={{ fontSize: 16, color: t.color, flexShrink: 0 }} />}
-                                <Typography variant="body2" sx={{ color: 'text.primary', flexGrow: 1 }}>
-                                  {b.type}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                              <div key={b.type} className="flex items-center gap-3 px-3 py-1">
+                                {et && <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: etColor }} />}
+                                {IconComp && <IconComp style={{ fontSize: 15, color: etColor, flexShrink: 0 }} />}
+                                <span className="text-sm flex-1" style={{ color: C.warmText }}>{b.type}</span>
+                                <span className="text-sm" style={{ color: C.muted }}>
                                   ${b.monthly_limit.toFixed(0)}
                                   {defaultLimits[b.type] && (
-                                    <Box component="span" sx={{ color: 'text.disabled' }}>
-                                      {' '}/ default ${parseFloat(defaultLimits[b.type]).toFixed(0)}
-                                    </Box>
+                                    <span style={{ color: C.dimText }}> / default ${parseFloat(defaultLimits[b.type]).toFixed(0)}</span>
                                   )}
-                                </Typography>
-                              </Stack>
+                                </span>
+                              </div>
                             )
                           })}
-                        </Stack>
-                      </Collapse>
-                    </Box>
+                        </div>
+                      </div>
+                    </div>
                   )
                 })}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           )}
-        </Stack>
-      </Collapse>
-    </Box>
+        </div>
+      </div>
+    </div>
   )
 }
 
-// ─── Macrocategory management section ────────────────────────────────────────
+// ─── Macrocategory Manager ────────────────────────────────────────────────────
 
 function MacrocategoryManager() {
   const C = useC()
@@ -645,133 +571,128 @@ function MacrocategoryManager() {
     if (!name) return setError('Name is required.')
     try {
       await api.post('/macrocategories', { name, color: newColor, budget_limit: newBudget ? parseFloat(newBudget) : null })
-      setNewName(''); setNewBudget(''); setError('')
-      reloadMacros()
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save.')
-    }
+      setNewName(''); setNewBudget(''); setError(''); reloadMacros()
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to save.') }
   }
 
   async function handleSaveEdit() {
     const name = editName.trim()
     if (!name) return setError('Name is required.')
     try {
-      await api.put(`/macrocategories/${editTarget.id}`, {
-        name, color: editColor, budget_limit: editBudget ? parseFloat(editBudget) : null,
-      })
-      setEditTarget(null); setError('')
-      reloadMacros()
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save.')
-    }
+      await api.put(`/macrocategories/${editTarget.id}`, { name, color: editColor, budget_limit: editBudget ? parseFloat(editBudget) : null })
+      setEditTarget(null); setError(''); reloadMacros()
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to save.') }
   }
 
   async function handleDelete(id) {
-    try {
-      await api.delete(`/macrocategories/${id}`)
-      reloadMacros()
-    } catch { /* ignore */ }
+    try { await api.delete(`/macrocategories/${id}`); reloadMacros() } catch { /* ignore */ }
   }
 
   return (
-    <Box>
-      <Divider sx={{ borderColor: C.hoverStrong, my: 3 }} />
-      <Stack direction="row" alignItems="center" justifyContent="space-between"
-        onClick={() => setOpen(o => !o)}
-        sx={{ cursor: 'pointer', userSelect: 'none', mb: open ? 2 : 0 }}>
-        <Box>
-          <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>Macrocategories</Typography>
-          <Typography variant="body2" color="text.secondary">Group categories into larger buckets.</Typography>
-        </Box>
-        <Stack direction="row" alignItems="center" gap={1}>
+    <div>
+      <div className="h-px my-5" style={{ backgroundColor: C.hoverStrong }} />
+      <div className="flex items-center justify-between cursor-pointer select-none"
+        style={{ marginBottom: open ? 16 : 0 }}
+        onClick={() => setOpen(o => !o)}>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: C.warmText }}>Macrocategories</p>
+          <p className="text-sm" style={{ color: C.muted }}>Group categories into larger buckets.</p>
+        </div>
+        <div className="flex items-center gap-2">
           {macrocategories.length > 0 && (
-            <Chip label={macrocategories.length} size="small"
-              sx={{ bgcolor: C.hoverStrong, color: 'text.secondary', fontSize: '0.8rem' }} />
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: C.hoverStrong, color: C.muted }}>
+              {macrocategories.length}
+            </span>
           )}
-          <IconButton size="small" sx={{ color: 'text.secondary' }}>
-            {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-          </IconButton>
-        </Stack>
-      </Stack>
+          <button type="button" className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+            {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </div>
+      </div>
 
-      <Collapse in={open}>
-        <Stack spacing={1.5}>
-          {/* Existing macrocategories */}
+      <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: open ? '9999px' : '0px' }}>
+        <div className="flex flex-col gap-2">
           {macrocategories.map(m => editTarget?.id === m.id ? (
-            <Stack key={m.id} direction="row" alignItems="center" gap={1.5}
-              sx={{ px: 1.5, py: 1, borderRadius: 1.5, border: `1px solid ${m.color}`, bgcolor: C.subtleBg }}>
-              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: editColor, flexShrink: 0 }} />
-              <TextField size="small" value={editName} onChange={e => setEditName(e.target.value)}
-                sx={{ flex: 1 }} autoFocus />
-              <TextField size="small" value={editBudget} onChange={e => setEditBudget(e.target.value)}
-                placeholder="No ceiling" type="number"
-                InputProps={{ startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>$</Typography> }}
-                inputProps={{ min: '0', style: { width: 70 } }} sx={{ width: 110 }} />
-              <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ maxWidth: 200 }}>
-                {PRESET_COLORS.map(c => (
-                  <ColorSwatch key={c} color={c} selected={editColor === c} onClick={() => setEditColor(c)} />
-                ))}
-              </Stack>
-              <Button size="small" variant="contained" onClick={handleSaveEdit}>Save</Button>
-              <Button size="small" variant="text" color="inherit" onClick={() => { setEditTarget(null); setError('') }}>Cancel</Button>
-            </Stack>
+            <div key={m.id} className="flex items-center gap-3 flex-wrap px-3 py-2 rounded-xl"
+              style={{ border: `1px solid ${m.color}`, backgroundColor: C.subtleBg }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: editColor }} />
+              <Input value={editName} onChange={e => setEditName(e.target.value)} autoFocus className="flex-1 h-8 text-sm" />
+              <div className="relative w-28">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
+                <Input value={editBudget} onChange={e => setEditBudget(e.target.value)}
+                  placeholder="No ceiling" type="number" min="0" className="pl-7 h-8 text-sm w-28" />
+              </div>
+              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                {PRESET_COLORS.map(c => <ColorSwatch key={c} color={c} selected={editColor === c} onClick={() => setEditColor(c)} />)}
+              </div>
+              <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setEditTarget(null); setError('') }}>Cancel</Button>
+            </div>
           ) : (
-            <Stack key={m.id} direction="row" alignItems="center" gap={1.5}
-              sx={{ px: 1.5, py: 0.75, borderRadius: 1.5, border: `1px solid ${C.hoverStrong}`,
-                '&:hover': { bgcolor: C.subtleBg } }}>
-              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: m.color, flexShrink: 0 }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1 }}>{m.name}</Typography>
+            <div key={m.id} className="flex items-center gap-3 px-3 py-2 rounded-xl transition-colors duration-150"
+              style={{ border: `1px solid ${C.hoverStrong}` }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+              <span className="text-sm font-medium flex-1" style={{ color: C.warmText }}>{m.name}</span>
               {m.budget_limit > 0 && (
-                <Typography variant="body2" color="text.secondary">${m.budget_limit.toFixed(0)} ceiling</Typography>
+                <span className="text-sm" style={{ color: C.muted }}>${m.budget_limit.toFixed(0)} ceiling</span>
               )}
-              <IconButton size="small"
-                onClick={() => { setEditTarget(m); setEditName(m.name); setEditColor(m.color); setEditBudget(m.budget_limit ? String(m.budget_limit) : ''); setError('') }}
-                sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" onClick={() => handleDelete(m.id)}
-                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Stack>
+              <button type="button" onClick={() => { setEditTarget(m); setEditName(m.name); setEditColor(m.color); setEditBudget(m.budget_limit ? String(m.budget_limit) : ''); setError('') }}
+                className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                style={{ color: C.muted }}
+                onMouseEnter={e => e.currentTarget.style.color = C.primary}
+                onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+                <Pencil size={14} />
+              </button>
+              <button type="button" onClick={() => handleDelete(m.id)}
+                className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                style={{ color: C.muted }}
+                onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+                onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
 
           {/* Add new */}
-          <Stack direction="row" alignItems="center" gap={1.5}
-            sx={{ px: 1.5, py: 1, borderRadius: 1.5, border: `1px dashed ${C.borderMed}` }}>
-            <TextField size="small" placeholder="Group name" value={newName}
-              onChange={e => { setNewName(e.target.value); setError('') }} sx={{ flex: 1 }} />
-            <TextField size="small" value={newBudget} onChange={e => setNewBudget(e.target.value)}
-              placeholder="No ceiling" type="number"
-              InputProps={{ startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>$</Typography> }}
-              inputProps={{ min: '0', style: { width: 70 } }} sx={{ width: 110 }} />
-            <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ maxWidth: 200 }}>
-              {PRESET_COLORS.map(c => (
-                <ColorSwatch key={c} color={c} selected={newColor === c} onClick={() => setNewColor(c)} />
-              ))}
-            </Stack>
-            <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={handleAdd}>Add</Button>
-          </Stack>
+          <div className="flex items-center gap-3 flex-wrap px-3 py-2 rounded-xl"
+            style={{ border: `1px dashed ${C.borderMed}` }}>
+            <Input placeholder="Group name" value={newName}
+              onChange={e => { setNewName(e.target.value); setError('') }}
+              className="flex-1 h-8 text-sm min-w-[120px]" />
+            <div className="relative w-28">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
+              <Input value={newBudget} onChange={e => setNewBudget(e.target.value)}
+                placeholder="No ceiling" type="number" min="0" className="pl-7 h-8 text-sm w-28" />
+            </div>
+            <div className="flex flex-wrap gap-1 max-w-[200px]">
+              {PRESET_COLORS.map(c => <ColorSwatch key={c} color={c} selected={newColor === c} onClick={() => setNewColor(c)} />)}
+            </div>
+            <Button size="sm" variant="outline" onClick={handleAdd}>
+              <Plus size={14} className="mr-1" />Add
+            </Button>
+          </div>
 
-          {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
-        </Stack>
-      </Collapse>
-    </Box>
+          {error && <AlertBox severity="error">{error}</AlertBox>}
+        </div>
+      </div>
+    </div>
   )
 }
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 export default function BudgetGoals({ onSaved }) {
   const C = useC()
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const { expenseTypes, reloadTypes, macrocategories } = useExpenseTypes()
   const [limits, setLimits] = useState({})
-  const [currentOverrides, setCurrentOverrides] = useState({})  // typeName → monthly_limit
+  const [currentOverrides, setCurrentOverrides] = useState({})
   const [overrideRefresh, setOverrideRefresh] = useState(0)
   const [loadingBudgets, setLoadingBudgets] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saved, setSaved] = useState(false)
-
   const [defaultsOpen, setDefaultsOpen] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -780,21 +701,16 @@ export default function BudgetGoals({ onSaved }) {
 
   const currentMonthShort = new Date().toLocaleString('en-US', { month: 'short' })
 
-  // Reload budget limits whenever the type list changes (renames, adds, deletes)
   useEffect(() => {
     if (expenseTypes.length === 0) return
-    setLoadingBudgets(true)
-    setSaved(false)
+    setLoadingBudgets(true); setSaved(false)
     api.get('/budgets').then(budgetsRes => {
-      const fromApi = Object.fromEntries(
-        budgetsRes.data.map(b => [b.type, b.monthly_limit > 0 ? String(b.monthly_limit) : ''])
-      )
+      const fromApi = Object.fromEntries(budgetsRes.data.map(b => [b.type, b.monthly_limit > 0 ? String(b.monthly_limit) : '']))
       const defaults = Object.fromEntries(expenseTypes.map(t => [t.name, '']))
       setLimits({ ...defaults, ...fromApi })
     }).finally(() => setLoadingBudgets(false))
   }, [expenseTypes])
 
-  // Fetch current month overrides to annotate Default Limits rows
   useEffect(() => {
     api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
       .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))
@@ -802,9 +718,7 @@ export default function BudgetGoals({ onSaved }) {
   }, [overrideRefresh, expenseTypes])
 
   function handleLimitChange(typeName, value) {
-    setLimits(prev => ({ ...prev, [typeName]: value }))
-    setSaved(false)
-    setSaveError('')
+    setLimits(prev => ({ ...prev, [typeName]: value })); setSaved(false); setSaveError('')
   }
 
   async function handleSaveBudgets(e) {
@@ -812,324 +726,208 @@ export default function BudgetGoals({ onSaved }) {
     const budgets = expenseTypes
       .filter(t => limits[t.name] !== '' && Number(limits[t.name]) >= 0)
       .map(t => ({ type: t.name, monthly_limit: parseFloat(limits[t.name]) }))
-
     if (budgets.length === 0) return setSaveError('Enter at least one budget limit.')
-
     setSaving(true)
-    try {
-      await api.post('/budgets', budgets)
-      setSaved(true)
-      onSaved()
-    } catch {
-      setSaveError('Failed to save. Please try again.')
-    } finally {
-      setSaving(false)
-    }
+    try { await api.post('/budgets', budgets); setSaved(true); onSaved() }
+    catch { setSaveError('Failed to save. Please try again.') }
+    finally { setSaving(false) }
   }
 
-  async function handleTypeSaved() {
-    await reloadTypes()
-    onSaved()
+  async function handleTypeSaved() { await reloadTypes(); onSaved() }
+  async function handleTypeDeleted() { await reloadTypes(); onSaved() }
+
+  function renderRow(t) {
+    const IconComp = ICON_REGISTRY[t.icon]
+    const tColor = C.adaptColor(t.color)
+    const hasOverride = currentOverrides[t.name] != null
+    const inputField = (
+      <div className="relative flex-shrink-0 w-32">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
+        <Input
+          type="number"
+          placeholder="No limit"
+          value={limits[t.name] ?? ''}
+          onChange={e => handleLimitChange(t.name, e.target.value)}
+          className="pl-7 text-right h-8 text-sm"
+          min="0"
+          step="0.01"
+        />
+      </div>
+    )
+    const overrideLabel = hasOverride ? (
+      <span className="text-xs flex-shrink-0 whitespace-nowrap" style={{ color: C.muted }}>
+        <span style={{ color: C.primary }}>{currentMonthShort} Override: ${Number(currentOverrides[t.name]).toFixed(0)}</span>
+        {limits[t.name] && ` | Default: $${parseFloat(limits[t.name]).toFixed(0)}`}
+      </span>
+    ) : null
+
+    return (
+      <div
+        key={t.id}
+        className="rounded-xl px-3 py-2 transition-colors duration-150"
+        style={{ border: `1px solid ${C.hoverStrong}` }}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+      >
+        {/* Desktop */}
+        <div className="hidden sm:flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tColor }} />
+          {IconComp && <IconComp style={{ fontSize: 18, color: tColor, flexShrink: 0 }} />}
+          <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: C.warmText }}>{t.name}</span>
+          {overrideLabel}
+          {macrocategories.length > 0 && (
+            <select
+              value={t.macrocategory_id ?? ''}
+              onChange={async e => {
+                await api.put(`/expense-types/${t.id}`, { name: t.name, color: t.color, icon: t.icon, macrocategory_id: e.target.value || null })
+                await reloadTypes()
+              }}
+              className="h-8 rounded-lg border px-2 text-xs bg-transparent flex-shrink-0"
+              style={{ borderColor: C.borderLight, color: C.muted, minWidth: 120 }}
+            >
+              <option value="">— No group —</option>
+              {macrocategories.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          )}
+          {inputField}
+          <button type="button" title="Edit category" onClick={() => { setEditTarget(t); setFormOpen(true) }}
+            className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+            style={{ color: C.muted }}
+            onMouseEnter={e => e.currentTarget.style.color = C.primary}
+            onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+            <Pencil size={14} />
+          </button>
+          {t.name !== 'Other' && (
+            <button type="button" title="Delete category" onClick={() => setDeleteTarget(t)}
+              className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+              style={{ color: C.muted }}
+              onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+              onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+        {/* Mobile */}
+        <div className="sm:hidden">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tColor }} />
+            {IconComp && <IconComp style={{ fontSize: 18, color: tColor, flexShrink: 0 }} />}
+            <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: C.warmText }}>{t.name}</span>
+            <button type="button" onClick={() => { setEditTarget(t); setFormOpen(true) }}
+              className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+              <Pencil size={14} />
+            </button>
+            {t.name !== 'Other' && (
+              <button type="button" onClick={() => setDeleteTarget(t)}
+                className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 mt-2">
+            {inputField}
+            {overrideLabel}
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  async function handleTypeDeleted() {
-    await reloadTypes()
-    onSaved()
+  function renderGrouped() {
+    if (macrocategories.length === 0) return (
+      <div className="flex flex-col gap-1.5 mb-4">{expenseTypes.map(renderRow)}</div>
+    )
+    const grouped = {}
+    macrocategories.forEach(m => { grouped[m.id] = [] })
+    const ungrouped = []
+    expenseTypes.forEach(t => {
+      if (t.macrocategory_id && grouped[t.macrocategory_id]) grouped[t.macrocategory_id].push(t)
+      else ungrouped.push(t)
+    })
+    return (
+      <div className="mb-4">
+        {macrocategories.map(m => grouped[m.id].length > 0 && (
+          <div key={m.id} className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
+              <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>{m.name}</span>
+              {m.budget_limit > 0 && <span className="text-xs" style={{ color: C.muted }}>— ${m.budget_limit.toFixed(0)} ceiling</span>}
+            </div>
+            <div className="flex flex-col gap-1.5">{grouped[m.id].map(renderRow)}</div>
+          </div>
+        ))}
+        {ungrouped.length > 0 && (
+          <div className="mb-4">
+            <span className="text-xs font-semibold uppercase tracking-widest mb-2 block" style={{ color: C.muted }}>Ungrouped</span>
+            <div className="flex flex-col gap-1.5">{ungrouped.map(renderRow)}</div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        bgcolor: 'background.paper',
-        borderRadius: 2,
-        p: { xs: 3, sm: 4 },
-      }}
-    >
+    <Card variant="glass" blur="xl" className="rounded-xl p-5 sm:p-7">
       {/* Header */}
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
-            Settings
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage spending categories and budget limits.
-          </Typography>
-        </Box>
-        <Stack direction="row" gap={1} flexWrap="wrap">
-          <Button
-            variant="outlined"
-            color="inherit"
-            startIcon={<FileUploadIcon />}
-            onClick={() => setImportOpen(true)}
-            sx={{ fontWeight: 600, flexShrink: 0, color: 'text.secondary', borderColor: C.borderMed }}
-            size="small"
-          >
-            Import
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <h2 className="text-base font-semibold mb-0.5" style={{ color: C.warmText }}>Settings</h2>
+          <p className="text-sm" style={{ color: C.muted }}>Manage spending categories and budget limits.</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="font-semibold" style={{ color: C.muted, borderColor: C.borderMed }}>
+            <Upload size={14} className="mr-1" />Import
           </Button>
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={() => { setEditTarget(null); setFormOpen(true) }}
-            sx={{ fontWeight: 600, flexShrink: 0 }}
-            size="small"
-          >
-            Add Category
+          <Button variant="outline" size="sm" onClick={() => { setEditTarget(null); setFormOpen(true) }} className="font-semibold">
+            <Plus size={14} className="mr-1" />Add Category
           </Button>
-        </Stack>
-      </Stack>
+        </div>
+      </div>
 
-      <Divider sx={{ borderColor: C.hoverStrong, mt: 2.5 }} />
+      <div className="h-px mt-4" style={{ backgroundColor: C.hoverStrong }} />
 
-      {/* Default limits sub-header (collapsible) */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
+      {/* Default limits */}
+      <div
+        className="flex items-center justify-between cursor-pointer select-none py-4"
         onClick={() => setDefaultsOpen(o => !o)}
-        sx={{ cursor: 'pointer', userSelect: 'none', py: 2 }}
       >
-        <Box>
-          <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            Default Limits
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Monthly budget limits applied across all months.
-          </Typography>
-        </Box>
-        <IconButton size="small" sx={{ color: 'text.secondary' }}>
-          {defaultsOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </IconButton>
-      </Stack>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: C.warmText }}>Default Limits</p>
+          <p className="text-sm" style={{ color: C.muted }}>Monthly budget limits applied across all months.</p>
+        </div>
+        <button type="button" className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+          {defaultsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
 
-      {/* Category rows */}
-      <Collapse in={defaultsOpen}>
-      {loadingBudgets ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>Loading…</Typography>
-      ) : (
-        <form onSubmit={handleSaveBudgets}>
-          {(() => {
-            function renderRow(t) {
-              const IconComp = ICON_REGISTRY[t.icon]
-              const hasOverride = currentOverrides[t.name] != null
-              const overrideContent = hasOverride ? (
-                <>
-                  <Box component="span" sx={{ color: 'primary.main' }}>
-                    {currentMonthShort} Override: ${Number(currentOverrides[t.name]).toFixed(0)}
-                  </Box>
-                  {limits[t.name] && ` | Default: $${parseFloat(limits[t.name]).toFixed(0)}`}
-                </>
-              ) : null
-              const inputField = (
-                <TextField
-                  type="number"
-                  placeholder="No limit"
-                  value={limits[t.name] ?? ''}
-                  onChange={e => handleLimitChange(t.name, e.target.value)}
-                  size="small"
-                  InputProps={{
-                    startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>$</Typography>,
-                  }}
-                  inputProps={{ min: '0', step: '0.01', style: { textAlign: 'right', width: 70 } }}
-                  sx={{ width: 120, flexShrink: 0 }}
-                />
-              )
-              return (
-                <Box
-                  key={t.id}
-                  sx={{
-                    px: 1.5,
-                    py: 0.75,
-                    borderRadius: 1.5,
-                    border: `1px solid ${C.hoverStrong}`,
-                    '&:hover': { bgcolor: C.subtleBg },
-                  }}
-                >
-                  {/* Desktop: single row with all elements */}
-                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ display: { xs: 'none', sm: 'flex' } }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />
-                    {IconComp && <IconComp sx={{ fontSize: 18, color: t.color, flexShrink: 0 }} />}
-                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1, minWidth: 0 }}>
-                      {t.name}
-                    </Typography>
-                    {hasOverride && (
-                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {overrideContent}
-                      </Typography>
-                    )}
-                    {macrocategories.length > 0 && (
-                      <FormControl size="small" sx={{ minWidth: 120 }}>
-                        <Select
-                          value={t.macrocategory_id ?? ''}
-                          onChange={async e => {
-                            await api.put(`/expense-types/${t.id}`, {
-                              name: t.name, color: t.color, icon: t.icon,
-                              macrocategory_id: e.target.value || null,
-                            })
-                            await reloadTypes()
-                          }}
-                          displayEmpty
-                          sx={{ fontSize: '0.75rem', color: 'text.secondary' }}
-                          {...DROPDOWN_MENU_PROPS}
-                        >
-                          <MenuItem value="" sx={{ ...DROPDOWN_ITEM_SX, fontSize: '0.75rem' }}><em>— No group —</em></MenuItem>
-                          {macrocategories.map(m => (
-                            <MenuItem key={m.id} value={m.id} sx={{ ...DROPDOWN_ITEM_SX, fontSize: '0.75rem' }}>
-                              <Stack direction="row" alignItems="center" gap={1}>
-                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: m.color, flexShrink: 0 }} />
-                                {m.name}
-                              </Stack>
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    )}
-                    {inputField}
-                    <IconButton size="small" onClick={() => { setEditTarget(t); setFormOpen(true) }}
-                      sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, p: 0.5 }}>
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
-                    {t.name !== 'Other' && (
-                      <IconButton size="small" onClick={() => setDeleteTarget(t)}
-                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' }, p: 0.5 }}>
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                  </Stack>
+      <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: defaultsOpen ? '9999px' : '0px' }}>
+        {loadingBudgets ? (
+          <p className="text-sm py-4" style={{ color: C.muted }}>Loading…</p>
+        ) : (
+          <form onSubmit={handleSaveBudgets}>
+            {renderGrouped()}
+            {saveError && <AlertBox severity="error">{saveError}</AlertBox>}
+            <div className="flex items-center justify-end gap-4 mt-3">
+              {saved && <span className="text-sm" style={{ color: C.primary }}>Changes saved!</span>}
+              <Button type="submit" disabled={saving} className="font-semibold">
+                {saving ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
 
-                  {/* Mobile: row 1 = name + edit/delete, row 2 = input + override */}
-                  <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                    <Stack direction="row" alignItems="center" gap={1}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: t.color, flexShrink: 0 }} />
-                      {IconComp && <IconComp sx={{ fontSize: 18, color: t.color, flexShrink: 0 }} />}
-                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {t.name}
-                      </Typography>
-                      <IconButton size="small" onClick={() => { setEditTarget(t); setFormOpen(true) }}
-                        sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, p: 0.5 }}>
-                        <EditOutlinedIcon fontSize="small" />
-                      </IconButton>
-                      {t.name !== 'Other' && (
-                        <IconButton size="small" onClick={() => setDeleteTarget(t)}
-                          sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' }, p: 0.5 }}>
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Stack>
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ mt: 0.75 }}>
-                      {inputField}
-                      {hasOverride && (
-                        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right', minWidth: 0 }}>
-                          {overrideContent}
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Box>
-                </Box>
-              )
-            }
-
-            if (macrocategories.length > 0) {
-              const grouped = {}
-              macrocategories.forEach(m => { grouped[m.id] = [] })
-              const ungrouped = []
-              expenseTypes.forEach(t => {
-                if (t.macrocategory_id && grouped[t.macrocategory_id]) {
-                  grouped[t.macrocategory_id].push(t)
-                } else {
-                  ungrouped.push(t)
-                }
-              })
-              return (
-                <Box mb={2}>
-                  {macrocategories.map(m => grouped[m.id].length > 0 && (
-                    <Box key={m.id} mb={2}>
-                      <Stack direction="row" alignItems="center" gap={1} mb={1}>
-                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: m.color }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem' }}>
-                          {m.name}
-                        </Typography>
-                        {m.budget_limit > 0 && (
-                          <Typography variant="body2" color="text.secondary">— ${m.budget_limit.toFixed(0)} ceiling</Typography>
-                        )}
-                      </Stack>
-                      <Stack spacing={0.75}>
-                        {grouped[m.id].map(renderRow)}
-                      </Stack>
-                    </Box>
-                  ))}
-                  {ungrouped.length > 0 && (
-                    <Box mb={2}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem', mb: 1 }}>
-                        Ungrouped
-                      </Typography>
-                      <Stack spacing={0.75}>
-                        {ungrouped.map(renderRow)}
-                      </Stack>
-                    </Box>
-                  )}
-                </Box>
-              )
-            }
-
-            return (
-              <Stack spacing={0.75} mb={3}>
-                {expenseTypes.map(renderRow)}
-              </Stack>
-            )
-          })()}
-
-          {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
-
-          <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={2} mt={2}>
-            {saved && (
-              <Typography variant="body2" sx={{ color: 'primary.main' }}>
-                Changes saved!
-              </Typography>
-            )}
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              disabled={saving}
-              sx={{ fontWeight: 600 }}
-            >
-              {saving ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </Stack>
-        </form>
-      )}
-      </Collapse>
-
-      {/* Monthly overrides */}
-      <MonthlyOverrides
-        expenseTypes={expenseTypes}
-        defaultLimits={limits}
-        onChanged={() => setOverrideRefresh(s => s + 1)}
-      />
-
-      {/* Macrocategory management */}
+      <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} onChanged={() => setOverrideRefresh(s => s + 1)} />
       <MacrocategoryManager />
 
-      {/* Dialogs */}
       {importOpen && (
         <ImportBudgetsDialog
           onClose={() => setImportOpen(false)}
-          onImported={async () => {
-            setImportOpen(false)
-            await reloadTypes()
-            onSaved()
-          }}
+          onImported={async () => { setImportOpen(false); await reloadTypes(); onSaved() }}
         />
       )}
       {formOpen && (
-        <CategoryFormDialog
-          open
-          onClose={() => setFormOpen(false)}
-          onSaved={handleTypeSaved}
-          existing={editTarget}
-        />
+        <CategoryFormDialog open onClose={() => setFormOpen(false)} onSaved={handleTypeSaved} existing={editTarget} />
       )}
       {deleteTarget && (
         <DeleteDialog
@@ -1140,6 +938,6 @@ export default function BudgetGoals({ onSaved }) {
           otherTypes={expenseTypes.filter(t => t.id !== deleteTarget.id)}
         />
       )}
-    </Paper>
+    </Card>
   )
 }

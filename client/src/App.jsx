@@ -1,24 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
-import { ThemeProvider } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
-import Stack from '@mui/material/Stack'
-import IconButton from '@mui/material/IconButton'
-import ButtonBase from '@mui/material/ButtonBase'
-import BottomNavigation from '@mui/material/BottomNavigation'
-import BottomNavigationAction from '@mui/material/BottomNavigationAction'
-import LightModeIcon from '@mui/icons-material/LightMode'
-import DarkModeIcon from '@mui/icons-material/DarkMode'
-import HomeIcon from '@mui/icons-material/Home'
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
-import SavingsIcon from '@mui/icons-material/Savings'
-import BarChartIcon from '@mui/icons-material/BarChart'
+import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon } from 'lucide-react'
 import api from './api.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import { ColorsProvider, useC } from './colors'
-import { createAppTheme } from './theme.js'
 import ExpenseList from './components/ExpenseList.jsx'
 import BudgetSetup from './components/BudgetSetup.jsx'
 import BudgetGoals from './components/BudgetGoals.jsx'
@@ -31,12 +15,11 @@ function currentMonth() {
 }
 
 const NAV_ITEMS = [
-  { value: 'home',         label: 'Overview',    icon: <HomeIcon /> },
-  { value: 'analysis',     label: 'Analysis',    icon: <BarChartIcon /> },
-  { value: 'savings',      label: 'Savings',     icon: <SavingsIcon /> },
-  { value: 'budgets',      label: 'Budgets',     icon: <AccountBalanceIcon /> },
-  { value: 'all-expenses', label: 'Expenses',    icon: <ReceiptLongIcon /> },
-
+  { value: 'home',         label: 'Overview',  Icon: Home },
+  { value: 'analysis',     label: 'Analysis',  Icon: BarChart2 },
+  { value: 'savings',      label: 'Savings',   Icon: PiggyBank },
+  { value: 'budgets',      label: 'Budgets',   Icon: Landmark },
+  { value: 'all-expenses', label: 'Expenses',  Icon: Receipt },
 ]
 
 function AppContent({ mode, onToggleMode }) {
@@ -63,192 +46,152 @@ function AppContent({ mode, onToggleMode }) {
     setRefreshKey(k => k + 1)
   }, [])
 
-  if (budgetsReady === null || typesLoading) return null
+  if (budgetsReady === null || typesLoading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ height: 64, borderBottom: '1px solid rgba(128,128,128,0.15)' }} />
+      <div style={{ flex: 1, padding: '24px 16px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
+        {[180, 120, 220, 160].map((h, i) => (
+          <div key={i} style={{
+            height: h, borderRadius: 16, marginBottom: 16,
+            background: 'rgba(128,128,128,0.08)',
+            animation: 'pulse 1.5s ease-in-out infinite',
+            animationDelay: `${i * 0.1}s`,
+          }} />
+        ))}
+      </div>
+    </div>
+  )
 
   if (!budgetsReady) {
     return <BudgetSetup onComplete={refresh} />
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* ── Desktop top nav ─────────────────────────────── */}
-      <Box
-        component="header"
-        sx={{
-          display: { xs: 'none', sm: 'flex' },
-          alignItems: 'center',
-          bgcolor: C.surface,
-          borderBottom: `1px solid ${C.border}`,
-          px: 3,
+    <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+      {/* Blobs in their own stacking context so filter doesn't bleed into content */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', isolation: 'isolate' }} aria-hidden="true">
+        <div className="glass-blob glass-blob-1" />
+        <div className="glass-blob glass-blob-2" />
+        <div className="glass-blob glass-blob-3" />
+      </div>
+
+      {/* Desktop top nav */}
+      <header
+        className="hidden sm:flex items-center sticky top-0 z-50 px-6 gap-6"
+        style={{
           height: 64,
-          position: 'sticky',
-          top: 0,
-          zIndex: 1100,
-          gap: 3,
+          backgroundColor: mode === 'dark' ? 'rgba(14,14,22,0.62)' : 'rgba(255,255,255,0.58)',
+          backdropFilter: 'blur(18px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          borderBottom: `1px solid ${C.border}`,
         }}
       >
         {/* Logo */}
-        <Stack direction="row" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
-          <Box
-            sx={{
-              width: 32,
-              height: 32,
-              borderRadius: '10px',
-              bgcolor: C.primary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div
+            className="w-8 h-8 rounded-[10px] flex items-center justify-center"
+            style={{ backgroundColor: C.primary }}
           >
-            <SavingsIcon sx={{ fontSize: 16, color: '#fff' }} />
-          </Box>
-          <Typography
-            sx={{
-              fontWeight: 800,
-              fontSize: '1rem',
-              color: 'text.primary',
-              letterSpacing: '-0.02em',
-            }}
-          >
+            <PiggyBank size={16} color="#fff" />
+          </div>
+          <span className="font-extrabold text-base tracking-tight" style={{ color: C.warmText }}>
             Budget
-          </Typography>
-        </Stack>
+          </span>
+        </div>
 
         {/* Nav tabs */}
-        <Stack direction="row" gap={0.5} sx={{ flex: 1 }}>
-          {NAV_ITEMS.map(item => {
-            const active = page === item.value
+        <div className="flex gap-1 flex-1">
+          {NAV_ITEMS.map(({ value, label }) => {
+            const active = page === value
             return (
-              <ButtonBase
-                key={item.value}
-                onClick={() => setPage(item.value)}
-                sx={{
-                  px: 2,
-                  py: 0.75,
-                  borderRadius: '100px',
-                  fontSize: '0.875rem',
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPage(value)}
+                className="px-4 py-1.5 rounded-full text-sm font-[inherit] border-none cursor-pointer transition-colors duration-150"
+                style={{
                   fontWeight: active ? 700 : 500,
-                  fontFamily: "'Plus Jakarta Sans', sans-serif",
-                  color: active ? C.primary : 'text.secondary',
-                  bgcolor: active ? C.primaryTint : 'transparent',
-                  transition: 'all 0.15s',
-                  '&:hover': {
-                    bgcolor: active ? C.primaryTint : C.hover,
-                    color: active ? C.primary : 'text.primary',
-                  },
+                  color: active ? C.primary : C.muted,
+                  backgroundColor: active ? C.primaryTint : 'transparent',
                 }}
               >
-                {item.label}
-              </ButtonBase>
+                {label}
+              </button>
             )
           })}
-        </Stack>
+        </div>
 
-        {/* Mode toggle */}
-        <IconButton
-          size="small"
+        {/* Theme toggle */}
+        <button
+          type="button"
           onClick={onToggleMode}
-          sx={{
-            color: 'text.secondary',
-            '&:hover': { color: C.primary, bgcolor: C.primaryTint },
-            borderRadius: '8px',
-          }}
+          className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
+          style={{ color: C.muted, backgroundColor: 'transparent' }}
         >
-          {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
-        </IconButton>
-      </Box>
+          {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      </header>
 
-      {/* ── Mobile top bar ───────────────────────────────── */}
-      <Box
-        sx={{
-          display: { xs: 'flex', sm: 'none' },
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          bgcolor: C.surface,
-          borderBottom: `1px solid ${C.border}`,
-          px: 2,
+      {/* Mobile top bar */}
+      <div
+        className="flex sm:hidden items-center justify-between px-4 backdrop-blur-xl"
+        style={{
           height: 52,
+          backgroundColor: C.surface,
+          borderBottom: `1px solid ${C.border}`,
         }}
       >
-        <Stack direction="row" alignItems="center" gap={1}>
-          <Box
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: '9px',
-              bgcolor: C.primary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+        <div className="flex items-center gap-2">
+          <div
+            className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center"
+            style={{ backgroundColor: C.primary }}
           >
-            <SavingsIcon sx={{ fontSize: 14, color: '#fff' }} />
-          </Box>
-          <Typography sx={{ fontWeight: 800, fontSize: '0.9rem', color: 'text.primary', letterSpacing: '-0.02em' }}>
+            <PiggyBank size={14} color="#fff" />
+          </div>
+          <span className="font-extrabold text-[0.9rem] tracking-tight" style={{ color: C.warmText }}>
             Budget
-          </Typography>
-        </Stack>
-        <IconButton
-          size="small"
+          </span>
+        </div>
+        <button
+          type="button"
           onClick={onToggleMode}
-          sx={{ color: 'text.secondary', borderRadius: '8px' }}
+          className="p-1.5 rounded-lg border-none cursor-pointer"
+          style={{ color: C.muted, backgroundColor: 'transparent' }}
         >
-          {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
-        </IconButton>
-      </Box>
+          {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+      </div>
 
-      {/* ── Mobile bottom navigation ──────────────────────── */}
-      <BottomNavigation
-        value={page}
-        onChange={(_, val) => setPage(val)}
-        sx={{
-          display: { xs: 'flex', sm: 'none' },
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 1100,
-          bgcolor: C.surface,
-          borderTop: `1px solid ${C.border}`,
+      {/* Mobile bottom nav */}
+      <nav
+        className="flex sm:hidden fixed bottom-0 left-0 right-0 z-50"
+        style={{
           height: 60,
-          '& .MuiBottomNavigationAction-root': {
-            color: 'text.disabled',
-            minWidth: 0,
-            px: 0.5,
-            fontFamily: "'Plus Jakarta Sans', sans-serif",
-          },
-          '& .Mui-selected': { color: C.primary },
-          '& .MuiBottomNavigationAction-label': {
-            fontSize: '0.65rem !important',
-            fontWeight: 600,
-            fontFamily: "'Plus Jakarta Sans', sans-serif",
-          },
-          '& .MuiBottomNavigationAction-label.Mui-selected': {
-            fontSize: '0.65rem !important',
-          },
+          backgroundColor: mode === 'dark' ? 'rgba(14,14,22,0.62)' : 'rgba(255,255,255,0.58)',
+          backdropFilter: 'blur(18px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          borderTop: `1px solid ${C.border}`,
         }}
       >
-        {NAV_ITEMS.map(item => (
-          <BottomNavigationAction
-            key={item.value}
-            label={item.label}
-            value={item.value}
-            icon={item.icon}
-          />
-        ))}
-      </BottomNavigation>
+        {NAV_ITEMS.map(({ value, label, Icon }) => {
+          const active = page === value
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setPage(value)}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5 border-none cursor-pointer bg-transparent font-[inherit]"
+              style={{ color: active ? C.primary : C.dimText }}
+            >
+              <Icon size={20} />
+              <span className="text-[0.65rem] font-semibold leading-none">{label}</span>
+            </button>
+          )
+        })}
+      </nav>
 
-      {/* ── Page content ─────────────────────────────────── */}
-      <Box
-        component="main"
-        sx={{
-          maxWidth: 1100,
-          mx: 'auto',
-          px: { xs: 2, sm: 3 },
-          py: { xs: 2.5, sm: 3 },
-          pb: { xs: 10, sm: 3 },
-        }}
-      >
+      {/* Page content */}
+      <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-6 pb-[72px] sm:pb-6">
         {page === 'home' && (
           <DashboardPage
             selectedMonth={selectedMonth}
@@ -261,34 +204,26 @@ function AppContent({ mode, onToggleMode }) {
         {page === 'analysis' && (
           <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} />
         )}
-        {page === 'savings' && (
-          <SavingsPage />
-        )}
-        {page === 'budgets' && (
-          <BudgetGoals onSaved={refresh} />
-        )}
+        {page === 'savings' && <SavingsPage />}
+        {page === 'budgets' && <BudgetGoals onSaved={refresh} />}
         {page === 'all-expenses' && (
           <ExpenseList refreshKey={refreshKey} onRefresh={refresh} />
         )}
-      </Box>
-    </Box>
+      </main>
+    </div>
   )
 }
 
 function ThemedApp() {
   const [mode, setMode] = useState('dark')
-  const theme = createAppTheme(mode)
   const toggleMode = () => setMode(m => m === 'dark' ? 'light' : 'dark')
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <ColorsProvider mode={mode}>
-        <ExpenseTypesProvider>
-          <AppContent mode={mode} onToggleMode={toggleMode} />
-        </ExpenseTypesProvider>
-      </ColorsProvider>
-    </ThemeProvider>
+    <ColorsProvider mode={mode}>
+      <ExpenseTypesProvider>
+        <AppContent mode={mode} onToggleMode={toggleMode} />
+      </ExpenseTypesProvider>
+    </ColorsProvider>
   )
 }
 

@@ -1,21 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
-import LinearProgress from '@mui/material/LinearProgress'
-import Chip from '@mui/material/Chip'
-import Card from '@mui/material/Card'
-import CardContent from '@mui/material/CardContent'
-import Stack from '@mui/material/Stack'
-import IconButton from '@mui/material/IconButton'
-import Button from '@mui/material/Button'
-import Divider from '@mui/material/Divider'
-import Collapse from '@mui/material/Collapse'
-import AddIcon from '@mui/icons-material/Add'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import { startTransition } from 'react'
+import { Plus, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import api from '../api.js'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
@@ -23,8 +9,35 @@ import { useC } from '../colors'
 import SpendingChart from './SpendingChart.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
 
-
 const CARD_LIMIT = 9
+
+function StatusBadge({ label, color }) {
+  return (
+    <span
+      className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full"
+      style={{ backgroundColor: color, color: '#fff' }}
+    >
+      {label}
+    </span>
+  )
+}
+
+function TwoToneBar({ pct, solidColor, ghostStart, ghostWidth, trackColor }) {
+  return (
+    <div className="relative h-1 rounded-full overflow-hidden mb-1.5" style={{ backgroundColor: trackColor }}>
+      {ghostWidth !== null && ghostWidth > 0 && (
+        <div
+          className="absolute top-0 h-full rounded-full"
+          style={{ left: `${ghostStart}%`, width: `${ghostWidth}%`, backgroundColor: solidColor, opacity: 0.4 }}
+        />
+      )}
+      <div
+        className="absolute top-0 left-0 h-full rounded-full"
+        style={{ width: `${pct}%`, backgroundColor: solidColor }}
+      />
+    </div>
+  )
+}
 
 export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTypeChange, activeMacro, onMacroChange, hideHeader = false, defaultCollapsed = false }) {
   const C = useC()
@@ -59,13 +72,10 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
     })
   }, [selectedMonth])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData, refreshKey])
+  useEffect(() => { fetchData() }, [fetchData, refreshKey])
 
   const totalSpent = summary.reduce((sum, s) => sum + s.total, 0)
   const totalBudget = Object.values(budgets).reduce((sum, v) => sum + v, 0)
-  const grandPct = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : null
   const grandOver = totalBudget > 0 && totalSpent > totalBudget
   const net = totalIncome - totalSpent
   const hasIncome = totalIncome > 0
@@ -76,308 +86,265 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
   const projectedOver = totalBudget > 0 && totalProjected != null && totalProjected > totalBudget
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        bgcolor: 'background.paper',
-        borderRadius: 2,
-        p: { xs: 2, sm: 3 },
-        mb: 3,
+    <div
+      className="rounded-2xl p-4 sm:p-6 mb-6"
+      style={{
+        backgroundColor: C.surface,
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
+        border: `1px solid ${C.border}`,
+        contain: 'layout style',
       }}
     >
       {!hideHeader && (
         <>
-          {/* Header row */}
-          <Box sx={{
-            background: `linear-gradient(160deg, ${C.surfaceAlt} 0%, transparent 100%)`,
-            borderRadius: 2,
-            p: 2.5,
-            mb: 3,
-          }}>
-            <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3}>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1 }}>
-                  ${totalSpent.toFixed(2)}
-                </Typography>
+          {/* Spending header */}
+          <div
+            className="rounded-2xl p-5 mb-6"
+            style={{ background: `linear-gradient(160deg, ${C.surfaceAlt} 0%, transparent 100%)` }}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <p className="text-3xl font-bold leading-none">${totalSpent.toFixed(2)}</p>
                 {totalBudget > 0 && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    of ${totalBudget.toFixed(2)} budget
-                  </Typography>
+                  <p className="text-sm mt-1" style={{ color: C.muted }}>of ${totalBudget.toFixed(2)} budget</p>
                 )}
                 {totalProjected != null && totalBudget > 0 && (
-                  <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
+                  <p className="text-sm mt-0.5" style={{ color: projectedOver ? C.overBudget : C.muted }}>
                     ${totalProjected.toFixed(2)} projected
-                  </Typography>
+                  </p>
                 )}
-              </Box>
+              </div>
               {totalBudget > 0 && (
-                <Box sx={{ pt: 0.5, textAlign: 'right' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: grandOver ? 'error.main' : 'primary.main', lineHeight: 1.2 }}>
+                <div className="text-right pt-1">
+                  <p
+                    className="text-lg font-bold leading-tight"
+                    style={{ color: grandOver ? C.overBudget : C.primary }}
+                  >
                     {grandOver
                       ? `$${(totalSpent - totalBudget).toFixed(2)} over budget`
                       : `$${(totalBudget - totalSpent).toFixed(2)} remaining`}
-                  </Typography>
+                  </p>
                   {totalProjected != null && (
-                    <Typography variant="body2" sx={{ mt: 0.25, color: projectedOver ? 'error.main' : 'text.secondary' }}>
+                    <p className="text-sm mt-0.5" style={{ color: projectedOver ? C.overBudget : C.muted }}>
                       {projectedOver
                         ? `$${(totalProjected - totalBudget).toFixed(2)} proj. over`
                         : `$${(totalBudget - totalProjected).toFixed(2)} proj. remaining`}
-                    </Typography>
+                    </p>
                   )}
-                </Box>
+                </div>
               )}
-            </Stack>
-          </Box>
+            </div>
+          </div>
 
           {/* Income / Net row */}
-          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap">
-            <Stack direction="row" gap={3} flexWrap="wrap">
-              <Box>
-                <Typography variant="caption" color="text.secondary">Income</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 600, color: hasIncome ? C.income : 'text.secondary' }}>
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div className="flex gap-6 flex-wrap">
+              <div>
+                <span className="text-xs" style={{ color: C.muted }}>Income</span>
+                <p className="text-base font-semibold" style={{ color: hasIncome ? C.income : C.muted }}>
                   ${totalIncome.toFixed(2)}
-                </Typography>
-              </Box>
+                </p>
+              </div>
               {hasIncome && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Net</Typography>
-                  <Stack direction="row" alignItems="center" gap={0.5}>
+                <div>
+                  <span className="text-xs" style={{ color: C.muted }}>Net</span>
+                  <div className="flex items-center gap-1">
                     {net >= 0
-                      ? <TrendingUpIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                      : <TrendingDownIcon sx={{ fontSize: 16, color: 'error.main' }} />
-                    }
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: net >= 0 ? 'primary.main' : 'error.main' }}>
+                      ? <TrendingUp size={16} style={{ color: C.primary }} />
+                      : <TrendingDown size={16} style={{ color: C.overBudget }} />}
+                    <p className="text-base font-semibold" style={{ color: net >= 0 ? C.primary : C.overBudget }}>
                       {net >= 0 ? '+' : '−'}${Math.abs(net).toFixed(2)}
-                    </Typography>
-                  </Stack>
-                </Box>
+                    </p>
+                  </div>
+                </div>
               )}
-            </Stack>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<AddIcon />}
+            </div>
+            <button
+              type="button"
               onClick={() => { setEditingIncome(null); setShowIncomeForm(true) }}
-              sx={{ fontWeight: 600, flexShrink: 0, borderColor: C.incomeButtonBg, color: C.incomeButtonBg,
-                '&:hover': { borderColor: C.incomeButtonBg, bgcolor: C.incomeButtonHoverBg } }}
+              className="flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border transition-colors duration-150 cursor-pointer bg-transparent"
+              style={{ borderColor: C.incomeButtonBg, color: C.incomeButtonBg }}
             >
+              <Plus size={16} />
               Add Income
-            </Button>
-          </Stack>
+            </button>
+          </div>
 
-          <Divider sx={{ borderColor: C.hoverStrong, mb: 3 }} />
+          <div className="h-px mb-6" style={{ backgroundColor: C.hoverStrong }} />
 
           {/* Macrocategory summary cards */}
           {macroSummary.length > 0 && (
             <>
-              <Stack direction="row" flexWrap="wrap" gap={2} mb={2}>
+              <div className="flex flex-wrap gap-4 mb-4">
                 {macroSummary.map(m => {
                   const isSelected = activeMacro === m.id
                   const hasBudget = m.budget_limit > 0
                   const over = hasBudget && m.total > m.budget_limit
                   const pct = hasBudget ? Math.min((m.total / m.budget_limit) * 100, 100) : null
+                  const mColor = C.adaptColor(m.color ?? C.dimText)
                   return (
-                    <Card
+                    <div
                       key={m.id}
-                      elevation={0}
                       onClick={() => onMacroChange?.(isSelected ? null : m.id)}
-                      sx={{
-                        bgcolor: isSelected ? `${m.color}${C.cardTintSelectedAlpha}` : `${m.color}${C.cardTintAlpha}`,
-                        border: isSelected ? `1.5px solid ${m.color}` : `1px solid ${m.color}${C.cardBorderAlpha}`,
-                        minWidth: { xs: 0, sm: 160 },
-                        flex: { xs: '1 1 100%', sm: '1 1 160px' },
-                        cursor: 'pointer',
-                        transition: 'background-color 0.15s, border-color 0.15s',
-                        '&:hover': { bgcolor: C.hoverMed },
+                      className="flex-1 min-w-0 sm:min-w-[160px] rounded-xl p-3 cursor-pointer transition-colors duration-150"
+                      style={{
+                        backgroundColor: isSelected ? `${mColor}${C.cardTintSelectedAlpha}` : `${mColor}${C.cardTintAlpha}`,
+                        border: isSelected ? `1.5px solid ${mColor}` : `1px solid ${mColor}${C.cardBorderAlpha}`,
                       }}
                     >
-                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                          {m.name}
-                        </Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 700, color: over ? 'error.main' : m.color, lineHeight: 1.2, mb: 0.5 }}>
-                          ${m.total.toFixed(2)}
-                          {hasBudget && (
-                            <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
-                              {' '}/ ${m.budget_limit.toFixed(0)}
-                            </Typography>
-                          )}
-                        </Typography>
-                        {pct !== null && (
-                          <LinearProgress
-                            variant="determinate"
-                            value={pct}
-                            sx={{
-                              height: 4, borderRadius: 2, mb: 0.75,
-                              bgcolor: C.hoverStrong,
-                              '& .MuiLinearProgress-bar': { bgcolor: over ? 'error.main' : m.color, borderRadius: 2 },
-                            }}
-                          />
-                        )}
-                        <Typography variant="caption" color="text.secondary">
-                          {m.count} {m.count === 1 ? 'expense' : 'expenses'}
-                        </Typography>
-                      </CardContent>
-                    </Card>
+                      <p className="text-sm mb-1" style={{ color: C.muted }}>{m.name}</p>
+                      <p className="text-lg font-bold leading-tight mb-1" style={{ color: over ? C.overBudget : mColor }}>
+                        ${m.total.toFixed(2)}
+                        {hasBudget && <span className="text-xs font-normal ml-1" style={{ color: C.muted }}>/ ${m.budget_limit.toFixed(0)}</span>}
+                      </p>
+                      {pct !== null && (
+                        <div className="h-1 rounded-full mb-1.5" style={{ backgroundColor: C.hoverStrong }}>
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: over ? C.overBudget : mColor }} />
+                        </div>
+                      )}
+                      <span className="text-xs" style={{ color: C.muted }}>
+                        {m.count} {m.count === 1 ? 'expense' : 'expenses'}
+                      </span>
+                    </div>
                   )
                 })}
-              </Stack>
-              <Divider sx={{ borderColor: C.hoverStrong, mb: 3 }} />
+              </div>
+              <div className="h-px mb-6" style={{ backgroundColor: C.hoverStrong }} />
             </>
           )}
         </>
       )}
 
-      {/* Category cards + chart */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
+      {/* Category cards toggle header */}
+      <div
+        className="flex items-center justify-between cursor-pointer select-none"
+        style={{ marginBottom: categoriesOpen ? 16 : 0 }}
         onClick={() => setCategoriesOpen(o => !o)}
-        sx={{ cursor: 'pointer', userSelect: 'none', mb: categoriesOpen ? 2 : 0 }}
       >
-        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.75rem' }}>
+        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>
           All Categories
-        </Typography>
-        <IconButton size="small" sx={{ color: 'text.secondary' }}>
-          {categoriesOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </IconButton>
-      </Stack>
+        </p>
+        <button type="button" className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+          {categoriesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
 
-      <Collapse in={categoriesOpen}>
-      <Stack direction="row" alignItems="flex-start" gap={3} flexWrap="wrap">
-        <Stack direction="row" flexWrap="wrap" gap={2} sx={{ flex: 1, minWidth: 280 }}>
-        {[...summary].filter(s => !activeMacro || typeMap[s.type]?.macrocategory_id === activeMacro).sort((a, b) => {
-          const pctA = budgets[a.type] > 0 ? a.total / budgets[a.type] : -1
-          const pctB = budgets[b.type] > 0 ? b.total / budgets[b.type] : -1
-          return pctB - pctA
-        }).slice(0, (showAllCards || activeMacro) ? undefined : CARD_LIMIT).map(s => {
-          const typeEntry = typeMap[s.type] || { color: C.dimText, icon: null }
-          const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
-          const limit = budgets[s.type]
-          const pct = limit > 0 ? Math.min((s.total / limit) * 100, 100) : null
-          const over = limit > 0 && s.total > limit
-          const isSelected = activeType === s.type
+      {/* Collapse — grid-rows trick: animates 1fr↔0fr with no layout cost */}
+      <div
+        className="transition-[grid-template-rows] duration-300"
+        style={{ display: 'grid', gridTemplateRows: categoriesOpen ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+          {[...summary]
+            .filter(s => !activeMacro || typeMap[s.type]?.macrocategory_id === activeMacro)
+            .sort((a, b) => {
+              const pctA = budgets[a.type] > 0 ? a.total / budgets[a.type] : -1
+              const pctB = budgets[b.type] > 0 ? b.total / budgets[b.type] : -1
+              return pctB - pctA
+            })
+            .slice(0, (showAllCards || activeMacro) ? undefined : CARD_LIMIT)
+            .map(s => {
+              const typeEntry = typeMap[s.type] || { color: C.dimText, icon: null }
+              const IconComp = typeEntry.icon ? ICON_REGISTRY[typeEntry.icon] : null
+              const limit = budgets[s.type]
+              const pct = limit > 0 ? Math.min((s.total / limit) * 100, 100) : null
+              const over = limit > 0 && s.total > limit
+              const isSelected = activeType === s.type
+              const catColor = C.adaptColor(typeEntry.color ?? C.dimText)
 
-          return (
-            <Card
-              key={s.type}
-              elevation={0}
-              onClick={() => onTypeChange?.(isSelected ? 'All' : s.type)}
-              sx={{
-                bgcolor: isSelected ? `${typeEntry.color}${C.cardTintSelectedAlpha}` : `${typeEntry.color}${C.cardTintAlpha}`,
-                border: isSelected ? `1.5px solid ${typeEntry.color}` : `1px solid ${typeEntry.color}${C.cardBorderAlpha}`,
-                minWidth: { xs: 0, sm: 300 },
-                flex: { xs: '1 1 100%', sm: '1 1 300px' },
-                cursor: onTypeChange ? 'pointer' : 'default',
-                transition: 'background-color 0.15s, border-color 0.15s',
-                '&:hover': onTypeChange ? { bgcolor: C.hoverMed } : {},
-              }}
-            >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
-                  {IconComp && (
-                    <IconComp sx={{ fontSize: 18, color: typeEntry.color }} />
-                  )}
-                  <Typography variant="body2" color="text.secondary">
-                    {s.type}
-                  </Typography>
-                </Stack>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 700,
-                    color: over ? 'error.main' : typeEntry.color,
-                    lineHeight: 1.2,
-                    mb: 0.5,
+              const pac = pacing[s.type]
+              const actuallyOver = limit > 0 && s.total > limit
+              const solidColor = actuallyOver ? C.overBudget : catColor
+              const statusColor = pac?.status === 'over_budget' ? C.overBudget
+                : pac?.status === 'at_risk' ? C.atRisk
+                : pac?.status === 'well_under' ? C.nearGoal
+                : C.primary
+              const projPct = isCurrentMonth && pac?.projected_spend != null && pac.projected_spend > s.total && limit > 0
+                ? Math.min((pac.projected_spend / limit) * 100, 100)
+                : null
+              const ghostWidth = projPct !== null ? projPct - (pct ?? 0) : null
+
+              return (
+                <div
+                  key={s.type}
+                  onClick={() => onTypeChange?.(isSelected ? 'All' : s.type)}
+                  className="rounded-xl p-3 transition-colors duration-150 min-w-0"
+                  style={{
+                    backgroundColor: isSelected ? `${catColor}${C.cardTintSelectedAlpha}` : `${catColor}${C.cardTintAlpha}`,
+                    border: isSelected ? `1.5px solid ${catColor}` : `1px solid ${catColor}${C.cardBorderAlpha}`,
+                    cursor: onTypeChange ? 'pointer' : 'default',
+                    viewTransitionName: `vt-card-${s.type.replace(/[^a-zA-Z0-9]/g, '-')}`,
                   }}
                 >
-                  ${s.total.toFixed(2)}
-                  {limit > 0 && (
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontWeight: 400 }}
-                    >
-                      {' '}/ ${limit.toFixed(0)}
-                    </Typography>
-                  )}
-                </Typography>
-                {/* Two-tone bar: solid = actual spend (category color), ghost extension = projection */}
-                {pct !== null && (() => {
-                  const pac = pacing[s.type]
-                  const actuallyOver = limit > 0 && s.total > limit
-                  const solidColor = actuallyOver ? C.overBudget : typeEntry.color
-                  const statusColor = pac?.status === 'over_budget' ? C.overBudget
-                    : pac?.status === 'at_risk' ? C.atRisk
-                    : typeEntry.color
-                  const projPct = isCurrentMonth && pac?.projected_spend != null && pac.projected_spend > s.total && limit > 0
-                    ? Math.min((pac.projected_spend / limit) * 100, 100)
-                    : null
-                  const ghostWidth = projPct !== null ? projPct - (pct ?? 0) : null
-                  return (
-                    <Box sx={{ position: 'relative', height: 4, borderRadius: 2, bgcolor: C.hoverStrong, mb: 0.75, overflow: 'hidden' }}>
-                      {ghostWidth !== null && ghostWidth > 0 && (
-                        <Box sx={{ position: 'absolute', top: 0, left: `${pct}%`, height: '100%', width: `${ghostWidth}%`, bgcolor: statusColor, opacity: 0.4, borderRadius: 2 }} />
-                      )}
-                      <Box sx={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct}%`, bgcolor: solidColor, borderRadius: 2 }} />
-                    </Box>
-                  )
-                })()}
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Typography variant="caption" color="text.secondary">
-                    {s.count} {s.count === 1 ? 'expense' : 'expenses'}
-                  </Typography>
-                  {isCurrentMonth && pacing[s.type]?.status && pacing[s.type].status !== 'no_budget' ? (
-                    <Chip
-                      label={pacing[s.type].status === 'over_budget' ? `$${(pacing[s.type].projected_spend - limit).toFixed(0)} proj. over`
-                        : pacing[s.type].status === 'at_risk' ? 'at risk'
-                        : 'on track'}
-                      size="small"
-                      sx={{
-                        fontSize: '0.72rem', height: 20, fontWeight: 600,
-                        bgcolor: pacing[s.type].status === 'over_budget' ? C.overBudget
-                          : pacing[s.type].status === 'at_risk' ? C.atRisk
-                          : C.onTrack,
-                        color: C.surface,
-                      }}
+                  <div className="flex items-center gap-2 mb-1">
+                    {IconComp && <IconComp style={{ fontSize: '18px', color: catColor }} />}
+                    <span className="text-sm" style={{ color: C.muted }}>{s.type}</span>
+                  </div>
+                  <p className="text-lg font-bold leading-tight mb-1" style={{ color: over ? C.overBudget : catColor }}>
+                    ${s.total.toFixed(2)}
+                    {limit > 0 && (
+                      <span className="text-xs font-normal ml-1" style={{ color: C.muted }}>/ ${limit.toFixed(0)}</span>
+                    )}
+                  </p>
+                  {pct !== null && (
+                    <TwoToneBar
+                      pct={pct}
+                      solidColor={solidColor}
+                      ghostStart={pct}
+                      ghostWidth={ghostWidth}
+                      trackColor={C.hoverStrong}
                     />
-                  ) : over ? (
-                    <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>
-                      ${(s.total - limit).toFixed(2)} over
-                    </Typography>
-                  ) : null}
-                </Stack>
-                {isCurrentMonth && pacing[s.type]?.projected_spend != null && (
-                  <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                    → ${pacing[s.type].projected_spend.toFixed(2)} projected
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs" style={{ color: C.muted }}>
+                      {s.count} {s.count === 1 ? 'expense' : 'expenses'}
+                    </span>
+                    {isCurrentMonth && pac?.status && pac.status !== 'no_budget' ? (
+                      <StatusBadge
+                        label={pac.status === 'over_budget' ? `$${(pac.projected_spend - limit).toFixed(0)} proj. over`
+                          : pac.status === 'at_risk' ? 'at risk'
+                          : pac.status === 'well_under' ? 'under budget'
+                          : 'on track'}
+                        color={statusColor}
+                      />
+                    ) : over ? (
+                      <span className="text-xs font-semibold" style={{ color: C.overBudget }}>
+                        ${(s.total - limit).toFixed(2)} over
+                      </span>
+                    ) : null}
+                  </div>
+                  {isCurrentMonth && pac?.projected_spend != null && (
+                    <p className="text-xs mt-0.5" style={{ color: C.muted }}>
+                      → ${pac.projected_spend.toFixed(2)} projected
+                    </p>
+                  )}
+                </div>
+              )
+            })}
           {summary.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-              No expenses this month yet. Add one below!
-            </Typography>
+            <p className="text-sm py-2" style={{ color: C.muted }}>No expenses this month yet. Add one below!</p>
           )}
           {summary.length > CARD_LIMIT && (
-            <Box sx={{ width: '100%' }}>
-              <Box
-                onClick={() => setShowAllCards(v => !v)}
-                sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+            <div className="col-span-2 sm:col-span-3 xl:col-span-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const update = () => setShowAllCards(v => !v)
+                  if (document.startViewTransition) document.startViewTransition(() => startTransition(update))
+                  else startTransition(update)
+                }}
+                className="min-h-[40px] flex items-center text-sm bg-transparent border-none cursor-pointer font-[inherit]"
+                style={{ color: C.muted }}
               >
-                <Typography variant="body2" sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                  {showAllCards ? 'Show less ↑' : `Show all ${summary.length} categories ↓`}
-                </Typography>
-              </Box>
-            </Box>
+                {showAllCards ? 'Show less ↑' : `Show all ${summary.length} categories ↓`}
+              </button>
+            </div>
           )}
-        </Stack>
-      </Stack>
-      </Collapse>
+        </div>
+        </div>
+      </div>
 
       {showIncomeForm && (
         <AddIncomeForm
@@ -392,6 +359,6 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
           onAdded={() => { setEditingIncome(null); fetchData() }}
         />
       )}
-    </Paper>
+    </div>
   )
 }

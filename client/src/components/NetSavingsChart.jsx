@@ -1,7 +1,4 @@
 import { useState, useEffect } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
@@ -10,7 +7,6 @@ import api from '../api.js'
 import { useC } from '../colors'
 
 const PAST_MONTHS = 6
-const FUTURE_MONTHS = 3
 
 function shortLabel(m) {
   const [y, mo] = m.split('-').map(Number)
@@ -45,40 +41,36 @@ function CustomTooltip({ active, payload, monthlyTarget }) {
   const net = entry.net ?? 0
   const isPos = net >= 0
   return (
-    <Box sx={{
-      bgcolor: C.surface,
-      border: `1px solid ${C.border}`,
-      borderRadius: 1,
-      px: 1.5,
-      py: 1,
-      minWidth: 150,
-    }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
+    <div
+      className="rounded-lg px-3 py-2 min-w-[150px]"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+    >
+      <p className="text-sm font-semibold mb-1">
         {entry.fullLabel}{entry.isFuture ? ' (projected)' : ''}
-      </Typography>
+      </p>
       {entry.isFuture ? (
-        <Typography variant="caption" sx={{ display: 'block', color: isPos ? NET_POS_COLOR : NET_NEG_COLOR, fontWeight: 600 }}>
+        <span className="block text-xs font-semibold" style={{ color: isPos ? NET_POS_COLOR : NET_NEG_COLOR }}>
           Projected net: {isPos ? '+' : ''}${net.toFixed(2)}
-        </Typography>
+        </span>
       ) : (
         <>
-          <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+          <span className="block text-xs" style={{ color: C.muted }}>
             Income: ${entry.income.toFixed(2)}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+          </span>
+          <span className="block text-xs" style={{ color: C.muted }}>
             Expenses: ${entry.expenses.toFixed(2)}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block', color: isPos ? NET_POS_COLOR : NET_NEG_COLOR, fontWeight: 600, mt: 0.5 }}>
+          </span>
+          <span className="block text-xs font-semibold mt-1" style={{ color: isPos ? NET_POS_COLOR : NET_NEG_COLOR }}>
             Net: {isPos ? '+' : ''}${net.toFixed(2)}
-          </Typography>
+          </span>
         </>
       )}
       {monthlyTarget != null && !entry.isFuture && (
-        <Typography variant="caption" sx={{ display: 'block', color: GOAL_COLOR, mt: 0.25 }}>
+        <span className="block text-xs mt-0.5" style={{ color: GOAL_COLOR }}>
           Goal: ${monthlyTarget.toFixed(2)}
-        </Typography>
+        </span>
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -90,12 +82,26 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
   const TICK = { fill: C.muted, fontSize: 12 }
   const AXIS_LINE = { stroke: C.border }
   const [historicalData, setHistoricalData] = useState([])
+  const [hiddenGoalIds, setHiddenGoalIds] = useState(new Set())
   const cur = currentMonth()
+
+  function toggleGoal(id) {
+    setHiddenGoalIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const portfolioAvg = goals.find(g => g.avg_monthly_net != null)?.avg_monthly_net ?? 0
   const activeGoals = goals.filter(
-    g => g.goal_type === 'one_time' && !g.completed && g.projected_completion
+    g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && !g.completed && g.projected_completion
   )
+  const FUTURE_MONTHS = Math.min(12, Math.max(3, ...activeGoals.map(g => {
+    const [gy, gm] = g.projected_completion.split('-').map(Number)
+    const [cy, cm] = cur.split('-').map(Number)
+    return (gy - cy) * 12 + (gm - cm)
+  }), 0))
 
   useEffect(() => {
     api.get('/savings-goals/net-chart', { params: { months: PAST_MONTHS } }).then(res => {
@@ -122,32 +128,52 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
   })
 
   const data = [...historicalData, ...futureData]
+  const allVisibleMonths = new Set(data.map(d => d.month))
 
-  const visibleFutureMonths = new Set(futureData.map(d => d.month))
-  const goalMarkers = activeGoals.filter(g => visibleFutureMonths.has(g.projected_completion))
+  const visibleGoals = activeGoals.filter(g => !hiddenGoalIds.has(g.id))
+  const projectionMarkers = visibleGoals.filter(g => allVisibleMonths.has(g.projected_completion))
+  const deadlineMarkers = visibleGoals.filter(g => {
+    const dm = g.deadline?.slice(0, 7)
+    return dm && g.projected_completion > dm && allVisibleMonths.has(dm)
+  })
 
   const allVals = data.map(d => d.net).filter(v => v !== 0)
   const maxAbs = allVals.length ? Math.max(...allVals.map(Math.abs)) : 100
   const domainPad = maxAbs * 1.3
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        bgcolor: 'background.paper',
-        border: `1px solid ${C.border}`,
-        borderRadius: 2,
-        p: 2.5,
-        mb: 3,
-      }}
+    <div
+      className="rounded-2xl p-6 mb-6"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
     >
-      <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.72rem' }}>
-        Monthly Net Savings
-      </Typography>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: C.muted }}>
+          Monthly Net Savings
+        </p>
+        {activeGoals.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {activeGoals.map(g => {
+              const hidden = hiddenGoalIds.has(g.id)
+              const goalColor = g.color ?? C.primary
+              return (
+                <button key={g.id} type="button" onClick={() => toggleGoal(g.id)}
+                  className="text-[10px] px-2 py-0.5 rounded-full border bg-transparent cursor-pointer transition-all duration-150"
+                  style={{
+                    color: hidden ? C.muted : goalColor,
+                    borderColor: hidden ? C.border : goalColor,
+                    opacity: hidden ? 0.5 : 1,
+                  }}>
+                  {g.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <XAxis
-            dataKey="label"
+            dataKey="month"
             tickLine={false}
             axisLine={AXIS_LINE}
             tick={({ x, y, payload, index }) => {
@@ -159,7 +185,7 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
                   fontSize={12}
                   fill={entry?.isFuture ? C.borderStrong : C.muted}
                 >
-                  {entry?.isFuture ? `~${payload.value}` : payload.value}
+                  {entry?.isFuture ? `~${shortLabel(payload.value)}` : shortLabel(payload.value)}
                 </text>
               )
             }}
@@ -183,17 +209,25 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
               label={{ value: `Goal $${monthlyTarget.toLocaleString()}`, position: 'insideTopRight', fill: GOAL_COLOR, fontSize: 11 }}
             />
           )}
-          {goalMarkers.map(g => {
-            const entry = data.find(d => d.month === g.projected_completion)
-            if (!entry) return null
+          {deadlineMarkers.map(g => (
+            <ReferenceLine
+              key={`due-${g.id}`}
+              x={g.deadline.slice(0, 7)}
+              stroke={C.overBudget}
+              strokeWidth={1.5}
+              label={{ value: `${g.name} due`, position: 'insideBottomLeft', fill: C.overBudget, fontSize: 10 }}
+            />
+          ))}
+          {projectionMarkers.map(g => {
+            const isAtRisk = g.deadline && g.projected_completion > g.deadline.slice(0, 7)
             return (
               <ReferenceLine
-                key={g.id}
-                x={entry.label}
+                key={`proj-${g.id}`}
+                x={g.projected_completion}
                 stroke={g.color ?? C.dimText}
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
-                label={{ value: g.name, position: 'insideTopLeft', fill: g.color ?? C.dimText, fontSize: 10 }}
+                label={{ value: isAtRisk ? `~${g.name}` : g.name, position: 'insideTopLeft', fill: g.color ?? C.dimText, fontSize: 10 }}
               />
             )
           })}
@@ -208,6 +242,6 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </Paper>
+    </div>
   )
 }

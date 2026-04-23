@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend, Cell,
+  ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
+import { Card } from 'glasscn-ui'
 
 const MONTH_OPTIONS = [6, 12, 24]
 
@@ -27,7 +25,7 @@ function currentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-function CustomTooltip({ active, payload, label, totalBudget, activeType, expenseTypes }) {
+function CustomTooltip({ active, payload, totalBudget, activeType, expenseTypes, categoryBudgets }) {
   const C = useC()
   if (!active || !payload?.length) return null
   const entry = payload[0]?.payload
@@ -35,50 +33,44 @@ function CustomTooltip({ active, payload, label, totalBudget, activeType, expens
 
   const income = entry.income ?? 0
   const expenseRows = expenseTypes
-    .map(t => ({ name: t.name, color: t.color, value: entry[t.name] ?? 0 }))
+    .map(t => ({ name: t.name, color: t.color, value: entry[t.name] ?? 0, budget: categoryBudgets?.[t.name] }))
     .filter(r => r.value > 0)
     .sort((a, b) => b.value - a.value)
 
   const totalSpent = expenseRows.reduce((s, r) => s + r.value, 0)
 
+  function fmtRow(value, budget) {
+    const spent = `$${value.toFixed(0)}`
+    return budget > 0 ? `${spent} / $${budget.toFixed(0)}` : spent
+  }
+
   return (
-    <Box sx={{
-      bgcolor: C.surface,
-      border: `1px solid ${C.border}`,
-      borderRadius: 1,
-      px: 1.5,
-      py: 1,
-      minWidth: 160,
-    }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
-        {entry.fullLabel}
-      </Typography>
+    <div
+      className="rounded-lg px-3 py-2 min-w-[180px]"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+    >
+      <p className="text-sm font-semibold mb-1">{entry.fullLabel}</p>
       {activeType !== 'All'
         ? (
-          <Typography variant="caption" sx={{ display: 'block', color: expenseTypes.find(t => t.name === activeType)?.color ?? 'text.secondary' }}>
-            {activeType}: ${(entry[activeType] ?? 0).toFixed(2)}
-          </Typography>
+          <span className="block text-xs" style={{ color: expenseTypes.find(t => t.name === activeType)?.color ?? C.muted }}>
+            {activeType}: {fmtRow(entry[activeType] ?? 0, categoryBudgets?.[activeType])}
+          </span>
         )
         : expenseRows.map(r => (
-          <Typography key={r.name} variant="caption" sx={{ display: 'block', color: r.color }}>
-            {r.name}: ${r.value.toFixed(2)}
-          </Typography>
+          <span key={r.name} className="block text-xs" style={{ color: r.color }}>
+            {r.name}: {fmtRow(r.value, r.budget)}
+          </span>
         ))
       }
-      <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.25 }}>
-        Total: ${activeType !== 'All' ? (entry[activeType] ?? 0).toFixed(2) : totalSpent.toFixed(2)}
-      </Typography>
+      <span className="block text-xs mt-0.5" style={{ color: C.muted }}>
+        Total: {fmtRow(activeType !== 'All' ? (entry[activeType] ?? 0) : totalSpent, totalBudget)}
+      </span>
       {income > 0 && (
-        <Typography variant="caption" sx={{ display: 'block', color: C.income, mt: 0.25 }}>
-          Income: ${income.toFixed(2)}
-        </Typography>
+        <span className="block text-xs mt-0.5" style={{ color: C.income }}>
+          Income: ${income.toFixed(0)}
+        </span>
       )}
-      {totalBudget > 0 && (
-        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
-          Budget: ${totalBudget.toFixed(2)}
-        </Typography>
-      )}
-    </Box>
+    </div>
   )
 }
 
@@ -93,6 +85,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
   const [totalBudget, setTotalBudget] = useState(0)
   const [budgetByType, setBudgetByType] = useState({})
   const [hasOverrides, setHasOverrides] = useState(false)
+  const [hoveredBar, setHoveredBar] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -100,20 +93,16 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
       api.get('/incomes/monthly-totals', { params: { months: monthsToShow } }),
       api.get('/budgets/effective-range', { params: { months: monthsToShow } }),
     ]).then(([byTypeRes, incomeRes, budgetsRes]) => {
-      // budgetsRes.data: [{ month, total, by_type }]
       const budgetByMonth = Object.fromEntries(budgetsRes.data.map(r => [r.month, r]))
-      // Default (first entry's by_type as baseline for budgetByType)
       const defaultByType = budgetsRes.data[0]?.by_type ?? {}
       const defaultTotal = Object.values(defaultByType).reduce((s, v) => s + v, 0)
       setTotalBudget(defaultTotal)
       setBudgetByType(defaultByType)
 
-      // Check if any month in the range has a different total (i.e. has overrides)
       const anyOverrides = budgetsRes.data.some(r => Math.abs(r.total - defaultTotal) > 0.001
         || Object.entries(r.by_type).some(([t, v]) => Math.abs(v - (defaultByType[t] ?? 0)) > 0.001))
       setHasOverrides(anyOverrides)
 
-      // Build a set of all months that appear in either dataset
       const monthSet = new Set([
         ...byTypeRes.data.map(r => r.month),
         ...incomeRes.data.map(r => r.month),
@@ -122,7 +111,6 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
       const current = currentMonth()
       const months = [...monthSet].sort()
 
-      // Build per-month objects with type breakdown + income + budget
       const incomeByMonth = Object.fromEntries(incomeRes.data.map(r => [r.month, r.total]))
 
       const built = months.map(m => {
@@ -154,20 +142,18 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
   )
   if (!hasAnyData) return null
 
-  // Determine which types actually have data in this window, filtered by macrocategory if active
   const activeTypes = expenseTypes.filter(t =>
     chartData.some(d => (d[t.name] ?? 0) > 0) &&
     (!activeMacro || t.macrocategory_id === activeMacro)
   )
 
-  // Y-axis domain
   const yMax = Math.ceil((Math.max(
     ...chartData.map(d => {
       const spent = activeTypes.reduce((s, t) => s + (d[t.name] ?? 0), 0)
       return Math.max(spent, d.income, d.budget ?? 0)
     }),
     1
-  ) * 1.2)/100) * 100 // round to nice number
+  ) * 1.2) / 100) * 100
 
   function handleBarClick(typeName) {
     if (onTypeChange) {
@@ -176,75 +162,86 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        bgcolor: 'background.paper',
-        border: `1px solid ${C.border}`,
-        borderRadius: 2,
-        p: { xs: 2, sm: 3 },
-        mb: 3,
-      }}
+    <Card
+      variant="glass"
+      blur="xl"
+      className="rounded-2xl p-4 sm:p-6 mb-6"
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm font-medium" style={{ color: C.muted }}>
           Monthly Spending
           {activeMacro && macroMap[activeMacro] && (
-            <Typography component="span" variant="body2" sx={{ ml: 1, color: macroMap[activeMacro].color }}>
+            <span className="ml-2" style={{ color: macroMap[activeMacro].color }}>
               · {macroMap[activeMacro].name}
-            </Typography>
+            </span>
           )}
           {!activeMacro && activeType !== 'All' && activeType !== 'Income' && (
-            <Typography component="span" variant="body2"
-              sx={{ ml: 1, color: expenseTypes.find(t => t.name === activeType)?.color }}>
+            <span className="ml-2" style={{ color: expenseTypes.find(t => t.name === activeType)?.color }}>
               · {activeType}
-            </Typography>
+            </span>
           )}
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ display: 'flex', gap: 0.25 }}>
+        </p>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-0.5">
             {MONTH_OPTIONS.map(n => (
-              <Box
+              <button
                 key={n}
+                type="button"
                 onClick={() => setMonthsToShow(n)}
-                sx={{ minHeight: 40, minWidth: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                className="min-h-[40px] min-w-[36px] flex items-center justify-center cursor-pointer bg-transparent border-none font-[inherit] text-sm transition-colors duration-150"
+                style={{
+                  fontWeight: monthsToShow === n ? 600 : 400,
+                  color: monthsToShow === n ? C.primary : C.dimText,
+                }}
               >
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontWeight: monthsToShow === n ? 600 : 400,
-                    color: monthsToShow === n ? 'primary.main' : 'text.disabled',
-                    '&:hover': { color: monthsToShow === n ? 'primary.main' : 'text.secondary' },
-                  }}
-                >
-                  {n}m
-                </Typography>
-              </Box>
+                {n}m
+              </button>
             ))}
-          </Box>
+          </div>
           {activeMacro ? (
-            <Box
+            <button
+              type="button"
               onClick={() => onMacroChange?.(null)}
-              sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+              className="min-h-[40px] flex items-center cursor-pointer bg-transparent border-none font-[inherit] text-sm transition-colors duration-150"
+              style={{ color: C.muted }}
             >
-              <Typography variant="body2"
-                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                Clear group filter ×
-              </Typography>
-            </Box>
+              Clear group filter ×
+            </button>
           ) : activeType !== 'All' && activeType !== 'Income' ? (
-            <Box
+            <button
+              type="button"
               onClick={() => onTypeChange?.('All')}
-              sx={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+              className="min-h-[40px] flex items-center cursor-pointer bg-transparent border-none font-[inherit] text-sm transition-colors duration-150"
+              style={{ color: C.muted }}
             >
-              <Typography variant="body2"
-                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                Clear filter ×
-              </Typography>
-            </Box>
+              Clear filter ×
+            </button>
           ) : null}
-        </Box>
-      </Box>
+        </div>
+      </div>
+
+      {/* Legend */}
+      {(totalBudget > 0 || chartData.some(d => d.income > 0)) && (
+        <div className="flex gap-6 mb-4 items-center">
+          {chartData.some(d => d.income > 0) && (
+            <div className="flex items-center gap-1.5">
+              <svg width="22" height="12">
+                <line x1="0" y1="6" x2="22" y2="6" stroke={INCOME_COLOR} strokeWidth="2" />
+                <circle cx="11" cy="6" r="3" fill={INCOME_COLOR} />
+              </svg>
+              <span className="text-xs" style={{ color: C.muted }}>Income</span>
+            </div>
+          )}
+          {totalBudget > 0 && (
+            <div className="flex items-center gap-1.5">
+              <svg width="22" height="12">
+                <line x1="0" y1="6" x2="22" y2="6" stroke={C.muted} strokeWidth="1.5" strokeDasharray="4 3" />
+              </svg>
+              <span className="text-xs" style={{ color: C.muted }}>Budget</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart
@@ -288,8 +285,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
               : C.borderStrong
             const refBudget = isTypeFilter ? (budgetByType[activeType] ?? 0) : totalBudget
             if (refBudget <= 0) return null
-            // When overrides exist, render as a varying Line; otherwise use a flat ReferenceLine
-            if (hasOverrides) return null  // Line rendered below
+            if (hasOverrides) return null
             return (
               <ReferenceLine
                 y={refBudget}
@@ -308,6 +304,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           })()}
           <Tooltip
             content={({ active, payload, label }) => {
+              if (!hoveredBar) return null
               const entry = payload?.[0]?.payload
               const perMonthBudget = entry
                 ? (activeType !== 'All' && activeType !== 'Income'
@@ -322,13 +319,14 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                   totalBudget={perMonthBudget}
                   activeType={activeType}
                   expenseTypes={expenseTypes}
+                  categoryBudgets={entry?.budgetByType ?? budgetByType}
                 />
               )
             }}
             cursor={{ fill: C.hover }}
+            wrapperStyle={{ zIndex: 1400 }}
           />
 
-          {/* Expense type bars — stacked when All; single bar when filtered */}
           {(() => {
             const isFiltered = activeType !== 'All' && activeType !== 'Income'
             const visibleTypes = isFiltered ? activeTypes.filter(t => t.name === activeType) : activeTypes
@@ -342,6 +340,8 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                 maxBarSize={48}
                 style={{ cursor: onTypeChange ? 'pointer' : 'default' }}
                 onClick={() => handleBarClick(t.name)}
+                onMouseEnter={() => setHoveredBar(true)}
+                onMouseLeave={() => setHoveredBar(false)}
               >
                 {chartData.map((entry, idx) => (
                   <Cell key={idx} fillOpacity={entry.isFuture ? 0.35 : 1} />
@@ -350,7 +350,6 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
             ))
           })()}
 
-          {/* Income line */}
           <Line
             type="monotone"
             dataKey="income"
@@ -361,7 +360,6 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
             connectNulls
           />
 
-          {/* Budget line — only when monthly overrides exist (otherwise ReferenceLine is used) */}
           {hasOverrides && (() => {
             const isTypeFilter = activeType !== 'All' && activeType !== 'Income'
             const refColor = isTypeFilter
@@ -379,12 +377,11 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
                 dot={false}
                 activeDot={false}
                 connectNulls
-                label={{value: 'Budget', fontSize: 11, position: 'insideTopRight'}}
               />
             )
           })()}
         </ComposedChart>
       </ResponsiveContainer>
-    </Paper>
+    </Card>
   )
 }

@@ -1,27 +1,357 @@
-html {
-  scroll-behavior: smooth;
+@import "tailwindcss";
+@source "../../node_modules/glasscn-ui/dist/index.js";
+
+@variant dark (&:is(.dark *));
+
+/* ─── Tailwind v4 theme ───────────────────────────────────────────────────── */
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* shadcn/ui color utilities */
+  --color-background:            hsl(var(--background));
+  --color-foreground:            hsl(var(--foreground));
+  --color-card:                  hsl(var(--card));
+  --color-card-foreground:       hsl(var(--card-foreground));
+  --color-popover:               hsl(var(--popover));
+  --color-popover-foreground:    hsl(var(--popover-foreground));
+  --color-primary:               hsl(var(--primary));
+  --color-primary-foreground:    hsl(var(--primary-foreground));
+  --color-secondary:             hsl(var(--secondary));
+  --color-secondary-foreground:  hsl(var(--secondary-foreground));
+  --color-muted:                 hsl(var(--muted));
+  --color-muted-foreground:      hsl(var(--muted-foreground));
+  --color-accent:                hsl(var(--accent));
+  --color-accent-foreground:     hsl(var(--accent-foreground));
+  --color-destructive:           hsl(var(--destructive));
+  --color-destructive-foreground:hsl(var(--destructive-foreground));
+  --color-border:                hsl(var(--border));
+  --color-input:                 hsl(var(--input));
+  --color-ring:                  hsl(var(--ring));
+
+  /* Our semantic token utilities */
+  --color-c-bg:              var(--bg);
+  --color-c-primary:         var(--c-primary);
+  --color-c-primary-hover:   var(--c-primary-hover);
+  --color-c-surface:         var(--c-surface);
+  --color-c-surface-alt:     var(--c-surface-alt);
+  --color-c-subtle-bg:       var(--c-subtle-bg);
+  --color-c-border:          var(--c-border);
+  --color-c-border-subtle:   var(--c-border-subtle);
+  --color-c-border-light:    var(--c-border-light);
+  --color-c-border-med:      var(--c-border-med);
+  --color-c-border-strong:   var(--c-border-strong);
+  --color-c-hover:           var(--c-hover);
+  --color-c-hover-med:       var(--c-hover-med);
+  --color-c-hover-strong:    var(--c-hover-strong);
+  --color-c-warm-text:       var(--c-warm-text);
+  --color-c-dim-text:        var(--c-dim-text);
+  --color-c-muted:           var(--c-muted);
+  --color-c-income:          var(--c-income);
+  --color-c-spent:           var(--c-spent);
+  --color-c-net-positive:    var(--c-net-positive);
+  --color-c-net-negative:    var(--c-net-negative);
+  --color-c-on-track:        var(--c-on-track);
+  --color-c-near-goal:       var(--c-near-goal);
+  --color-c-at-risk:         var(--c-at-risk);
+  --color-c-over-budget:     var(--c-over-budget);
+  --color-c-no-budget:       var(--c-no-budget);
+  --color-c-primary-tint:    var(--c-primary-tint);
+  --color-c-income-btn:      var(--c-income-button-bg);
+  --color-c-trend-up:        var(--c-trend-up);
+  --color-c-trend-down:      var(--c-trend-down);
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
+/* ─── Light mode (default :root) ─────────────────────────────────────────── */
+:root {
+  --radius: 0.75rem;
+
+  /* shadcn/ui HSL tokens - light */
+  --background:            138 18% 88%;
+  --foreground:            220 40% 10%;
+  --card:                  138 10% 96%;
+  --card-foreground:       220 40% 10%;
+  --popover:               138 10% 96%;
+  --popover-foreground:    220 40% 10%;
+  --primary:               142 55% 35%;
+  --primary-foreground:    0 0% 100%;
+  --secondary:             138 14% 86%;
+  --secondary-foreground:  220 40% 10%;
+  --muted:                 138 14% 84%;
+  --muted-foreground:      215 20% 45%;
+  --accent:                138 14% 84%;
+  --accent-foreground:     220 40% 10%;
+  --destructive:           0 72% 50%;
+  --destructive-foreground:0 0% 100%;
+  --border:                138 14% 78%;
+  --input:                 138 14% 78%;
+  --ring:                  142 55% 35%;
+
+  /* Our semantic tokens - light */
+  --bg: linear-gradient(135deg, #bfdbfe 0%, #f0f9ff 45%, #fef3c7 100%);
+  --c-primary:           #2d8a50;
+  --c-primary-hover:     #1e7a40;
+  --c-surface:           #f0f5f0;
+  --c-surface-alt:       #d0e0d0;
+  --c-subtle-bg:         rgba(17,24,39,0.02);
+  --c-border:            rgba(17,24,39,0.09);
+  --c-border-subtle:     rgba(17,24,39,0.07);
+  --c-border-light:      rgba(17,24,39,0.11);
+  --c-border-med:        rgba(17,24,39,0.15);
+  --c-border-strong:     rgba(17,24,39,0.22);
+  --c-border-hover:      rgba(17,24,39,0.28);
+  --c-hover:             rgba(17,24,39,0.04);
+  --c-hover-med:         rgba(17,24,39,0.06);
+  --c-hover-strong:      rgba(17,24,39,0.09);
+  --c-warm-text:         #111827;
+  --c-dim-text:          #9ca3af;
+  --c-muted:             #64748b;
+  --c-income:            #0d9488;
+  --c-spent:             #3b82f6;
+  --c-net-positive:      #16a34a;
+  --c-net-negative:      #dc2626;
+  --c-on-track:          #16a34a;
+  --c-near-goal:         #0d9488;
+  --c-at-risk:           #ca8a04;
+  --c-over-budget:       #dc2626;
+  --c-no-budget:         rgba(17,24,39,0.08);
+  --c-primary-tint:      rgba(45,138,80,0.09);
+  --c-menu-selected:     rgba(45,138,80,0.08);
+  --c-income-button-bg:  #0d9488;
+  --c-trend-up:          #dc2626;
+  --c-trend-down:        #16a34a;
+  --c-ref-line:          rgba(17,24,39,0.14);
+  --c-grid-line:         rgba(17,24,39,0.05);
 }
+
+/* ─── Dark mode ──────────────────────────────────────────────────────────── */
+.dark {
+  /* shadcn/ui HSL tokens - dark */
+  --background:            240 3% 6%;
+  --foreground:            220 20% 92%;
+  --card:                  240 3% 9%;
+  --card-foreground:       220 20% 92%;
+  --popover:               240 3% 9%;
+  --popover-foreground:    220 20% 92%;
+  --primary:               142 55% 55%;
+  --primary-foreground:    0 0% 10%;
+  --secondary:             240 3% 12%;
+  --secondary-foreground:  220 20% 92%;
+  --muted:                 240 3% 14%;
+  --muted-foreground:      215 20% 60%;
+  --accent:                240 3% 14%;
+  --accent-foreground:     220 20% 92%;
+  --destructive:           0 62% 68%;
+  --destructive-foreground:0 0% 10%;
+  --border:                240 5% 16%;
+  --input:                 240 5% 16%;
+  --ring:                  142 55% 55%;
+
+  /* Our semantic tokens - dark */
+  --bg: linear-gradient(135deg, #020e14 0%, #001a2e 45%, #0a0d00 100%);
+  --c-primary:           #52c97a;
+  --c-primary-hover:     #3db864;
+  --c-surface:           #161618;
+  --c-surface-alt:       #1e1e22;
+  --c-subtle-bg:         rgba(228,232,240,0.03);
+  --c-border:            rgba(228,232,240,0.09);
+  --c-border-subtle:     rgba(228,232,240,0.07);
+  --c-border-light:      rgba(228,232,240,0.11);
+  --c-border-med:        rgba(228,232,240,0.16);
+  --c-border-strong:     rgba(228,232,240,0.26);
+  --c-border-hover:      rgba(228,232,240,0.32);
+  --c-hover:             rgba(228,232,240,0.04);
+  --c-hover-med:         rgba(228,232,240,0.06);
+  --c-hover-strong:      rgba(228,232,240,0.09);
+  --c-warm-text:         #e4e8f0;
+  --c-dim-text:          #9e9e9e;
+  --c-muted:             rgba(228,232,240,0.5);
+  --c-income:            #4db6ac;
+  --c-spent:             #64b5f6;
+  --c-net-positive:      #52c97a;
+  --c-net-negative:      #e07c7c;
+  --c-on-track:          #52c97a;
+  --c-near-goal:         #4db6ac;
+  --c-at-risk:           #f0c040;
+  --c-over-budget:       #e07c7c;
+  --c-no-budget:         rgba(228,232,240,0.12);
+  --c-primary-tint:      rgba(82,201,122,0.10);
+  --c-menu-selected:     rgba(82,201,122,0.08);
+  --c-income-button-bg:  #4db6ac;
+  --c-trend-up:          #e07c7c;
+  --c-trend-down:        #52c97a;
+  --c-ref-line:          rgba(228,232,240,0.16);
+  --c-grid-line:         rgba(228,232,240,0.05);
+}
+
+/* ─── Base styles ────────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(30%2C41%2C59%2C0.11)'/%3E%3C/svg%3E"),
+    var(--bg);
+  background-attachment: fixed;
+  background-size: 28px 28px, cover;
+  background-repeat: repeat, no-repeat;
+  background-position: 0 0, center;
+  min-height: 100vh;
+  color: var(--c-warm-text);
 }
 
-::-webkit-scrollbar {
-  width: 6px;
+.dark body {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(203%2C213%2C225%2C0.11)'/%3E%3C/svg%3E"),
+    var(--bg);
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.35); }
+
+/* ─── View transitions ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  /* Sort arrow indicators slide out up / in from below */
+  ::view-transition-old(sort-arrow-name),
+  ::view-transition-old(sort-arrow-date),
+  ::view-transition-old(sort-arrow-amount),
+  ::view-transition-old(outlier-sort-arrow) {
+    animation: 120ms ease-out both vt-arrow-out;
+  }
+  ::view-transition-new(sort-arrow-name),
+  ::view-transition-new(sort-arrow-date),
+  ::view-transition-new(sort-arrow-amount),
+  ::view-transition-new(outlier-sort-arrow) {
+    animation: 120ms ease-in both vt-arrow-in;
+  }
+  @keyframes vt-arrow-out {
+    to { opacity: 0; transform: translateY(-4px) scale(0.8); }
+  }
+  @keyframes vt-arrow-in {
+    from { opacity: 0; transform: translateY(4px) scale(0.8); }
+  }
+
+  /* Table rows slide + fade when reordering */
+  ::view-transition-group(*) {
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.2);
-  border-radius: 3px;
+
+/* ─── Skeleton loader pulse ──────────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(128, 128, 128, 0.35);
+
+/* ─── Glass blob animations ──────────────────────────────────────────────── */
+@keyframes blob-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(40px, -30px) scale(1.08); }
+  66%       { transform: translate(-20px, 20px) scale(0.95); }
+}
+@keyframes blob-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(-50px, 30px) scale(1.05); }
+  66%       { transform: translate(30px, -40px) scale(1.1); }
+}
+@keyframes blob-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(25px, 25px) scale(1.06); }
+}
+
+.glass-blob {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+  /* Scale trick: render at 1/3 size with 1/3 blur, scale up 3x.
+     GPU blurs ~9x fewer pixels; visual result is identical.
+     No contain:paint here — blur must overflow element bounds. */
+}
+
+/* Dark mode: teal (top-left) + navy (bottom-right) */
+.dark .glass-blob-1 {
+  width: 140px; height: 140px; top: -20px; left: -13px;
+  background: radial-gradient(circle, rgba(0,180,160,0.32) 0%, rgba(0,180,160,0.12) 42%, transparent 80%);
+  filter: blur(14px);
+  transform: scale(3) translateZ(0);
+  transform-origin: top left;
+  animation: blob-drift-1 18s ease-in-out infinite;
+}
+.dark .glass-blob-2 {
+  width: 127px; height: 127px; bottom: -20px; right: -20px;
+  background: radial-gradient(circle, rgba(0,90,200,0.28) 0%, rgba(0,90,200,0.10) 42%, transparent 80%);
+  filter: blur(13px);
+  transform: scale(3) translateZ(0);
+  transform-origin: bottom right;
+  animation: blob-drift-2 22s ease-in-out infinite;
+}
+.dark .glass-blob-3 { display: none; }
+
+/* Light mode: sky blue (top-left) + peach (bottom-right) */
+:root:not(.dark) .glass-blob-1 {
+  width: 147px; height: 147px; top: -27px; left: -23px;
+  background: radial-gradient(circle, rgba(96,165,250,0.32) 0%, rgba(96,165,250,0.11) 42%, transparent 82%);
+  filter: blur(14px);
+  transform: scale(3) translateZ(0);
+  transform-origin: top left;
+  animation: blob-drift-1 20s ease-in-out infinite;
+}
+:root:not(.dark) .glass-blob-2 {
+  width: 127px; height: 127px; bottom: 0; right: -20px;
+  background: radial-gradient(circle, rgba(251,191,36,0.28) 0%, rgba(251,191,36,0.09) 42%, transparent 82%);
+  filter: blur(13px);
+  transform: scale(3) translateZ(0);
+  transform-origin: bottom right;
+  animation: blob-drift-2 25s ease-in-out infinite;
+}
+:root:not(.dark) .glass-blob-3 { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-blob { animation: none !important; display: none !important; }
+}
+
+/* ─── glasscn-ui Card overrides ──────────────────────────────────────────── */
+/* Remove backdrop-filter from cards — blobs are already blurry, cards don't
+   need to re-sample behind themselves every frame. Use higher opacity instead. */
+:root:not(.dark) .bg-white\/70 {
+  background-color: rgba(255,255,255,0.52) !important;
+}
+.dark .dark\:bg-gray-950\/50 {
+  background-color: rgba(10,10,20,0.52) !important;
+}
+[class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* Soften borders: replace solid HSL border-border with translucent white */
+:root:not(.dark) .border-border {
+  border-color: rgba(255,255,255,0.55) !important;
+}
+.dark .border-border {
+  border-color: rgba(255,255,255,0.12) !important;
+}
+
+/* ─── Uniform select styling (matches Input component) ───────────────────── */
+:root:not(.dark) select {
+  background-color: rgba(255, 255, 255, 0.8);
+  color: var(--c-warm-text);
+}
+.dark select {
+  background-color: transparent;
+  color: var(--c-warm-text);
+}
+select option {
+  background-color: var(--c-surface);
+  color: var(--c-warm-text);
 }

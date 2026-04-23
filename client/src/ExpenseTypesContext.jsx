@@ -10,7 +10,7 @@ export function ExpenseTypesProvider({ children }) {
 
   const reloadTypes = useCallback(() => {
     return api.get('/expense-types').then(res => {
-      setExpenseTypes(res.data)
+      setExpenseTypes([...res.data].sort((a, b) => a.name.localeCompare(b.name)))
     }).finally(() => setLoading(false))
   }, [])
 

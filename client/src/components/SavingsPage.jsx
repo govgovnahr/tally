@@ -1,47 +1,27 @@
 import { useState, useEffect } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
-import IconButton from '@mui/material/IconButton'
-import Stack from '@mui/material/Stack'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import TextField from '@mui/material/TextField'
-import Alert from '@mui/material/Alert'
-import LinearProgress from '@mui/material/LinearProgress'
-import Chip from '@mui/material/Chip'
-import Radio from '@mui/material/Radio'
-import RadioGroup from '@mui/material/RadioGroup'
-import FormControlLabel from '@mui/material/FormControlLabel'
-import FormLabel from '@mui/material/FormLabel'
-import Tooltip from '@mui/material/Tooltip'
-import InputAdornment from '@mui/material/InputAdornment'
-import Divider from '@mui/material/Divider'
-import Accordion from '@mui/material/Accordion'
-import AccordionSummary from '@mui/material/AccordionSummary'
-import AccordionDetails from '@mui/material/AccordionDetails'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
-import AddIcon from '@mui/icons-material/Add'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined'
-import PauseIcon from '@mui/icons-material/Pause'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
+import { Plus, Pencil, Trash2, PiggyBank, Pause, Play, Receipt, CheckCircle, ChevronDown } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import api from '../api.js'
 import NetSavingsChart from './NetSavingsChart.jsx'
 import { useC, palette, TYPE_PALETTE } from '../colors'
+import { Card } from 'glasscn-ui'
 
 const ONE_TIME_COLORS = TYPE_PALETTE.slice(0, 6)
+const GOAL_COLORS = [...TYPE_PALETTE.slice(0, 5), palette.teal, palette.green, palette.grey, '#f4a261', '#9b72cf']
 
 function fmtMonth(ym) {
   if (!ym) return ''
   const [y, m] = ym.split('-').map(Number)
   return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+}
+
+function trackingStatus(goal) {
+  if (!goal.deadline || !goal.projected_completion || goal.completed || goal.paused) return null
+  return goal.projected_completion <= goal.deadline ? 'on_track' : 'at_risk'
 }
 
 function fmtDeadline(dateStr) {
@@ -56,364 +36,255 @@ function fmtDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function AllocationChip({ goal }) {
-  if (goal.allocation_pct != null)
-    return <Chip label={`${goal.allocation_pct}% allocated`} size="small" sx={{ fontSize: '0.72rem', height: 20 }} />
-  if (goal.priority != null)
-    return <Chip label={`Priority #${goal.priority}`} size="small" sx={{ fontSize: '0.72rem', height: 20 }} />
-  return null
+function AlertBox({ severity, children }) {
+  const C = useC()
+  const colors = {
+    error: { bg: `${C.overBudget}15`, border: `${C.overBudget}40`, text: C.overBudget },
+    warning: { bg: `${C.atRisk}15`, border: `${C.atRisk}40`, text: C.atRisk },
+  }
+  const s = colors[severity] ?? colors.error
+  return (
+    <div className="text-sm px-3 py-2 rounded-lg" style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}>
+      {children}
+    </div>
+  )
+}
+
+function ProgressBar({ value, color, height = 6 }) {
+  const C = useC()
+  return (
+    <div className="rounded-full" style={{ height, backgroundColor: C.hoverStrong }}>
+      <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(value, 100)}%`, backgroundColor: color }} />
+    </div>
+  )
+}
+
+
+function CardActions({ goal, onEdit, onDelete, onPause }) {
+  const C = useC()
+  return (
+    <div className="flex">
+      <button type="button" title={goal.paused ? 'Resume' : 'Pause'} onClick={onPause}
+        className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+        style={{ color: C.muted }}
+        onMouseEnter={e => e.currentTarget.style.color = C.primary}
+        onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+        {goal.paused ? <Play size={14} /> : <Pause size={14} />}
+      </button>
+      <button type="button" title="Edit" onClick={onEdit}
+        className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+        style={{ color: C.muted }}
+        onMouseEnter={e => e.currentTarget.style.color = C.primary}
+        onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+        <Pencil size={14} />
+      </button>
+      <button type="button" title="Delete" onClick={onDelete}
+        className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+        style={{ color: C.muted }}
+        onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+        onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+        <Trash2 size={14} />
+      </button>
+    </div>
+  )
 }
 
 // ─── Goal Cards ──────────────────────────────────────────────────────────────
 
 function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
   const C = useC()
-  const PRIMARY = C.primary
-  const INCOME_COLOR = C.income
+  const cardColor = C.adaptColor(goal.color ?? C.income)
   const contributed = goal.monthly_contributions ?? 0
   const pct = goal.progress_pct
-  const cardColor = goal.color ?? INCOME_COLOR
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        border: `1px solid ${cardColor}${C.cardBorderAlpha}`,
-        bgcolor: `${cardColor}${C.cardTintAlpha}`,
-        borderRadius: 2,
-        p: 2.5,
-        mb: 2,
-        opacity: goal.paused ? 0.65 : 1,
-      }}
-    >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
-        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-          <SavingsOutlinedIcon sx={{ fontSize: 18, color: cardColor }} />
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            {goal.name}
-          </Typography>
-          <Chip label="Monthly" size="small" sx={{ fontSize: '0.72rem', height: 20, color: cardColor, borderColor: cardColor }} variant="outlined" />
-          {goal.paused && <Chip label="Paused" size="small" sx={{ fontSize: '0.72rem', height: 20, color: 'text.disabled', borderColor: 'text.disabled' }} variant="outlined" />}
-          <AllocationChip goal={goal} />
-        </Stack>
-        <Stack direction="row">
-          <Tooltip title={goal.paused ? 'Resume' : 'Pause'}>
-            <IconButton size="small" onClick={onPause} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-              {goal.paused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-          <IconButton size="small" onClick={onEdit} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" onClick={onDelete} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-      </Stack>
-
-      <Stack direction="row" alignItems="baseline" gap={0.5} mb={0.5}>
-        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-          ${contributed.toFixed(2)}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          / ${goal.target.toFixed(2)} this month
-        </Typography>
-      </Stack>
-
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(pct, 100)}
-        sx={{
-          height: 6,
-          borderRadius: 3,
-          bgcolor: C.hoverStrong,
-          mb: 1,
-          '& .MuiLinearProgress-bar': { bgcolor: cardColor, borderRadius: 3 },
-        }}
-      />
-
-      <Stack direction="row" justifyContent="flex-end">
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={onContribute}
-          startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: '14px !important' }} />}
-          sx={{ fontSize: '0.8rem', py: 0.5, px: 1.5, borderColor: cardColor, color: cardColor, '&:hover': { borderColor: cardColor, color: cardColor } }}
-        >
-          Log contribution
-        </Button>
-      </Stack>
-    </Paper>
+    <Card variant="glass" blur="md" className="rounded-xl p-4 sm:p-5 mb-4" style={{
+      border: `1px solid ${cardColor}${C.cardBorderAlpha}`,
+      opacity: goal.paused ? 0.65 : 1,
+    }}>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <PiggyBank size={17} style={{ color: cardColor }} />
+          <span className="text-sm font-semibold" style={{ color: C.warmText }}>{goal.name}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: cardColor, borderColor: cardColor }}>Monthly</span>
+          {goal.paused && <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.dimText, borderColor: C.dimText }}>Paused</span>}
+        </div>
+        <CardActions goal={goal} onEdit={onEdit} onDelete={onDelete} onPause={onPause} />
+      </div>
+      <div className="flex items-baseline gap-1.5 mb-1.5">
+        <span className="text-2xl font-bold" style={{ color: C.warmText }}>${contributed.toFixed(2)}</span>
+        <span className="text-sm" style={{ color: C.muted }}>/ ${goal.target.toFixed(2)} this month</span>
+      </div>
+      <div className="mb-3"><ProgressBar value={pct} color={cardColor} /></div>
+      <div className="flex justify-end">
+        <button type="button" onClick={onContribute}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-transparent cursor-pointer transition-colors duration-150"
+          style={{ borderColor: cardColor, color: cardColor }}>
+          <Receipt size={13} />Log contribution
+        </button>
+      </div>
+    </Card>
   )
 }
 
-function OneTimeGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute }) {
+function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onContribute }) {
   const C = useC()
-  const PRIMARY = C.primary
+  const color = C.adaptColor(rawColor)
   const pct = goal.progress_pct
   const met = pct >= 100
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        border: `1px solid ${color}${C.cardBorderAlpha}`,
-        bgcolor: `${color}${C.cardTintAlpha}`,
-        borderRadius: 2,
-        p: 2.5,
-        opacity: goal.paused ? 0.65 : 1,
-      }}
-    >
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1}>
-        <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            {goal.name}
-          </Typography>
-          <Stack direction="row" gap={0.5} mt={0.5} flexWrap="wrap">
+    <Card variant="glass" blur="md" className="rounded-xl p-4 sm:p-5" style={{
+      border: `1px solid ${color}${C.cardBorderAlpha}`,
+      opacity: goal.paused ? 0.65 : 1,
+    }}>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <span className="text-sm font-semibold" style={{ color: C.warmText }}>{goal.name}</span>
+          <div className="flex gap-1.5 mt-1 flex-wrap">
             {goal.deadline && (
-              <Chip
-                label={`Due ${fmtDeadline(goal.deadline)}`}
-                size="small"
-                sx={{ fontSize: '0.72rem', height: 20, color: 'text.secondary', borderColor: C.borderMed }}
-                variant="outlined"
-              />
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.muted, borderColor: C.borderMed }}>
+                Due {fmtDeadline(goal.deadline)}
+              </span>
             )}
-            {goal.paused && <Chip label="Paused" size="small" sx={{ fontSize: '0.72rem', height: 20, color: 'text.disabled', borderColor: 'text.disabled' }} variant="outlined" />}
-            <AllocationChip goal={goal} />
-          </Stack>
-        </Box>
-        <Stack direction="row">
-          <Tooltip title={goal.paused ? 'Resume' : 'Pause'}>
-            <IconButton size="small" onClick={onPause} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-              {goal.paused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-          <IconButton size="small" onClick={onEdit} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" onClick={onDelete} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-      </Stack>
-
-      <Stack direction="row" alignItems="baseline" gap={0.5} mb={0.25}>
-        <Typography variant="h6" sx={{ fontWeight: 700, color: met ? PRIMARY : 'text.primary' }}>
-          ${goal.total_contributions.toFixed(2)}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          / ${goal.target.toFixed(2)}
-        </Typography>
-      </Stack>
-
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(pct, 100)}
-        sx={{
-          height: 6,
-          borderRadius: 3,
-          bgcolor: C.hoverStrong,
-          mb: 1.5,
-          '& .MuiLinearProgress-bar': { bgcolor: met ? PRIMARY : color, borderRadius: 3 },
-        }}
-      />
-
-      <Stack direction="row" alignItems="flex-end" justifyContent="space-between" gap={1}>
-        <Box>
+            {goal.paused && <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.dimText, borderColor: C.dimText }}>Paused</span>}
+            {(() => {
+              const status = trackingStatus(goal)
+              if (!status) return null
+              const isOnTrack = status === 'on_track'
+              return (
+                <span className="text-[11px] px-1.5 py-0.5 rounded-full border font-medium"
+                  style={{ color: isOnTrack ? C.onTrack : C.overBudget, borderColor: isOnTrack ? C.onTrack : C.overBudget }}>
+                  {isOnTrack ? 'On track' : 'At risk'}
+                </span>
+              )
+            })()}
+          </div>
+        </div>
+        <CardActions goal={goal} onEdit={onEdit} onDelete={onDelete} onPause={onPause} />
+      </div>
+      <div className="flex items-baseline gap-1.5 mb-1">
+        <span className="text-xl font-bold" style={{ color: met ? C.primary : C.warmText }}>${goal.total_contributions.toFixed(2)}</span>
+        <span className="text-sm" style={{ color: C.muted }}>/ ${goal.target.toFixed(2)}</span>
+      </div>
+      <div className="mb-3"><ProgressBar value={pct} color={met ? C.primary : color} /></div>
+      <div className="flex items-end justify-between gap-2">
+        <div>
           {met ? (
-            <Typography variant="body2" sx={{ color: PRIMARY }}>Goal met!</Typography>
+            <span className="text-sm" style={{ color: C.primary }}>Goal met!</span>
           ) : goal.projected_completion ? (
-            <Typography variant="body2" color="text.secondary">
+            <span className="text-sm" style={{ color: C.muted }}>
               Projected: {fmtMonth(goal.projected_completion)}
               {goal.effective_avg_monthly_net > 0 && ` · at $${goal.effective_avg_monthly_net.toFixed(0)}/mo`}
-            </Typography>
+            </span>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              Log contributions to see a projection
-            </Typography>
+            <span className="text-sm" style={{ color: C.muted }}>Log contributions to see a projection</span>
           )}
-        </Box>
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={onContribute}
-          startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: '14px !important' }} />}
-          sx={{ flexShrink: 0, fontSize: '0.8rem', py: 0.5, px: 1.5, borderColor: color, color: color, '&:hover': { borderColor: color, color: color } }}
-        >
-          Log contribution
-        </Button>
-      </Stack>
-    </Paper>
+        </div>
+        <button type="button" onClick={onContribute}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-transparent cursor-pointer flex-shrink-0 transition-colors duration-150"
+          style={{ borderColor: color, color }}>
+          <Receipt size={13} />Log contribution
+        </button>
+      </div>
+    </Card>
   )
 }
 
-// ─── Emergency Fund Goal Card ────────────────────────────────────────────────
-
-function EmergencyFundGoalCard({ goal, color, onEdit, onDelete, onPause, onContribute }) {
+function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onContribute }) {
   const C = useC()
-  const PRIMARY = C.primary
+  const color = C.adaptColor(rawColor)
   const pct = goal.progress_pct
   const met = pct >= 100
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        border: `1px solid ${color}${C.cardBorderAlpha}`,
-        bgcolor: `${color}${C.cardTintAlpha}`,
-        borderRadius: 2,
-        p: 2.5,
-        opacity: goal.paused ? 0.65 : 1,
-      }}
-    >
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1}>
-        <Box>
-          <Stack direction="row" alignItems="center" gap={0.75}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              {goal.name}
-            </Typography>
-            <Chip label="Emergency Fund" size="small" sx={{ fontSize: '0.72rem', height: 20, color, borderColor: color }} variant="outlined" />
-          </Stack>
-          <Stack direction="row" gap={0.5} mt={0.5} flexWrap="wrap">
-            {goal.months_target && (
-              <Typography variant="body2" color="text.secondary">
-                {goal.months_target} months of expenses
-              </Typography>
-            )}
-            {goal.paused && <Chip label="Paused" size="small" sx={{ fontSize: '0.72rem', height: 20, color: 'text.disabled', borderColor: 'text.disabled' }} variant="outlined" />}
-          </Stack>
-        </Box>
-        <Stack direction="row">
-          <Tooltip title={goal.paused ? 'Resume' : 'Pause'}>
-            <IconButton size="small" onClick={onPause} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-              {goal.paused ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-          <IconButton size="small" onClick={onEdit} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" onClick={onDelete} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-      </Stack>
-
-      <Stack direction="row" alignItems="baseline" gap={0.5} mb={0.25}>
-        <Typography variant="h6" sx={{ fontWeight: 700, color: met ? PRIMARY : 'text.primary' }}>
-          ${goal.total_contributions.toFixed(2)}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          / ${goal.target.toFixed(2)}
-        </Typography>
-      </Stack>
-
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(pct, 100)}
-        sx={{
-          height: 6, borderRadius: 3, bgcolor: C.hoverStrong, mb: 1.5,
-          '& .MuiLinearProgress-bar': { bgcolor: met ? PRIMARY : color, borderRadius: 3 },
-        }}
-      />
-
-      <Stack direction="row" alignItems="flex-end" justifyContent="space-between" gap={1}>
-        <Box>
+    <Card variant="glass" blur="md" className="rounded-xl p-4 sm:p-5" style={{
+      border: `1px solid ${color}${C.cardBorderAlpha}`,
+      opacity: goal.paused ? 0.65 : 1,
+    }}>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold" style={{ color: C.warmText }}>{goal.name}</span>
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color, borderColor: color }}>Emergency Fund</span>
+          </div>
+          <div className="flex gap-1.5 mt-1 flex-wrap">
+            {goal.months_target && <span className="text-sm" style={{ color: C.muted }}>{goal.months_target} months of expenses</span>}
+            {goal.paused && <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.dimText, borderColor: C.dimText }}>Paused</span>}
+          </div>
+        </div>
+        <CardActions goal={goal} onEdit={onEdit} onDelete={onDelete} onPause={onPause} />
+      </div>
+      <div className="flex items-baseline gap-1.5 mb-1">
+        <span className="text-xl font-bold" style={{ color: met ? C.primary : C.warmText }}>${goal.total_contributions.toFixed(2)}</span>
+        <span className="text-sm" style={{ color: C.muted }}>/ ${goal.target.toFixed(2)}</span>
+      </div>
+      <div className="mb-3"><ProgressBar value={pct} color={met ? C.primary : color} /></div>
+      <div className="flex items-end justify-between gap-2">
+        <div>
           {met ? (
-            <Typography variant="body2" sx={{ color: PRIMARY }}>Goal met!</Typography>
+            <span className="text-sm" style={{ color: C.primary }}>Goal met!</span>
           ) : goal.projected_completion ? (
-            <Typography variant="body2" color="text.secondary">
-              Projected: {fmtMonth(goal.projected_completion)}
-            </Typography>
+            <span className="text-sm" style={{ color: C.muted }}>Projected: {fmtMonth(goal.projected_completion)}</span>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              Log contributions to see a projection
-            </Typography>
+            <span className="text-sm" style={{ color: C.muted }}>Log contributions to see a projection</span>
           )}
-        </Box>
-        <Button
-          size="small" variant="outlined" onClick={onContribute}
-          startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: '14px !important' }} />}
-          sx={{ flexShrink: 0, fontSize: '0.8rem', py: 0.5, px: 1.5, borderColor: color, color, '&:hover': { borderColor: color, color } }}
-        >
-          Log contribution
-        </Button>
-      </Stack>
-    </Paper>
+        </div>
+        <button type="button" onClick={onContribute}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-transparent cursor-pointer flex-shrink-0"
+          style={{ borderColor: color, color }}>
+          <Receipt size={13} />Log contribution
+        </button>
+      </div>
+    </Card>
   )
 }
-
-// ─── Completed Goal Card ─────────────────────────────────────────────────────
 
 function CompletedGoalCard({ goal, color, onDelete }) {
   const C = useC()
-  const PRIMARY = C.primary
   const byDeadline = goal.deadline && goal.deadline < new Date().toISOString().slice(0, 10)
-  const displayProgress = goal.total_contributions ?? 0
   const pct = goal.progress_pct
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        border: `1px solid ${color}${C.cardBorderAlpha}`,
-        bgcolor: `${color}${C.cardTintAlpha}`,
-        borderRadius: 2,
-        p: 2,
-        opacity: 0.7,
-      }}
-    >
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={1}>
-        <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            {goal.name}
-          </Typography>
-          <Stack direction="row" gap={0.5} mt={0.5}>
+    <div className="rounded-xl p-3" style={{
+      border: `1px solid ${color}${C.cardBorderAlpha}`,
+      backgroundColor: `${color}${C.cardTintAlpha}`,
+      opacity: 0.7,
+    }}>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <span className="text-sm font-semibold" style={{ color: C.warmText }}>{goal.name}</span>
+          <div className="flex gap-1.5 mt-1">
             {byDeadline && pct < 100 ? (
-              <Chip label="Deadline passed" size="small" sx={{ fontSize: '0.72rem', height: 20, color: 'text.disabled', borderColor: 'text.disabled' }} variant="outlined" />
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.dimText, borderColor: C.dimText }}>Deadline passed</span>
             ) : (
-              <Chip
-                icon={<CheckCircleOutlineIcon sx={{ fontSize: '12px !important' }} />}
-                label="Goal met"
-                size="small"
-                sx={{ fontSize: '0.72rem', height: 20, color: PRIMARY, borderColor: PRIMARY }}
-                variant="outlined"
-              />
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full border flex items-center gap-1" style={{ color: C.primary, borderColor: C.primary }}>
+                <CheckCircle size={10} />Goal met
+              </span>
             )}
-          </Stack>
-        </Box>
-        <IconButton size="small" onClick={onDelete} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-          <DeleteOutlineIcon fontSize="small" />
-        </IconButton>
-      </Stack>
-
-      <Stack direction="row" alignItems="baseline" gap={0.5} mb={0.75}>
-        <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-          ${displayProgress.toFixed(2)}
-        </Typography>
-        <Typography variant="body2" color="text.disabled">
-          / ${goal.target.toFixed(2)}
-        </Typography>
-      </Stack>
-
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(pct, 100)}
-        sx={{
-          height: 4,
-          borderRadius: 3,
-          bgcolor: C.hoverMed,
-          '& .MuiLinearProgress-bar': { bgcolor: pct >= 100 ? PRIMARY : color, borderRadius: 3 },
-        }}
-      />
-    </Paper>
+          </div>
+        </div>
+        <button type="button" onClick={onDelete}
+          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+          style={{ color: C.muted }}
+          onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+          onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+          <Trash2 size={14} />
+        </button>
+      </div>
+      <div className="flex items-baseline gap-1 mb-2">
+        <span className="text-sm font-semibold" style={{ color: C.muted }}>${(goal.total_contributions ?? 0).toFixed(2)}</span>
+        <span className="text-xs" style={{ color: C.dimText }}>/ ${goal.target.toFixed(2)}</span>
+      </div>
+      <ProgressBar value={pct} color={pct >= 100 ? C.primary : color} height={4} />
+    </div>
   )
 }
 
-// ─── Contribution Dialog ─────────────────────────────────────────────────────
+// ─── Contribution Dialog ──────────────────────────────────────────────────────
 
 function ContributionDialog({ open, onClose, goal, onRefresh }) {
   const C = useC()
-  const PRIMARY = C.primary
   const [amount, setAmount] = useState('')
   const [contribDate, setContribDate] = useState(new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState('')
@@ -423,147 +294,98 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
   async function handleAdd() {
     const a = parseFloat(amount)
     if (!a || a <= 0) { setError('Amount must be greater than 0'); return }
-    setSaving(true)
-    setError('')
+    setSaving(true); setError('')
     try {
-      await api.post(`/savings-goals/${goal.id}/contributions`, {
-        amount: a,
-        date: contribDate,
-        note: note.trim() || null,
-      })
-      setAmount('')
-      setNote('')
-      onRefresh()
-    } catch (err) {
-      setError(err.response?.data?.detail ?? 'Something went wrong')
-    } finally {
-      setSaving(false)
-    }
+      await api.post(`/savings-goals/${goal.id}/contributions`, { amount: a, date: contribDate, note: note.trim() || null })
+      setAmount(''); setNote(''); onRefresh()
+    } catch (err) { setError(err.response?.data?.detail ?? 'Something went wrong') }
+    finally { setSaving(false) }
   }
 
   async function handleDelete(contribId) {
-    try {
-      await api.delete(`/savings-goals/${goal.id}/contributions/${contribId}`)
-      onRefresh()
-    } catch {
-      // ignore
-    }
+    try { await api.delete(`/savings-goals/${goal.id}/contributions/${contribId}`); onRefresh() } catch { /* ignore */ }
   }
 
   const contributions = goal?.contributions ?? []
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-    >
-      <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
-        Contributions — {goal?.name}
-      </DialogTitle>
-      <DialogContent>
-        <Stack gap={2}>
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Contributions — {goal?.name}</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
           {contributions.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No contributions logged yet.</Typography>
+            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>No contributions logged yet.</p>
           ) : (
-            <Box>
+            <div>
               {contributions.map(c => (
-                <Stack
-                  key={c.id}
-                  direction="row"
-                  alignItems="center"
-                  justifyContent="space-between"
-                  py={0.75}
-                  sx={{ borderBottom: `1px solid ${C.hoverStrong}` }}
-                >
-                  <Stack>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>${c.amount.toFixed(2)}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {fmtDate(c.date)}{c.note ? ` · ${c.note}` : ''}
-                    </Typography>
-                  </Stack>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleDelete(c.id)}
-                    sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
-                  >
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
-                </Stack>
+                <div key={c.id} className="flex items-center justify-between py-2"
+                  style={{ borderBottom: `1px solid ${C.hoverStrong}` }}>
+                  <div>
+                    <p className="text-sm font-medium">${c.amount.toFixed(2)}</p>
+                    <p className="text-xs" style={{ color: C.muted }}>{fmtDate(c.date)}{c.note ? ` · ${c.note}` : ''}</p>
+                  </div>
+                  <button type="button" onClick={() => handleDelete(c.id)}
+                    className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                    style={{ color: C.muted }}
+                    onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+                    onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
-            </Box>
+            </div>
           )}
-
-          <Divider sx={{ borderColor: C.border }} />
-
-          <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, display: 'block', fontWeight: 500 }}>
-              Log a contribution
-            </Typography>
-            <Stack direction="row" gap={1.5} flexWrap="wrap">
-              <TextField
-                label="Amount ($)"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                type="number"
-                size="small"
-                sx={{ width: 140 }}
-                slotProps={{ input: { inputProps: { min: 0, step: 0.01 } } }}
-              />
-              <TextField
-                label="Date"
-                value={contribDate}
-                onChange={e => setContribDate(e.target.value)}
-                type="date"
-                size="small"
-                sx={{ width: 160 }}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                label="Note (optional)"
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                size="small"
-                sx={{ flexGrow: 1, minWidth: 120 }}
-              />
-            </Stack>
-            {error && <Alert severity="error" sx={{ mt: 1, py: 0.5 }}>{error}</Alert>}
-          </Box>
-        </Stack>
+          <div className="h-px" style={{ backgroundColor: C.border }} />
+          <div>
+            <p className="text-sm font-medium mb-3" style={{ color: C.muted }}>Log a contribution</p>
+            <div className="flex gap-3 flex-wrap">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs" style={{ color: C.muted }}>Amount ($)</label>
+                <Input value={amount} onChange={e => setAmount(e.target.value)} type="number" min="0" step="0.01" className="w-32 h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs" style={{ color: C.muted }}>Date</label>
+                <Input value={contribDate} onChange={e => setContribDate(e.target.value)} type="date" className="w-40 h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1 flex-1 min-w-[120px]">
+                <label className="text-xs" style={{ color: C.muted }}>Note (optional)</label>
+                <Input value={note} onChange={e => setNote(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+            {error && <div className="mt-2"><AlertBox severity="error">{error}</AlertBox></div>}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button onClick={handleAdd} disabled={saving}>Add</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button variant="text" color="inherit" onClick={onClose}>Close</Button>
-        <Button
-          variant="contained"
-          onClick={handleAdd}
-          disabled={saving}
-          sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover } }}
-        >
-          Add
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }
 
-// ─── Add / Edit Dialog ───────────────────────────────────────────────────────
+// ─── Goal Dialog ──────────────────────────────────────────────────────────────
 
-const GOAL_COLORS = [...TYPE_PALETTE.slice(0, 5), palette.teal, palette.green, palette.grey, '#f4a261', '#9b72cf']
+function ColorSwatch({ color, selected, onClick }) {
+  return (
+    <div onClick={onClick} className="cursor-pointer rounded-full hover:scale-110 transition-transform duration-100"
+      style={{
+        width: 22, height: 22, backgroundColor: color, flexShrink: 0,
+        border: selected ? '2px solid white' : '2px solid transparent',
+        outline: selected ? `2px solid ${color}` : 'none',
+        boxSizing: 'border-box',
+      }} />
+  )
+}
 
-function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPriorities = [], portfolioAvg = null, otherAllocatedPct = 0 }) {
+function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal }) {
   const C = useC()
-  const PRIMARY = C.primary
   const isEdit = !!existing
   const [goalType, setGoalType] = useState('one_time')
   const [name, setName] = useState('')
   const [target, setTarget] = useState('')
   const [deadline, setDeadline] = useState('')
   const [color, setColor] = useState(GOAL_COLORS[0])
-  const [allocMode, setAllocMode] = useState('none')
-  const [allocPct, setAllocPct] = useState('')
-  const [allocPriority, setAllocPriority] = useState('')
   const [monthsTarget, setMonthsTarget] = useState('3')
   const [avgExpenses, setAvgExpenses] = useState(null)
   const [error, setError] = useState('')
@@ -578,19 +400,6 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPri
       setColor(existing?.color ?? GOAL_COLORS[0])
       setMonthsTarget(existing?.months_target?.toString() ?? '3')
       setError('')
-      if (existing?.allocation_pct != null) {
-        setAllocMode('pct')
-        setAllocPct(existing.allocation_pct.toString())
-        setAllocPriority('')
-      } else if (existing?.priority != null) {
-        setAllocMode('priority')
-        setAllocPriority(existing.priority.toString())
-        setAllocPct('')
-      } else {
-        setAllocMode('none')
-        setAllocPct('')
-        setAllocPriority('')
-      }
     }
   }, [open, existing])
 
@@ -602,10 +411,7 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPri
 
   async function handleSubmit() {
     if (!name.trim()) { setError('Name is required'); return }
-
-    let t = null
-    let months_target_val = null
-
+    let t = null; let months_target_val = null
     if (goalType === 'emergency_fund') {
       const mt = parseInt(monthsTarget)
       if (!mt || mt <= 0) { setError('Months target must be at least 1'); return }
@@ -614,315 +420,138 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, takenPri
       t = parseFloat(target)
       if (!t || t <= 0) { setError('Target must be greater than 0'); return }
     }
-
-    let allocation_pct = null
-    let priority = null
-    if (allocMode === 'pct' && goalType !== 'monthly') {
-      const pct = parseFloat(allocPct)
-      if (isNaN(pct) || pct < 0 || pct > 100) { setError('Percentage must be between 0 and 100'); return }
-      allocation_pct = pct
-    } else if (allocMode === 'priority' && goalType !== 'monthly') {
-      const p = parseInt(allocPriority)
-      if (isNaN(p) || p < 1) { setError('Priority must be 1 or greater'); return }
-      priority = p
-    }
-
-    setSaving(true)
-    setError('')
+    setSaving(true); setError('')
     try {
       const isOneTimeLike = goalType === 'one_time' || goalType === 'emergency_fund'
       const body = {
-        goal_type: goalType,
-        name: name.trim(),
-        target: t,
+        goal_type: goalType, name: name.trim(), target: t,
         deadline: isOneTimeLike && deadline ? deadline : null,
         color,
-        allocation_pct: isOneTimeLike ? allocation_pct : null,
-        priority: isOneTimeLike ? priority : null,
+        allocation_pct: null,
+        priority: null,
         months_target: months_target_val,
       }
       if (isEdit) {
         await api.put(`/savings-goals/${existing.id}`, {
-          name: body.name,
-          target: body.target,
-          deadline: body.deadline,
-          color,
-          allocation_pct: body.allocation_pct,
-          priority: body.priority,
-          paused: existing.paused ?? false,
-          months_target: body.months_target,
+          name: body.name, target: body.target, deadline: body.deadline, color,
+          allocation_pct: null, priority: null,
+          paused: existing.paused ?? false, months_target: body.months_target,
         })
       } else {
         await api.post('/savings-goals', body)
       }
       onSaved()
-    } catch (err) {
-      setError(err.response?.data?.detail ?? 'Something went wrong')
-    } finally {
-      setSaving(false)
-    }
+    } catch (err) { setError(err.response?.data?.detail ?? 'Something went wrong') }
+    finally { setSaving(false) }
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-    >
-      <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
-        {isEdit ? 'Edit Goal' : 'New Savings Goal'}
-      </DialogTitle>
-      <DialogContent>
-        <Stack gap={2.5} sx={{ mt: 0.5 }}>
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>{isEdit ? 'Edit Goal' : 'New Savings Goal'}</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4 pt-1">
           {!isEdit && (
-            <Box>
-              <FormLabel sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Goal type</FormLabel>
-              <RadioGroup value={goalType} onChange={e => setGoalType(e.target.value)} sx={{ mt: 0.5 }}>
-                <Tooltip title={hasMonthlyGoal ? 'Monthly goal already set' : ''} placement="top">
-                  <FormControlLabel
-                    value="monthly"
-                    control={<Radio size="small" />}
-                    label={<Typography variant="body2">Monthly recurring</Typography>}
-                    disabled={hasMonthlyGoal}
-                  />
-                </Tooltip>
-                <FormControlLabel
-                  value="one_time"
-                  control={<Radio size="small" />}
-                  label={<Typography variant="body2">One-time goal</Typography>}
-                />
-                <FormControlLabel
-                  value="emergency_fund"
-                  control={<Radio size="small" />}
-                  label={<Typography variant="body2">Emergency fund</Typography>}
-                />
-              </RadioGroup>
-            </Box>
+            <div>
+              <p className="text-xs mb-2" style={{ color: C.muted }}>Goal type</p>
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { value: 'monthly', label: 'Monthly recurring', disabled: hasMonthlyGoal },
+                  { value: 'one_time', label: 'One-time goal', disabled: false },
+                  { value: 'emergency_fund', label: 'Emergency fund', disabled: false },
+                ].map(({ value, label, disabled }) => (
+                  <label key={value} className={`flex items-center gap-2 text-sm cursor-pointer ${disabled ? 'opacity-40' : ''}`}>
+                    <input type="radio" value={value} checked={goalType === value} onChange={() => !disabled && setGoalType(value)}
+                      disabled={disabled} className="accent-current" style={{ accentColor: C.primary }} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
           )}
 
-          <TextField
-            label="Name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            size="small"
-            fullWidth
-            placeholder={goalType === 'monthly' ? 'e.g. Monthly savings target' : 'e.g. Vacation fund'}
-          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Name</label>
+            <Input value={name} onChange={e => setName(e.target.value)}
+              placeholder={goalType === 'monthly' ? 'e.g. Monthly savings target' : 'e.g. Vacation fund'} />
+          </div>
 
-          <Box>
-            <FormLabel sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Color</FormLabel>
-            <Stack direction="row" gap={0.75} mt={0.75} flexWrap="wrap">
-              {GOAL_COLORS.map(c => (
-                <Box
-                  key={c}
-                  onClick={() => setColor(c)}
-                  sx={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    bgcolor: c,
-                    cursor: 'pointer',
-                    border: color === c ? '2px solid white' : '2px solid transparent',
-                    outline: color === c ? `2px solid ${c}` : 'none',
-                    transition: 'transform 0.1s',
-                    '&:hover': { transform: 'scale(1.15)' },
-                  }}
-                />
-              ))}
-            </Stack>
-          </Box>
+          <div>
+            <p className="text-xs mb-2" style={{ color: C.muted }}>Color</p>
+            <div className="flex flex-wrap gap-2">
+              {GOAL_COLORS.map(c => <ColorSwatch key={c} color={c} selected={color === c} onClick={() => setColor(c)} />)}
+            </div>
+          </div>
 
           {goalType === 'emergency_fund' ? (
-            <Box>
-              <TextField
-                label="Months of expenses to cover"
-                value={monthsTarget}
-                onChange={e => setMonthsTarget(e.target.value)}
-                size="small"
-                fullWidth
-                type="number"
-                slotProps={{ input: { inputProps: { min: 1, step: 1 } } }}
-              />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Months of expenses to cover</label>
+              <Input value={monthsTarget} onChange={e => setMonthsTarget(e.target.value)} type="number" min="1" step="1" />
               {avgExpenses !== null && (
-                <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                <p className="text-sm" style={{ color: C.muted }}>
                   {(() => {
                     const mt = parseInt(monthsTarget)
                     if (!mt || mt <= 0) return `3-mo avg: $${avgExpenses.toFixed(0)}/mo`
                     return `≈ $${(mt * avgExpenses).toFixed(0)} target (${mt}× $${avgExpenses.toFixed(0)}/mo avg)`
                   })()}
-                </Typography>
+                </p>
               )}
-            </Box>
+            </div>
           ) : (
-            <TextField
-              label="Target amount ($)"
-              value={target}
-              onChange={e => setTarget(e.target.value)}
-              size="small"
-              fullWidth
-              type="number"
-              slotProps={{ input: { inputProps: { min: 0, step: 0.01 } } }}
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Target amount ($)</label>
+              <Input value={target} onChange={e => setTarget(e.target.value)} type="number" min="0" step="0.01" />
+            </div>
           )}
 
           {goalType === 'one_time' && (
-            <TextField
-              label="Deadline (optional)"
-              value={deadline}
-              onChange={e => setDeadline(e.target.value)}
-              size="small"
-              fullWidth
-              type="date"
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Deadline (optional)</label>
+              <Input value={deadline} onChange={e => setDeadline(e.target.value)} type="date" />
+            </div>
           )}
 
           {goalType === 'monthly' && (
-            <Typography variant="body2" color="text.secondary">
-              Progress tracks contributions logged this month toward your target.
-            </Typography>
+            <p className="text-sm" style={{ color: C.muted }}>Progress tracks contributions logged this month toward your target.</p>
           )}
-
           {(goalType === 'one_time' || goalType === 'emergency_fund') && !isEdit && (
-            <Typography variant="body2" color="text.secondary">
-              Progress tracks cumulative contributions logged toward this goal.
-            </Typography>
+            <p className="text-sm" style={{ color: C.muted }}>Progress tracks cumulative contributions logged toward this goal.</p>
           )}
 
-          {(goalType === 'one_time' || goalType === 'emergency_fund') && (() => {
-            const pctNum = parseFloat(allocPct)
-            const totalAfterThis = otherAllocatedPct + (isNaN(pctNum) ? 0 : pctNum)
-            const overAllocated = allocMode === 'pct' && totalAfterThis > 100
-            const remainingPct = Math.max(0, 100 - otherAllocatedPct)
-            return (
-              <Box>
-                <FormLabel sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Allocation</FormLabel>
-                <RadioGroup
-                  row
-                  value={allocMode}
-                  onChange={e => setAllocMode(e.target.value)}
-                  sx={{ mt: 0.5 }}
-                >
-                  <FormControlLabel value="none" control={<Radio size="small" />} label={<Typography variant="body2">None</Typography>} />
-                  <FormControlLabel value="pct" control={<Radio size="small" />} label={<Typography variant="body2">% Slice</Typography>} />
-                  <FormControlLabel value="priority" control={<Radio size="small" />} label={<Typography variant="body2">Priority</Typography>} />
-                </RadioGroup>
-                {allocMode === 'pct' && (
-                  <Box>
-                    <TextField
-                      label="Percentage of monthly net"
-                      value={allocPct}
-                      onChange={e => setAllocPct(e.target.value)}
-                      type="number"
-                      size="small"
-                      error={overAllocated}
-                      sx={{ mt: 1, width: 200 }}
-                      slotProps={{
-                        input: {
-                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                          inputProps: { min: 0, max: 100, step: 1 },
-                        },
-                      }}
-                      helperText={
-                        overAllocated
-                          ? `Total would be ${totalAfterThis.toFixed(0)}% — exceeds 100%`
-                          : otherAllocatedPct > 0
-                            ? `Other goals use ${otherAllocatedPct.toFixed(0)}% — ${remainingPct.toFixed(0)}% remaining`
-                            : 'Share of monthly net savings allocated to this goal'
-                      }
-                    />
-                    {portfolioAvg != null && portfolioAvg > 0 && !isNaN(pctNum) && pctNum > 0 && (
-                      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                        3-mo avg net ${portfolioAvg.toFixed(0)}/mo → {pctNum}% = ${(portfolioAvg * pctNum / 100).toFixed(0)}/mo toward this goal
-                      </Typography>
-                    )}
-                    {portfolioAvg != null && portfolioAvg <= 0 && (
-                      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                        No recent net income data — projection will use contribution history instead.
-                      </Typography>
-                    )}
-                  </Box>
-                )}
-                {allocMode === 'priority' && (() => {
-                  const p = parseInt(allocPriority)
-                  const conflict = !isNaN(p) && takenPriorities.includes(p)
-                  return (
-                    <TextField
-                      label="Priority rank"
-                      value={allocPriority}
-                      onChange={e => setAllocPriority(e.target.value)}
-                      type="number"
-                      size="small"
-                      error={conflict}
-                      sx={{ mt: 1, width: 160 }}
-                      slotProps={{ input: { inputProps: { min: 1, step: 1 } } }}
-                      helperText={
-                        conflict
-                          ? `Priority ${p} is already taken`
-                          : takenPriorities.length > 0
-                            ? `Taken: ${takenPriorities.sort((a, b) => a - b).join(', ')}`
-                            : '1 = highest priority (funded first from remainder)'
-                      }
-                    />
-                  )
-                })()}
-                {allocMode !== 'none' && (
-                  <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                    {allocMode === 'pct'
-                      ? '% slice goals are funded simultaneously. Unallocated remainder goes to priority goals.'
-                      : 'Priority goals are funded sequentially after % slice goals. Lower number = higher priority.'}
-                  </Typography>
-                )}
-              </Box>
-            )
-          })()}
-
-          {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
-        </Stack>
+          {error && <AlertBox severity="error">{error}</AlertBox>}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={saving}>{isEdit ? 'Save' : 'Create'}</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button variant="text" color="inherit" onClick={onClose} disabled={saving}>Cancel</Button>
-        <Button variant="contained" onClick={handleSubmit} disabled={saving} sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover } }}>
-          {isEdit ? 'Save' : 'Create'}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }
 
-// ─── Delete Confirm ──────────────────────────────────────────────────────────
+// ─── Delete Confirm ───────────────────────────────────────────────────────────
 
 function DeleteConfirmDialog({ open, onClose, onConfirm, goalName }) {
   const C = useC()
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-    >
-      <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>Delete goal?</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary">
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Delete goal?</DialogTitle></DialogHeader>
+        <p className="text-sm" style={{ color: C.muted }}>
           "{goalName}" and all its contributions will be permanently deleted. Linked expenses will remain in your expense history. This cannot be undone.
-        </Typography>
+        </p>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm}>Delete</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button variant="text" color="inherit" onClick={onClose}>Cancel</Button>
-        <Button variant="contained" color="error" onClick={onConfirm}>Delete</Button>
-      </DialogActions>
     </Dialog>
   )
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SavingsPage() {
   const C = useC()
-  const PRIMARY = C.primary
   const [goals, setGoals] = useState([])
   const [monthlyTarget, setMonthlyTarget] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -943,60 +572,32 @@ export default function SavingsPage() {
   const oneTimeGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && !g.completed)
   const completedGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && g.completed)
   const hasMonthlyGoal = !!monthlyGoal
-
-  // Priorities currently in use by active goals (excluding the one being edited)
-  const takenPriorities = goals
-    .filter(g => g.priority != null && !g.completed && g.id !== editingGoal?.id)
-    .map(g => g.priority)
-
-  const portfolioAvg = goals.find(g => g.avg_monthly_net != null)?.avg_monthly_net ?? null
-
-  const otherAllocatedPct = goals
-    .filter(g => g.allocation_pct != null && !g.completed && g.id !== editingGoal?.id)
-    .reduce((sum, g) => sum + g.allocation_pct, 0)
-
-  const activeContribGoal = contributingToGoalId
-    ? goals.find(g => g.id === contributingToGoalId) ?? null
-    : null
+  const activeContribGoal = contributingToGoalId ? goals.find(g => g.id === contributingToGoalId) ?? null : null
 
   async function handleDelete() {
     if (!deletingGoal) return
     await api.delete(`/savings-goals/${deletingGoal.id}`)
-    setDeletingGoal(null)
-    refresh()
+    setDeletingGoal(null); refresh()
   }
 
   async function handlePause(goalId) {
-    await api.patch(`/savings-goals/${goalId}/pause`)
-    refresh()
+    await api.patch(`/savings-goals/${goalId}/pause`); refresh()
   }
 
   return (
-    <Box>
-      {/* Header */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" mb={3} gap={2}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', fontSize: { xs: '1.2rem', sm: '1.4rem' } }}>
-            Savings Goals
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-            Track monthly net savings and long-term targets
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => { setEditingGoal(null); setDialogOpen(true) }}
-          sx={{ fontWeight: 600, bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover }, flexShrink: 0 }}
-        >
-          Add Goal
+    <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: C.warmText }}>Savings Goals</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.muted }}>Track monthly net savings and long-term targets</p>
+        </div>
+        <Button onClick={() => { setEditingGoal(null); setDialogOpen(true) }} className="font-semibold flex-shrink-0">
+          <Plus size={15} className="mr-1" />Add Goal
         </Button>
-      </Stack>
+      </div>
 
-      {/* Net chart */}
       <NetSavingsChart refreshKey={refreshKey} monthlyTarget={monthlyTarget} goals={goals} />
 
-      {/* Monthly goal */}
       {monthlyGoal && (
         <MonthlyGoalCard
           goal={monthlyGoal}
@@ -1007,16 +608,8 @@ export default function SavingsPage() {
         />
       )}
 
-      {/* Active one-time goals */}
       {oneTimeGoals.length > 0 && (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: 2,
-            mt: monthlyGoal ? 2 : 0,
-          }}
-        >
+        <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
           {oneTimeGoals.map((goal, i) => {
             const color = goal.color ?? ONE_TIME_COLORS[i % ONE_TIME_COLORS.length]
             const commonProps = {
@@ -1030,39 +623,20 @@ export default function SavingsPage() {
               ? <EmergencyFundGoalCard {...commonProps} />
               : <OneTimeGoalCard {...commonProps} />
           })}
-        </Box>
+        </div>
       )}
 
-      {/* Completed goals */}
       {completedGoals.length > 0 && (
-        <Accordion
-          expanded={completedOpen}
-          onChange={() => setCompletedOpen(o => !o)}
-          elevation={0}
-          sx={{
-            mt: 3,
-            bgcolor: 'transparent',
-            border: `1px solid ${C.border}`,
-            borderRadius: '8px !important',
-            '&:before': { display: 'none' },
-          }}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: 'text.secondary' }} />}>
-            <Stack direction="row" alignItems="center" gap={1}>
-              <CheckCircleOutlineIcon sx={{ fontSize: 16, color: PRIMARY }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary' }}>
-                Completed ({completedGoals.length})
-              </Typography>
-            </Stack>
-          </AccordionSummary>
-          <AccordionDetails sx={{ pt: 0 }}>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                gap: 1.5,
-              }}
-            >
+        <div className="mt-5 rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+          <div className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none"
+            onClick={() => setCompletedOpen(o => !o)}>
+            <CheckCircle size={15} style={{ color: C.primary }} />
+            <span className="text-sm font-medium" style={{ color: C.muted }}>Completed ({completedGoals.length})</span>
+            <ChevronDown size={14} className="ml-auto transition-transform duration-200"
+              style={{ color: C.muted, transform: completedOpen ? 'rotate(180deg)' : 'none' }} />
+          </div>
+          <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: completedOpen ? '9999px' : '0px' }}>
+            <div className="grid gap-3 p-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
               {completedGoals.map((goal, i) => (
                 <CompletedGoalCard
                   key={goal.id}
@@ -1071,27 +645,16 @@ export default function SavingsPage() {
                   onDelete={() => setDeletingGoal(goal)}
                 />
               ))}
-            </Box>
-          </AccordionDetails>
-        </Accordion>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Empty state */}
       {goals.length === 0 && (
-        <Paper
-          elevation={0}
-          sx={{
-            border: `1px solid ${C.border}`,
-            borderRadius: 2,
-            py: 8,
-            textAlign: 'center',
-          }}
-        >
-          <SavingsOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
-          <Typography variant="body2" color="text.secondary">
-            No savings goals yet. Add one to start tracking.
-          </Typography>
-        </Paper>
+        <div className="rounded-xl py-16 text-center" style={{ border: `1px solid ${C.border}` }}>
+          <PiggyBank size={40} className="mx-auto mb-3" style={{ color: C.dimText }} />
+          <p className="text-sm" style={{ color: C.muted }}>No savings goals yet. Add one to start tracking.</p>
+        </div>
       )}
 
       <GoalDialog
@@ -1100,24 +663,9 @@ export default function SavingsPage() {
         onSaved={() => { setDialogOpen(false); refresh() }}
         existing={editingGoal}
         hasMonthlyGoal={hasMonthlyGoal && !editingGoal}
-        takenPriorities={takenPriorities}
-        portfolioAvg={portfolioAvg}
-        otherAllocatedPct={otherAllocatedPct}
       />
-
-      <DeleteConfirmDialog
-        open={!!deletingGoal}
-        onClose={() => setDeletingGoal(null)}
-        onConfirm={handleDelete}
-        goalName={deletingGoal?.name ?? ''}
-      />
-
-      <ContributionDialog
-        open={!!contributingToGoalId}
-        onClose={() => setContributingToGoalId(null)}
-        goal={activeContribGoal}
-        onRefresh={refresh}
-      />
-    </Box>
+      <DeleteConfirmDialog open={!!deletingGoal} onClose={() => setDeletingGoal(null)} onConfirm={handleDelete} goalName={deletingGoal?.name ?? ''} />
+      <ContributionDialog open={!!contributingToGoalId} onClose={() => setContributingToGoalId(null)} goal={activeContribGoal} onRefresh={refresh} />
+    </div>
   )
 }

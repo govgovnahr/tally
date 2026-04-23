@@ -1,44 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
-import IconButton from '@mui/material/IconButton'
-import Tabs from '@mui/material/Tabs'
-import Tab from '@mui/material/Tab'
-import Chip from '@mui/material/Chip'
-import Table from '@mui/material/Table'
-import TableHead from '@mui/material/TableHead'
-import TableBody from '@mui/material/TableBody'
-import TableRow from '@mui/material/TableRow'
-import TableCell from '@mui/material/TableCell'
-import TableContainer from '@mui/material/TableContainer'
-import Stack from '@mui/material/Stack'
-import Pagination from '@mui/material/Pagination'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import TextField from '@mui/material/TextField'
-import InputAdornment from '@mui/material/InputAdornment'
-import TableSortLabel from '@mui/material/TableSortLabel'
-import Tooltip from '@mui/material/Tooltip'
-import Divider from '@mui/material/Divider'
-import useMediaQuery from '@mui/material/useMediaQuery'
-import { useTheme } from '@mui/material/styles'
-import AddIcon from '@mui/icons-material/Add'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import RepeatIcon from '@mui/icons-material/Repeat'
-import UploadFileIcon from '@mui/icons-material/UploadFile'
-import SearchIcon from '@mui/icons-material/Search'
-import CloseIcon from '@mui/icons-material/Close'
+import { startTransition } from 'react'
+import { Plus, Trash2, Pencil, Repeat, Upload, Search, X, ArrowUp, ArrowDown } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
 import api from '../api.js'
 import AddExpenseForm from './AddExpenseForm.jsx'
 import AddIncomeForm from './AddIncomeForm.jsx'
 import ImportDialog from './ImportDialog.jsx'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
+import { Card } from 'glasscn-ui'
 
 function formatDate(dateStr) {
   const [year, month, day] = dateStr.split('-')
@@ -52,39 +29,50 @@ function formatMonthLabel(m) {
   return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long' })
 }
 
+function SortBtn({ col, sortBy, sortDir, onSort, children, className = '' }) {
+  const C = useC()
+  const active = sortBy === col
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      className={`flex items-center gap-1 bg-transparent border-none cursor-pointer font-[inherit] font-semibold text-xs ${className}`}
+      style={{ color: C.muted }}
+    >
+      {children}
+      <span style={{ viewTransitionName: `sort-arrow-${col}`, display: 'inline-flex' }}>
+        {active
+          ? (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
+          : <ArrowDown size={12} style={{ opacity: 0.3 }} />}
+      </span>
+    </button>
+  )
+}
+
 export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange }) {
   const C = useC()
-  const INCOME_COLOR = C.income
   const { typeNames, typeMap, macroMap } = useExpenseTypes()
-  const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
-  // Controlled when propActiveType is provided (home page); internal otherwise (all-expenses page)
   const [internalType, setInternalType] = useState('All')
   const activeType = propActiveType ?? internalType
   const handleTypeChange = onTypeChange ?? setInternalType
   const tabsRef = useRef(null)
 
   useEffect(() => {
-    const root = tabsRef.current
-    if (!root) return
-    const scroller = root.querySelector('.MuiTabs-scroller')
-    const selected = root.querySelector('[role="tab"][aria-selected="true"]')
-    if (!scroller || !selected) return
-    const sr = scroller.getBoundingClientRect()
-    const er = selected.getBoundingClientRect()
-    if (er.left < sr.left) {
-      scroller.scrollLeft += er.left - sr.left - 8
-    } else if (er.right > sr.right) {
-      scroller.scrollLeft += er.right - sr.right + 8
-    }
+    const container = tabsRef.current
+    if (!container) return
+    const active = container.querySelector('[data-active="true"]')
+    if (!active) return
+    const cr = container.getBoundingClientRect()
+    const er = active.getBoundingClientRect()
+    if (er.left < cr.left) container.scrollLeft += er.left - cr.left - 8
+    else if (er.right > cr.right) container.scrollLeft += er.right - cr.right + 8
   }, [activeType])
 
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
-
   const [expenses, setExpenses] = useState([])
   const [incomes, setIncomes] = useState([])
   const [total, setTotal] = useState(0)
@@ -106,17 +94,18 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   }, [searchInput])
 
   function handleSort(col) {
-    if (sortBy === col) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    const update = () => {
+      if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+      else { setSortBy(col); setSortDir('asc') }
+    }
+    if (document.startViewTransition) {
+      document.startViewTransition(() => startTransition(update)).finished.catch(() => {})
     } else {
-      setSortBy(col)
-      setSortDir('asc')
+      startTransition(update)
     }
   }
 
-  useEffect(() => {
-    setPage(1)
-  }, [activeType, activeMacro, month, refreshKey, search, sortBy, sortDir])
+  useEffect(() => { setPage(1) }, [activeType, activeMacro, month, refreshKey, search, sortBy, sortDir])
 
   useEffect(() => {
     if (activeType === 'Income') {
@@ -124,21 +113,18 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       if (month) params.month = month
       if (search) params.search = search
       api.get('/incomes', { params }).then(res => {
-        setIncomes(res.data.incomes)
-        setTotal(res.data.total)
+        const update = () => { setIncomes(res.data.incomes); setTotal(res.data.total) }
+        update()
       })
     } else {
       const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
-      if (activeMacro) {
-        params.macrocategory_id = activeMacro
-      } else if (activeType !== 'All') {
-        params.type = activeType
-      }
+      if (activeMacro) params.macrocategory_id = activeMacro
+      else if (activeType !== 'All') params.type = activeType
       if (month) params.month = month
       if (search) params.search = search
       api.get('/expenses', { params }).then(res => {
-        setExpenses(res.data.expenses)
-        setTotal(res.data.total)
+        const update = () => { setExpenses(res.data.expenses); setTotal(res.data.total) }
+        update()
       })
     }
   }, [refreshKey, activeType, activeMacro, month, page, search, sortBy, sortDir])
@@ -182,381 +168,306 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const pageCount = Math.ceil(total / PAGE_SIZE)
   const macroName = activeMacro ? (macroMap[activeMacro]?.name ?? '') : null
 
+  const activeTabColor = activeType === 'Income' ? C.income
+    : activeType !== 'All' ? (typeMap[activeType]?.color ?? C.primary)
+    : C.primary
+
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        bgcolor: 'background.paper',
-        border: `1px solid ${C.border}`,
-        borderRadius: 2,
-        overflow: 'hidden',
-      }}
-    >
+    <Card variant="glass" blur="xl" className="rounded-xl overflow-hidden mb-4">
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 }, pb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+      <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-3">
+        <h2 className="text-base font-semibold" style={{ color: C.warmText }}>
           {isIncome
             ? month ? `${formatMonthLabel(month)}'s Income` : 'All Income'
             : macroName
               ? month ? `${formatMonthLabel(month)} · ${macroName}` : macroName
               : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
-        </Typography>
+        </h2>
 
-        {/* Desktop header buttons (sm+) */}
-        <Stack direction="row" gap={1} sx={{ display: { xs: 'none', sm: 'flex' } }}>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => setShowClearConfirm(true)}
-            sx={{ fontWeight: 600 }}
-          >
+        {/* Desktop buttons */}
+        <div className="hidden sm:flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowClearConfirm(true)}
+            className="font-semibold text-red-500 border-red-400 hover:bg-red-50 dark:hover:bg-red-950">
             {month ? 'Clear Month' : 'Clear All'}
           </Button>
-          <Button
-            variant="outlined"
-            startIcon={<UploadFileIcon />}
-            onClick={() => setShowImport(true)}
-            sx={{ fontWeight: 600 }}
-          >
-            Import
+          <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="font-semibold">
+            <Upload size={14} className="mr-1" />Import
           </Button>
           {isIncome ? (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => setShowIncomeForm(true)}
-              sx={{ fontWeight: 600, bgcolor: INCOME_COLOR, '&:hover': { bgcolor: C.incomeButtonHover } }}
-            >
-              Add Income
+            <Button size="sm" className="font-semibold" onClick={() => setShowIncomeForm(true)}
+              style={{ backgroundColor: C.income, color: '#000' }}>
+              <Plus size={14} className="mr-1" />Add Income
             </Button>
           ) : (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => setShowExpenseForm(true)}
-              sx={{ fontWeight: 600 }}
-            >
-              Add Expense
+            <Button size="sm" className="font-semibold" onClick={() => setShowExpenseForm(true)}>
+              <Plus size={14} className="mr-1" />Add Expense
             </Button>
           )}
-        </Stack>
+        </div>
 
-        {/* Mobile header buttons (xs only) */}
-        <Stack direction="row" gap={0.5} sx={{ display: { xs: 'flex', sm: 'none' } }}>
-          <Tooltip title={month ? 'Clear Month' : 'Clear All'}>
-            <IconButton size="small" color="error" onClick={() => setShowClearConfirm(true)}>
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Import">
-            <IconButton size="small" onClick={() => setShowImport(true)} sx={{ color: 'text.secondary' }}>
-              <UploadFileIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title={isIncome ? 'Add Income' : 'Add Expense'}>
-            <IconButton
-              size="small"
-              onClick={() => isIncome ? setShowIncomeForm(true) : setShowExpenseForm(true)}
-              sx={{ color: isIncome ? INCOME_COLOR : 'primary.main' }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Stack>
+        {/* Mobile buttons */}
+        <div className="flex sm:hidden gap-1">
+          <button type="button" title={month ? 'Clear Month' : 'Clear All'}
+            onClick={() => setShowClearConfirm(true)}
+            className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer"
+            style={{ color: C.overBudget }}>
+            <Trash2 size={16} />
+          </button>
+          <button type="button" title="Import" onClick={() => setShowImport(true)}
+            className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer"
+            style={{ color: C.muted }}>
+            <Upload size={16} />
+          </button>
+          <button type="button" title={isIncome ? 'Add Income' : 'Add Expense'}
+            onClick={() => isIncome ? setShowIncomeForm(true) : setShowExpenseForm(true)}
+            className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer"
+            style={{ color: isIncome ? C.income : C.primary }}>
+            <Plus size={16} />
+          </button>
+        </div>
+      </div>
 
-      {/* Type filter tabs */}
-      <Box ref={tabsRef} sx={{ borderBottom: `1px solid ${C.border}`, px: 1 }}>
-        <Tabs
-          value={activeType}
-          onChange={(_, val) => handleTypeChange(val)}
-          variant="scrollable"
-          scrollButtons={false}
-          TabIndicatorProps={{
-            style: {
-              height: 2,
-              backgroundColor:
-                activeType === 'Income' ? INCOME_COLOR
-                : activeType !== 'All' ? (typeMap[activeType]?.color ?? C.primary)
-                : C.primary,
-            },
-          }}
-          sx={{
-            minHeight: 44,
-            '& .MuiTab-root': { minHeight: 44, py: 0, fontSize: '0.9rem', color: 'text.secondary' },
-          }}
-        >
-          {tabs.map(tab => (
-            <Tab
+      {/* Scrollable type tabs */}
+      <div
+        ref={tabsRef}
+        className="flex overflow-x-auto px-1 scrollbar-none"
+        style={{ borderBottom: `1px solid ${C.border}` }}
+      >
+        {tabs.map(tab => {
+          const isActive = activeType === tab
+          const tabColor = tab === 'Income' ? C.income
+            : tab !== 'All' ? (typeMap[tab]?.color ?? C.primary)
+            : C.primary
+          return (
+            <button
               key={tab}
-              label={tab}
-              value={tab}
-              sx={
-                activeType === tab && tab === 'Income'
-                  ? { color: `${INCOME_COLOR} !important` }
-                  : activeType === tab && tab !== 'All'
-                  ? { color: `${typeMap[tab]?.color} !important` }
-                  : activeType === tab
-                  ? { color: 'primary.main !important' }
-                  : {}
-              }
-            />
-          ))}
-        </Tabs>
-      </Box>
-
-      {/* Search */}
-      <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${C.hoverStrong}` }}>
-        <TextField
-          size="small"
-          placeholder="Search by name…"
-          value={searchInput}
-          onChange={e => setSearchInput(e.target.value)}
-          fullWidth
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
-                </InputAdornment>
-              ),
-              endAdornment: searchInput ? (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => { setSearchInput(''); setSearch('') }}>
-                    <CloseIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
-            }
-          }}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              fontSize: '0.85rem',
-              '& fieldset': { borderColor: C.borderLight },
-              '&:hover fieldset': { borderColor: C.borderStrong },
-            },
-          }}
-        />
-      </Box>
-
-      {/* Content — mobile cards vs desktop table */}
-      {isEmpty ? (
-        <Box sx={{ py: 6, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            {isIncome
-              ? 'No income recorded yet'
-              : `No expenses${activeType !== 'All' ? ` in ${activeType}` : ''} yet`}
-          </Typography>
-        </Box>
-      ) : isMobile ? (
-        /* Mobile: tappable card list */
-        <Box>
-          {rows.map(row => (
-            <Box
-              key={row.id}
-              onClick={() => { setDetailItem(row); setDetailIsIncome(isIncome) }}
-              sx={{
-                px: 2,
-                py: 1.5,
-                borderBottom: `1px solid ${C.hoverStrong}`,
-                cursor: 'pointer',
-                userSelect: 'none',
-                '&:hover': { bgcolor: C.subtleBg },
-                '&:active': { bgcolor: C.hoverMed },
+              type="button"
+              data-active={isActive}
+              onClick={() => handleTypeChange(tab)}
+              className="px-3 py-2.5 text-sm whitespace-nowrap bg-transparent border-none cursor-pointer font-[inherit] flex-shrink-0 border-b-2 transition-colors duration-150"
+              style={{
+                color: isActive ? tabColor : C.muted,
+                borderBottomColor: isActive ? tabColor : 'transparent',
               }}
             >
-              <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
-                <Stack direction="row" alignItems="center" gap={0.75} sx={{ minWidth: 0, flexShrink: 1 }}>
-                  <Typography
-                    variant="body2"
-                    fontWeight={600}
-                    sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                  >
-                    {row.name}
-                  </Typography>
-                  {row.is_recurring === 1 && <RepeatIcon sx={{ fontSize: 13, color: 'text.secondary', flexShrink: 0 }} />}
-                </Stack>
-                <Typography variant="body2" fontWeight={600} sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || C.dimText, flexShrink: 0 }}>
+              {tab}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="px-3 py-2" style={{ borderBottom: `1px solid ${C.hoverStrong}` }}>
+        <div className="relative">
+          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: C.dimText }} />
+          <Input
+            placeholder="Search by name…"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            className="pl-8 pr-8 text-sm h-8"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => { setSearchInput(''); setSearch('') }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer p-0"
+              style={{ color: C.dimText }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Empty state */}
+      {isEmpty && (
+        <div className="py-10 text-center">
+          <p className="text-sm" style={{ color: C.muted }}>
+            {isIncome ? 'No income recorded yet' : `No expenses${activeType !== 'All' ? ` in ${activeType}` : ''} yet`}
+          </p>
+        </div>
+      )}
+
+      {/* Mobile card list */}
+      {!isEmpty && (
+        <div className="sm:hidden">
+          {rows.map(row => (
+            <div
+              key={row.id}
+              onClick={() => { setDetailItem(row); setDetailIsIncome(isIncome) }}
+              className="px-4 py-3 cursor-pointer select-none transition-colors duration-150"
+              style={{ borderBottom: `1px solid ${C.hoverStrong}` }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-shrink">
+                  <span className="text-sm font-semibold truncate" style={{ color: C.warmText }}>{row.name}</span>
+                  {row.is_recurring === 1 && <Repeat size={12} style={{ color: C.muted, flexShrink: 0 }} />}
+                </div>
+                <span className="text-sm font-semibold flex-shrink-0"
+                  style={{ color: isIncome ? C.income : typeMap[row.type]?.color || C.dimText }}>
                   ${row.amount.toFixed(2)}
-                </Typography>
-              </Stack>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
-                <Chip
-                  label={isIncome ? 'Income' : row.type}
-                  variant="outlined"
-                  size="small"
-                  sx={{ color: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || C.dimText, borderColor: isIncome ? INCOME_COLOR : typeMap[row.type]?.color || C.dimText, fontSize: '0.7rem', height: 20 }}
-                />
-                <Typography variant="caption" color="text.secondary">
-                  {formatDate(row.date)}
-                </Typography>                                      
-              </Stack>     
-            </Box>
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <button
+                  type="button"
+                  onClick={ev => { ev.stopPropagation(); if (!isIncome) handleTypeChange(row.type) }}
+                  className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent font-[inherit] transition-opacity duration-150 hover:opacity-70"
+                  style={{
+                    color: isIncome ? C.income : C.adaptColor(typeMap[row.type]?.color || C.dimText),
+                    borderColor: isIncome ? C.income : C.adaptColor(typeMap[row.type]?.color || C.dimText),
+                    cursor: isIncome ? 'default' : 'pointer',
+                  }}
+                >
+                  {isIncome ? 'Income' : row.type}
+                </button>
+                <span className="text-xs" style={{ color: C.muted }}>{formatDate(row.date)}</span>
+              </div>
+            </div>
           ))}
-        </Box>
-      ) : (
-        /* Desktop: sortable table */
-        <TableContainer>
-          <Table size="small" sx={{ minWidth: 480 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
-                  <TableSortLabel
-                    active={sortBy === 'name'}
-                    direction={sortBy === 'name' ? sortDir : 'asc'}
-                    onClick={() => handleSort('name')}
-                    sx={{ color: 'inherit !important', '& .MuiTableSortLabel-icon': { color: 'text.disabled !important' } }}
-                  >
-                    Name
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
-                  {isIncome ? 'Source' : 'Type'}
-                </TableCell>
-                <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
-                  <TableSortLabel
-                    active={sortBy === 'date'}
-                    direction={sortBy === 'date' ? sortDir : 'asc'}
-                    onClick={() => handleSort('date')}
-                    sx={{ color: 'inherit !important', '& .MuiTableSortLabel-icon': { color: 'text.disabled !important' } }}
-                  >
-                    Date
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell align="right" sx={{ color: 'text.secondary', borderColor: C.hoverStrong, fontWeight: 600 }}>
-                  <TableSortLabel
-                    active={sortBy === 'amount'}
-                    direction={sortBy === 'amount' ? sortDir : 'asc'}
-                    onClick={() => handleSort('amount')}
-                    sx={{ color: 'inherit !important', '& .MuiTableSortLabel-icon': { color: 'text.disabled !important' }, flexDirection: 'row-reverse' }}
-                  >
-                    Amount
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ borderColor: C.hoverStrong, width: 80 }} />
+        </div>
+      )}
+
+      {/* Desktop table */}
+      {!isEmpty && (
+        <div className="hidden sm:block" style={{ minHeight: 240 }}>
+          <Table>
+            <TableHeader>
+              <TableRow style={{ borderColor: C.hoverStrong }}>
+                <TableHead style={{ color: C.muted }}>
+                  <SortBtn col="name" sortBy={sortBy} sortDir={sortDir} onSort={handleSort}>Name</SortBtn>
+                </TableHead>
+                <TableHead style={{ color: C.muted }}>{isIncome ? 'Source' : 'Type'}</TableHead>
+                <TableHead style={{ color: C.muted }}>
+                  <SortBtn col="date" sortBy={sortBy} sortDir={sortDir} onSort={handleSort}>Date</SortBtn>
+                </TableHead>
+                <TableHead className="text-right" style={{ color: C.muted }}>
+                  <SortBtn col="amount" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="ml-auto">Amount</SortBtn>
+                </TableHead>
+                <TableHead className="w-20" />
               </TableRow>
-            </TableHead>
+            </TableHeader>
             <TableBody>
               {isIncome
                 ? incomes.map(inc => (
-                  <TableRow
-                    key={inc.id}
-                    sx={{ '&:hover': { bgcolor: C.subtleBg }, '& td': { borderColor: C.hoverStrong } }}
-                  >
-                    <TableCell sx={{ color: 'text.primary' }}>
-                      <Stack direction="row" alignItems="center" gap={0.75}>
-                        {inc.name}
-                        {inc.is_recurring === 1 && (
-                          <RepeatIcon sx={{ fontSize: 14, color: 'text.secondary', opacity: 0.7 }} titleAccess="Recurring monthly income" />
-                        )}
-                      </Stack>
+                  <TableRow key={inc.id} style={{ borderColor: C.hoverStrong, viewTransitionName: `row-inc-${inc.id}` }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                    <TableCell className="max-w-0 w-full" style={{ color: C.warmText }}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{inc.name}</span>
+                        {inc.is_recurring === 1 && <Repeat size={13} className="flex-shrink-0" style={{ color: C.muted, opacity: 0.7 }} title="Recurring monthly income" />}
+                      </div>
                     </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {inc.credit_type ? (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{ color: C.nearGoal, borderColor: C.nearGoal }}>
+                          Credit → {inc.credit_type}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{ color: C.income, borderColor: C.income }}>
+                          Income
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap" style={{ color: C.muted }}>{formatDate(inc.date)}</TableCell>
+                    <TableCell className="text-right font-medium" style={{ color: C.income }}>${inc.amount.toFixed(2)}</TableCell>
                     <TableCell>
-                      <Chip
-                        label="Income"
-                        variant="outlined"
-                        size="small"
-                        sx={{ color: INCOME_COLOR, borderColor: INCOME_COLOR, fontSize: '0.75rem', height: 22 }}
-                      />
-                    </TableCell>
-                    <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
-                      {formatDate(inc.date)}
-                    </TableCell>
-                    <TableCell align="right" sx={{ color: INCOME_COLOR, fontWeight: 500 }}>
-                      ${inc.amount.toFixed(2)}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Stack direction="row" justifyContent="center">
-                        <IconButton size="small" onClick={() => setEditingIncome(inc)} title="Edit income"
-                          sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleDeleteIncome(inc.id)} title="Delete income"
-                          sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Stack>
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button type="button" title="Edit income" onClick={() => setEditingIncome(inc)}
+                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                          style={{ color: C.muted }}
+                          onMouseEnter={e => e.currentTarget.style.color = C.primary}
+                          onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+                          <Pencil size={14} />
+                        </button>
+                        <button type="button" title="Delete income" onClick={() => handleDeleteIncome(inc.id)}
+                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                          style={{ color: C.muted }}
+                          onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
+                          onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
                 : expenses.map(e => (
-                  <TableRow
-                    key={e.id}
-                    sx={{ '&:hover': { bgcolor: C.subtleBg }, '& td': { borderColor: C.hoverStrong } }}
-                  >
-                    <TableCell sx={{ color: 'text.primary' }}>
-                      <Stack direction="row" alignItems="center" gap={0.75}>
-                        {e.name}
-                        {e.is_recurring === 1 && (
-                          <RepeatIcon sx={{ fontSize: 14, color: 'text.secondary', opacity: 0.7 }} titleAccess="Recurring monthly expense" />
-                        )}
-                      </Stack>
+                  <TableRow key={e.id} style={{ borderColor: C.hoverStrong, viewTransitionName: `row-exp-${e.id}` }}
+                    onMouseEnter={ev => ev.currentTarget.style.backgroundColor = C.subtleBg}
+                    onMouseLeave={ev => ev.currentTarget.style.backgroundColor = 'transparent'}>
+                    <TableCell className="max-w-0 w-full" style={{ color: C.warmText }}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{e.name}</span>
+                        {e.is_recurring === 1 && <Repeat size={13} className="flex-shrink-0" style={{ color: C.muted, opacity: 0.7 }} title="Recurring monthly expense" />}
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={e.type}
-                        variant="outlined"
-                        size="small"
-                        sx={{
-                          color: typeMap[e.type]?.color || C.dimText,
-                          borderColor: typeMap[e.type]?.color || C.dimText,
-                          fontSize: '0.75rem',
-                          height: 22,
-                        }}
-                      />
+                    <TableCell className="whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={ev => { ev.stopPropagation(); handleTypeChange(e.type) }}
+                        className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent cursor-pointer font-[inherit] transition-opacity duration-150 hover:opacity-70"
+                        style={{ color: C.adaptColor(typeMap[e.type]?.color || C.dimText), borderColor: C.adaptColor(typeMap[e.type]?.color || C.dimText) }}>
+                        {e.type}
+                      </button>
                     </TableCell>
-                    <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
-                      {formatDate(e.date)}
-                    </TableCell>
-                    <TableCell align="right" sx={{ color: isIncome ? INCOME_COLOR : typeMap[e.type]?.color || 'text.primary', fontWeight: 500 }}>
+                    <TableCell className="whitespace-nowrap" style={{ color: C.muted }}>{formatDate(e.date)}</TableCell>
+                    <TableCell className="text-right font-medium"
+                      style={{ color: C.adaptColor(typeMap[e.type]?.color || C.warmText) }}>
                       ${e.amount.toFixed(2)}
                     </TableCell>
-                    <TableCell align="center">
-                      <Stack direction="row" justifyContent="center">
-                        <IconButton size="small" onClick={() => setEditingExpense(e)} title="Edit expense"
-                          sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleDeleteExpense(e.id)} title="Delete expense"
-                          sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Stack>
+                    <TableCell>
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button type="button" title="Edit expense" onClick={() => setEditingExpense(e)}
+                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                          style={{ color: C.muted }}
+                          onMouseEnter={ev => ev.currentTarget.style.color = C.primary}
+                          onMouseLeave={ev => ev.currentTarget.style.color = C.muted}>
+                          <Pencil size={14} />
+                        </button>
+                        <button type="button" title="Delete expense" onClick={() => handleDeleteExpense(e.id)}
+                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+                          style={{ color: C.muted }}
+                          onMouseEnter={ev => ev.currentTarget.style.color = C.overBudget}
+                          onMouseLeave={ev => ev.currentTarget.style.color = C.muted}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
               }
             </TableBody>
           </Table>
-        </TableContainer>
+        </div>
       )}
 
+      {/* Pagination */}
       {pageCount > 1 && (
-        <Stack alignItems="center" sx={{ py: 2 }}>
-          <Pagination
-            count={pageCount}
-            page={page}
-            onChange={(_, v) => setPage(v)}
-            size="small"
-            sx={{ '& .MuiPaginationItem-root': { color: 'text.secondary' } }}
-          />
-        </Stack>
+        <div className="flex items-center justify-center gap-3 py-3">
+          <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+            className="px-3 py-1 rounded-lg text-sm bg-transparent border-none cursor-pointer disabled:opacity-40"
+            style={{ color: C.muted }}>
+            ← Prev
+          </button>
+          <span className="text-sm" style={{ color: C.muted }}>Page {page} of {pageCount}</span>
+          <button type="button" onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={page === pageCount}
+            className="px-3 py-1 rounded-lg text-sm bg-transparent border-none cursor-pointer disabled:opacity-40"
+            style={{ color: C.muted }}>
+            Next →
+          </button>
+        </div>
       )}
 
-      {showExpenseForm && (
-        <AddExpenseForm onClose={() => setShowExpenseForm(false)} onAdded={onRefresh} />
-      )}
-      {editingExpense && (
-        <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} onAdded={onRefresh} />
-      )}
-      {showIncomeForm && (
-        <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={() => { setShowIncomeForm(false); onRefresh() }} />
-      )}
-      {editingIncome && (
-        <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={() => { setEditingIncome(null); onRefresh() }} />
-      )}
+      {/* Forms & dialogs */}
+      {showExpenseForm && <AddExpenseForm onClose={() => setShowExpenseForm(false)} onAdded={onRefresh} />}
+      {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} onAdded={onRefresh} />}
+      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={() => { setShowIncomeForm(false); onRefresh() }} />}
+      {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={() => { setEditingIncome(null); onRefresh() }} />}
       {showImport && (
         <ImportDialog
           defaultRecordType={isIncome ? 'income' : 'expense'}
@@ -565,124 +476,88 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
         />
       )}
 
-      {/* Clear confirmation dialog */}
-      <Dialog
-        open={showClearConfirm}
-        onClose={() => setShowClearConfirm(false)}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-      >
-        <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
-          {month ? `Clear ${formatMonthLabel(month)}?` : 'Clear all transactions?'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">
+      {/* Clear confirm */}
+      <Dialog open={showClearConfirm} onOpenChange={open => { if (!open) setShowClearConfirm(false) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{month ? `Clear ${formatMonthLabel(month)}?` : 'Clear all transactions?'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
             {month
               ? `This will permanently delete all expenses and income for ${formatMonthLabel(month)}. This cannot be undone.`
               : 'This will permanently delete all expenses and income records. This cannot be undone.'}
-          </Typography>
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowClearConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleClearAll}>
+              {month ? 'Delete Month' : 'Delete Everything'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="text" color="inherit" onClick={() => setShowClearConfirm(false)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={handleClearAll}>
-            {month ? 'Delete Month' : 'Delete Everything'}
-          </Button>
-        </DialogActions>
       </Dialog>
 
-      {/* Transaction detail modal (mobile) */}
-      <Dialog
-        open={!!detailItem}
-        onClose={() => setDetailItem(null)}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-      >
-        <DialogTitle sx={{ pb: 1 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              {detailItem?.name}
-            </Typography>
-            <IconButton size="small" onClick={() => setDetailItem(null)} sx={{ color: 'text.secondary' }}>
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Stack>
-        </DialogTitle>
-        <Divider sx={{ borderColor: C.border }} />
-        <DialogContent sx={{ pt: 2 }}>
-          <Stack gap={1.5}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="body2" color="text.secondary">Amount</Typography>
-              <Typography variant="body1" fontWeight={600}
-                sx={{ color: detailIsIncome ? INCOME_COLOR : 'text.primary' }}>
+      {/* Mobile detail */}
+      <Dialog open={!!detailItem} onOpenChange={open => { if (!open) setDetailItem(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{detailItem?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-1">
+            <div className="flex justify-between items-center">
+              <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Amount</span>
+              <span className="text-sm font-semibold"
+                style={{ color: detailIsIncome ? 'var(--income, green)' : 'var(--foreground)' }}>
                 ${detailItem?.amount?.toFixed(2)}
-              </Typography>
-            </Stack>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="body2" color="text.secondary">Type</Typography>
-              {detailIsIncome ? (
-                <Chip label="Income" variant="outlined" size="small"
-                  sx={{ color: INCOME_COLOR, borderColor: INCOME_COLOR, fontSize: '0.75rem', height: 22 }} />
-              ) : (
-                <Chip
-                  label={detailItem?.type}
-                  variant="outlined"
-                  size="small"
-                  sx={{
-                    color: typeMap[detailItem?.type]?.color || C.dimText,
-                    borderColor: typeMap[detailItem?.type]?.color || C.dimText,
-                    fontSize: '0.75rem',
-                    height: 22,
-                  }}
-                />
-              )}
-            </Stack>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="body2" color="text.secondary">Date</Typography>
-              <Typography variant="body2" color="text.primary">
-                {detailItem?.date ? formatDate(detailItem.date) : ''}
-              </Typography>
-            </Stack>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Type</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!detailIsIncome) { setDetailItem(null); handleTypeChange(detailItem.type) }
+                }}
+                className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent font-[inherit] transition-opacity duration-150"
+                style={{
+                  color: detailIsIncome ? 'var(--income)' : typeMap[detailItem?.type]?.color || 'var(--muted-foreground)',
+                  borderColor: detailIsIncome ? 'var(--income)' : typeMap[detailItem?.type]?.color || 'var(--muted-foreground)',
+                  cursor: detailIsIncome ? 'default' : 'pointer',
+                }}>
+                {detailIsIncome ? 'Income' : detailItem?.type}
+              </button>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Date</span>
+              <span className="text-sm">{detailItem?.date ? formatDate(detailItem.date) : ''}</span>
+            </div>
             {detailItem?.is_recurring === 1 && (
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="body2" color="text.secondary">Recurring</Typography>
-                <Stack direction="row" alignItems="center" gap={0.5}>
-                  <RepeatIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">Monthly</Typography>
-                </Stack>
-              </Stack>
+              <div className="flex justify-between items-center">
+                <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Recurring</span>
+                <div className="flex items-center gap-1.5">
+                  <Repeat size={13} style={{ color: 'var(--muted-foreground)' }} />
+                  <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Monthly</span>
+                </div>
+              </div>
             )}
-          </Stack>
-        </DialogContent>
-        <Divider sx={{ borderColor: C.border }} />
-        <DialogActions sx={{ px: 2, py: 1.5, justifyContent: 'space-between' }}>
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteOutlineIcon />}
-            onClick={() => {
+          </div>
+          <DialogFooter className="justify-between">
+            <Button variant="outline" className="text-red-500 border-red-400" onClick={() => {
               if (detailIsIncome) handleDeleteIncome(detailItem.id)
               else handleDeleteExpense(detailItem.id)
               setDetailItem(null)
-            }}
-          >
-            Delete
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<EditOutlinedIcon />}
-            onClick={() => {
+            }}>
+              <Trash2 size={14} className="mr-1" />Delete
+            </Button>
+            <Button onClick={() => {
               if (detailIsIncome) setEditingIncome(detailItem)
               else setEditingExpense(detailItem)
               setDetailItem(null)
-            }}
-            sx={detailIsIncome ? { bgcolor: INCOME_COLOR, '&:hover': { bgcolor: C.incomeButtonHover } } : {}}
-          >
-            Edit
-          </Button>
-        </DialogActions>
+            }}>
+              <Pencil size={14} className="mr-1" />Edit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
-    </Paper>
+    </Card>
   )
 }

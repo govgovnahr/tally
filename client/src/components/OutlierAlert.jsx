@@ -1,48 +1,38 @@
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
-import ButtonBase from '@mui/material/ButtonBase'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import { useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { useC } from '../colors'
 
 export default function OutlierAlert({ count, onSeeDetails }) {
   const C = useC()
+  const [btnHovered, setBtnHovered] = useState(false)
+
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 1,
-        bgcolor: `${C.atRisk}18`,
+    <div
+      style={{
+        backgroundColor: `${C.atRisk}18`,
         border: `1px solid ${C.atRisk}40`,
-        borderRadius: 2,
-        px: 2,
-        py: 1.25,
-        mb: 2,
       }}
+      className="flex items-center justify-between flex-wrap gap-2 rounded-2xl px-4 py-3 mb-4"
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <WarningAmberIcon sx={{ fontSize: 18, color: C.atRisk }} />
-        <Typography variant="body2" sx={{ fontWeight: 600, color: C.atRisk }}>
+      <div className="flex items-center gap-2">
+        <TriangleAlert size={18} style={{ color: C.atRisk }} />
+        <span className="text-sm font-semibold" style={{ color: C.atRisk }}>
           {count} unusual {count === 1 ? 'expense' : 'expenses'} detected this month
-        </Typography>
-      </Box>
-      <ButtonBase
+        </span>
+      </div>
+      <button
+        type="button"
         onClick={onSeeDetails}
-        sx={{
-          fontSize: '0.8rem',
-          fontWeight: 600,
+        onMouseEnter={() => setBtnHovered(true)}
+        onMouseLeave={() => setBtnHovered(false)}
+        style={{
           color: C.atRisk,
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-          px: 1.5,
-          py: 0.5,
-          borderRadius: 1,
-          '&:hover': { bgcolor: `${C.atRisk}18` },
+          backgroundColor: btnHovered ? `${C.atRisk}18` : 'transparent',
         }}
+        className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors duration-150 cursor-pointer border-none font-[inherit]"
       >
         See details →
-      </ButtonBase>
-    </Box>
+      </button>
+    </div>
   )
 }

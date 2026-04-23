@@ -1,6 +1,4 @@
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
-import Stack from '@mui/material/Stack'
+import { useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
@@ -12,23 +10,27 @@ function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
-    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: 1, px: 1.5, py: 1 }}>
-      <Typography variant="body2" sx={{ fontWeight: 600 }}>{d.name}</Typography>
-      <Typography variant="caption" color="text.secondary">{fmt(d.value)} · {d.pct}%</Typography>
-    </Box>
+    <div
+      className="rounded-lg px-3 py-2"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+    >
+      <p className="text-sm font-semibold">{d.name}</p>
+      <span className="text-xs" style={{ color: C.muted }}>{fmt(d.value)} · {d.pct}%</span>
+    </div>
   )
 }
 
 export default function SpendingDonut({ summary, activeType, onTypeChange }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
+  const [hoveredName, setHoveredName] = useState(null)
 
   const total = summary.reduce((s, x) => s + x.total, 0)
   if (!summary.length || total === 0) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 140 }}>
-        <Typography variant="body2" color="text.secondary">No spending this month</Typography>
-      </Box>
+      <div className="flex items-center justify-center h-[140px]">
+        <p className="text-sm" style={{ color: C.muted }}>No spending this month</p>
+      </div>
     )
   }
 
@@ -48,9 +50,9 @@ export default function SpendingDonut({ summary, activeType, onTypeChange }) {
   }
 
   return (
-    <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'center', sm: 'center' }} gap={2.5}>
+    <div className="flex flex-col sm:flex-row items-center gap-6">
       {/* Donut */}
-      <Box sx={{ position: 'relative', width: 160, height: 160, flexShrink: 0 }}>
+      <div className="relative w-40 h-40 flex-shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -78,50 +80,50 @@ export default function SpendingDonut({ summary, activeType, onTypeChange }) {
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
         </ResponsiveContainer>
-        <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', pointerEvents: 'none' }}>
-          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.2 }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+          <p className="text-sm font-bold leading-tight" style={{ fontSize: '0.9rem' }}>
             {selected ? fmt(data.find(d => d.name === selected)?.value ?? 0) : fmt(total)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+          </p>
+          <span className="text-[10px] leading-tight" style={{ color: C.muted, fontSize: '0.65rem' }}>
             {selected ? selected : 'total'}
-          </Typography>
-        </Box>
-      </Box>
+          </span>
+        </div>
+      </div>
 
       {/* Legend */}
-      <Stack gap={0.6} sx={{ flex: 1, minWidth: 0, width: { xs: '100%', sm: 'auto' } }}>
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0 w-full sm:w-auto">
         {data.map((d, i) => {
           const isActive = selected === d.name
+          const isHovered = hoveredName === d.name
           return (
-            <Stack
+            <div
               key={i}
-              direction="row"
-              alignItems="center"
-              gap={1}
               onClick={() => handleClick(d.name)}
-              sx={{
-                minWidth: 0,
-                cursor: 'pointer',
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 1,
+              onMouseEnter={() => setHoveredName(d.name)}
+              onMouseLeave={() => setHoveredName(null)}
+              style={{
                 opacity: selected && !isActive ? 0.45 : 1,
-                bgcolor: isActive ? `${d.color}18` : 'transparent',
-                transition: 'opacity 0.15s, background-color 0.15s',
-                '&:hover': { bgcolor: `${d.color}14` },
+                backgroundColor: isActive ? `${d.color}18` : isHovered ? `${d.color}14` : 'transparent',
               }}
+              className="flex items-center gap-2 min-w-0 cursor-pointer px-1.5 py-0.5 rounded-lg transition-all duration-150"
             >
-              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: d.color, flexShrink: 0 }} />
-              <Typography variant="caption" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'text.secondary', fontWeight: isActive ? 600 : 400 }}>
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+              <span
+                className="flex-1 text-xs truncate"
+                style={{ color: C.muted, fontWeight: isActive ? 600 : 400 }}
+              >
                 {d.name}
-              </Typography>
-              <Typography variant="caption" sx={{ fontWeight: 600, flexShrink: 0, color: isActive ? d.color : 'text.primary' }}>
+              </span>
+              <span
+                className="text-xs font-semibold flex-shrink-0"
+                style={{ color: isActive ? d.color : C.warmText }}
+              >
                 {d.pct}%
-              </Typography>
-            </Stack>
+              </span>
+            </div>
           )
         })}
-      </Stack>
-    </Stack>
+      </div>
+    </div>
   )
 }

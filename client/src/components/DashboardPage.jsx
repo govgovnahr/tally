@@ -1,13 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
-import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import Typography from '@mui/material/Typography'
-import Stack from '@mui/material/Stack'
-import LinearProgress from '@mui/material/LinearProgress'
-import Divider from '@mui/material/Divider'
-import Chip from '@mui/material/Chip'
+import { useState, useEffect, useCallback, startTransition } from 'react'
 import api from '../api.js'
 import { useC } from '../colors'
+import { Card } from 'glasscn-ui'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import MonthSelector from './MonthSelector.jsx'
 import MonthlyTrendsChart from './MonthlyTrendsChart.jsx'
@@ -19,56 +13,33 @@ import SavingsGoalsMini from './SavingsGoalsMini.jsx'
 
 function fmt(n) { return `$${n.toFixed(2)}` }
 
-function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, icon, progress, progressColor }) {
+function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, progress, progressColor }) {
   const C = useC()
+  // TODO(human): Replace the outer div below with a glasscn-ui Card.
+  // Use: <Card variant="glass" blur="xl" className="rounded-xl p-3.5 sm:p-5">
+  // Remove backgroundColor and border from the style prop — Card handles those.
+  // Keep all inner content exactly as-is.
   return (
-    <Paper elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 2, p: { xs: 1.75, sm: 2.5 } }}>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.7rem', fontWeight: 600 }}
-      >
+    <Card variant="glass" blur="xl" className='rounded-xl p-3.5 sm:p-5' style={{ minHeight: '6rem' }}>
+      <p className="text-[11px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.muted }}>
         {label}
-      </Typography>
-      <Stack direction="row" alignItems="center" gap={0.5} mt={0.5}>
-        {icon && <Box sx={{ display: 'flex', alignItems: 'center' }}>{icon}</Box>}
-        <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2, color: color ?? 'text.primary' }}>
-          {value}
-        </Typography>
-      </Stack>
-      {subtitle && (
-        <Typography variant="caption" sx={{ color: subtitleColor ?? 'text.secondary', mt: 0.25, display: 'block' }}>
-          {subtitle}
-        </Typography>
-      )}
+      </p>
+      <p className="text-xl font-bold leading-tight" style={{ color: color ?? C.warmText }}>
+        {value}
+      </p>
+      <p className="text-sm mt-0.5" style={{ color: subtitleColor ?? C.muted, visibility: subtitle ? 'visible' : 'hidden' }}>
+        {subtitle ?? ' '}
+      </p>
       {progress != null && (
-        <LinearProgress
-          variant="determinate"
-          value={progress}
-          sx={{
-            height: 3,
-            borderRadius: 2,
-            mt: 1,
-            bgcolor: C.hoverStrong,
-            '& .MuiLinearProgress-bar': { bgcolor: progressColor ?? C.primary, borderRadius: 2 },
-          }}
-        />
+        <div className="h-[3px] rounded-full mt-2.5" style={{ backgroundColor: C.hoverStrong }}>
+          <div className="h-full rounded-full" style={{ width: `${progress}%`, backgroundColor: progressColor ?? C.primary }} />
+        </div>
       )}
-      {subtitle2 && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          {subtitle2}
-        </Typography>
-      )}
-    </Paper>
+      <p className="text-xs mt-1" style={{ color: C.muted, visibility: subtitle2 ? 'visible' : 'hidden' }}>
+        {subtitle2 ?? ' '}
+      </p>
+    </Card>
   )
-}
-
-const LABEL_SX = {
-  fontWeight: 600,
-  color: 'text.secondary',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  fontSize: '0.75rem',
 }
 
 export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey, onRefresh, onNavigate }) {
@@ -130,25 +101,24 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
       return (b.spent / (b.budget_limit || 1)) - (a.spent / (a.budget_limit || 1))
     })
 
-  const spentColor = totalBudget > 0 && totalSpent > totalBudget ? C.overBudget : 'text.primary'
+  const spentColor = totalBudget > 0 && totalSpent > totalBudget ? C.overBudget : C.warmText
   const netColor = net >= 0 ? C.primary : C.overBudget
-  const savingsColor = savingsRate == null ? 'text.secondary'
+  const savingsColor = savingsRate == null ? C.muted
     : savingsRate >= 10 ? C.primary
     : savingsRate > 0 ? C.atRisk
     : C.overBudget
   const budgetBarColor = totalSpent > totalBudget ? C.overBudget
     : totalBudget > 0 && totalSpent / totalBudget > 0.85 ? C.atRisk
     : C.primary
-  const rateColor = dailyRate == null || targetDailyRate == null ? 'text.secondary'
+  const rateColor = dailyRate == null || targetDailyRate == null ? C.muted
     : dailyRate >= targetDailyRate ? C.overBudget
-    : dailyRate < targetDailyRate ? C.primary
     : C.primary
 
   const activeGoals = goals.filter(g => !g.completed && !g.is_paused)
   const hasGoals = activeGoals.length > 0
 
-  const handleTypeChange = t => { setActiveType(t); setActiveMacro(null) }
-  const handleMacroChange = m => { setActiveMacro(m); setActiveType('All') }
+  const handleTypeChange = t => startTransition(() => { setActiveType(t); setActiveMacro(null) })
+  const handleMacroChange = m => startTransition(() => { setActiveMacro(m); setActiveType('All') })
 
   const spentSubtitle = totalBudget > 0 ? `of ${fmt(totalBudget)} budget` : undefined
   const spentProjected = isCurrentMonth && totalProjected != null
@@ -156,8 +126,8 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
     : null
 
   return (
-    <Box>
-      <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} refreshKey={refreshKey} />
+    <div>
+      <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} refreshKey={refreshKey} big={true} />
 
       {outliers.length > 0 && (
         <OutlierAlert
@@ -167,7 +137,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
       )}
 
       {/* KPI Row */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <KPICard
           label="Spent"
           value={fmt(totalSpent)}
@@ -180,7 +150,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
         <KPICard
           label="Income / Net"
           value={fmt(totalIncome)}
-          color={totalIncome > 0 ? C.income : 'text.secondary'}
+          color={totalIncome > 0 ? C.income : C.muted}
           subtitle={totalIncome > 0 ? `Net ${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}` : 'add income to track'}
           subtitleColor={totalIncome > 0 ? netColor : undefined}
         />
@@ -188,6 +158,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
           label="Burn Rate"
           value={dailyRate != null ? `$${dailyRate.toFixed(2)}/day` : '—'}
           subtitle={targetDailyRate != null ? `Target: $${targetDailyRate.toFixed(2)}/day` : '-'}
+          subtitleColor={budgetBarColor}
           color={rateColor}
         />
         <KPICard
@@ -196,37 +167,43 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
           subtitle={savingsRate != null ? 'of income saved' : 'add income to track'}
           color={savingsColor}
         />
-      </Box>
+      </div>
 
       {/* Donut + Budget Status */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 3, alignItems: 'start' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 items-start">
         {/* Left: Spending Donut */}
-        <Paper elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 2, p: 2.5 }}>
-          <Typography variant="body2" sx={{ ...LABEL_SX, mb: 2 }}>Spending Breakdown</Typography>
+        <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-widest mb-4" style={{ color: C.muted }}>
+            Spending Breakdown
+          </p>
           <SpendingDonut
             summary={summary}
             activeType={activeType}
             onTypeChange={handleTypeChange}
           />
-        </Paper>
+        </Card>
 
-        {/* Right: [Goals if any] + Budget Status */}
-        <Paper elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 2, p: 2.5 }}>
+        {/* Right: Goals + Budget Status */}
+        <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-5">
           {hasGoals && (
             <>
-              <Typography variant="body2" sx={{ ...LABEL_SX, mb: 2 }}>Savings Goals</Typography>
+              <p className="text-[11px] font-semibold uppercase tracking-widest mb-4" style={{ color: C.muted }}>
+                Savings Goals
+              </p>
               <SavingsGoalsMini goals={goals} onNavigate={onNavigate} />
-              <Divider sx={{ borderColor: C.hoverStrong, my: 2 }} />
+              <div className="h-px my-4" style={{ backgroundColor: C.hoverStrong }} />
             </>
           )}
 
-          <Typography variant="body2" sx={{ ...LABEL_SX, mb: 1.5 }}>{isCurrentMonth ? 'Needs Attention' : 'Over Budget'}</Typography>
+          <p className="text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: C.muted }}>
+            {isCurrentMonth ? 'Needs Attention' : 'Over Budget'}
+          </p>
           {needsAttention.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <p className="text-sm" style={{ color: C.muted }}>
               {pacingCats.length === 0 ? 'No budget data yet.' : 'All categories on track.'}
-            </Typography>
+            </p>
           ) : (
-            <Stack gap={1.25}>
+            <div className="flex flex-col gap-4">
               {needsAttention.map(cat => {
                 const limit = cat.budget_limit ?? 0
                 const spent = cat.spent ?? 0
@@ -240,56 +217,41 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
                   : 'proj. over'
 
                 return (
-                  <Box key={cat.type}>
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.4}>
-                      <Stack direction="row" alignItems="center" gap={0.75} sx={{ minWidth: 0, flex: 1 }}>
-                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: catColor, flexShrink: 0 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {cat.type}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0, ml: 1 }}>
-                        <Chip
-                          label={statusLabel}
-                          size="small"
-                          sx={{
-                            height: 18,
-                            fontSize: '0.68rem',
-                            fontWeight: 600,
-                            bgcolor: barColor,
-                            color: C.surface,
-                            '& .MuiChip-label': { px: 0.75 },
-                          }}
-                        />
-                        <Typography variant="caption" color="text.secondary">
+                  <div key={cat.type}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />
+                        <span className="text-sm font-medium truncate" style={{ color: C.warmText }}>{cat.type}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <span
+                          className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: barColor, color: '#fff' }}
+                        >
+                          {statusLabel}
+                        </span>
+                        <span className="text-xs" style={{ color: C.muted }}>
                           ${spent.toFixed(0)}{limit > 0 ? ` / $${limit.toFixed(0)}` : ''}
-                        </Typography>
-                      </Stack>
-                    </Stack>
+                        </span>
+                      </div>
+                    </div>
                     {pct !== null && (
-                      <LinearProgress
-                        variant="determinate"
-                        value={pct}
-                        sx={{
-                          height: 3,
-                          borderRadius: 2,
-                          bgcolor: C.hoverStrong,
-                          '& .MuiLinearProgress-bar': { bgcolor: barColor, borderRadius: 2 },
-                        }}
-                      />
+                      <div className="h-[3px] rounded-full" style={{ backgroundColor: C.hoverStrong }}>
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                      </div>
                     )}
                     {isCurrentMonth && cat.projected_spend != null && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
+                      <p className="text-xs mt-0.5" style={{ color: C.muted }}>
                         → {fmt(cat.projected_spend)} projected
-                      </Typography>
+                      </p>
                     )}
-                  </Box>
+                  </div>
                 )
               })}
-            </Stack>
+            </div>
           )}
-        </Paper>
-      </Box>
+        </Card>
+      </div>
 
       {/* Category detail — collapsed by default */}
       <SummaryBar
@@ -323,7 +285,6 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
         activeMacro={activeMacro}
         onMacroChange={handleMacroChange}
       />
-
-    </Box>
+    </div>
   )
 }

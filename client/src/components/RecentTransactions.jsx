@@ -1,7 +1,3 @@
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
-import Stack from '@mui/material/Stack'
-import ButtonBase from '@mui/material/ButtonBase'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
 
@@ -15,50 +11,38 @@ export default function RecentTransactions({ transactions, onNavigate }) {
   const { typeMap } = useExpenseTypes()
 
   if (!transactions.length) {
-    return <Typography variant="body2" color="text.secondary">No transactions this month.</Typography>
+    return <p className="text-sm" style={{ color: C.muted }}>No transactions this month.</p>
   }
 
   return (
-    <Stack>
+    <div className="flex flex-col">
       {transactions.map(t => {
-        const color = typeMap[t.expense_type]?.color ?? C.dimText
+        const color = C.adaptColor(typeMap[t.expense_type]?.color ?? C.dimText)
         return (
-          <Stack
+          <div
             key={t.id}
-            direction="row"
-            alignItems="center"
-            gap={1.5}
-            sx={{ py: 0.9, borderBottom: `1px solid ${C.border}`, '&:last-child': { borderBottom: 'none' } }}
+            className="flex items-center gap-3 py-2"
+            style={{ borderBottom: `1px solid ${C.border}` }}
           >
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
-                {t.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate leading-tight">{t.name}</p>
+              <span className="text-xs leading-tight" style={{ color: C.muted }}>
                 {shortDate(t.date)} · {t.expense_type}
-              </Typography>
-            </Box>
-            <Typography variant="body2" sx={{ fontWeight: 600, flexShrink: 0 }}>
-              ${t.amount.toFixed(2)}
-            </Typography>
-          </Stack>
+              </span>
+            </div>
+            <span className="text-sm font-semibold flex-shrink-0">${t.amount.toFixed(2)}</span>
+          </div>
         )
       })}
-      <ButtonBase
+      <button
+        type="button"
         onClick={() => onNavigate('all-expenses')}
-        sx={{
-          alignSelf: 'flex-start',
-          mt: 1,
-          fontSize: '0.8rem',
-          fontWeight: 600,
-          color: C.primary,
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-          '&:hover': { textDecoration: 'underline' },
-        }}
+        className="self-start mt-2 text-xs font-semibold bg-transparent border-none cursor-pointer font-[inherit] hover:underline"
+        style={{ color: C.primary }}
       >
         View all →
-      </ButtonBase>
-    </Stack>
+      </button>
+    </div>
   )
 }

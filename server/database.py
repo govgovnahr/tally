@@ -1,3 +1,4 @@
+import math
 import sqlite3
 import uuid
 import os
@@ -168,6 +169,11 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        cursor.execute("ALTER TABLE incomes ADD COLUMN credit_type TEXT")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -259,6 +265,72 @@ def seed_income_recurring_forward(name: str, amount: float, source_month: str):
     conn.close()
 
 
+def _outlier_filtered_totals(conn, months_list: list[str], by_type: bool = False):
+    """Fetch expenses for months_list, exclude z≥1.5 outliers per category (needs ≥3), return sums.
+
+    by_type=False: returns {month: total_spent}
+    by_type=True:  returns {type: {month: total_spent}}
+    """
+    if not months_list:
+        return {}
+    placeholders = ",".join("?" * len(months_list))
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT id, type, amount, strftime('%Y-%m', date) as mo "
+        f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders})",
+        months_list,
+    )
+    rows = cursor.fetchall()
+
+    # Compute per-category stats across all fetched rows
+    cat_amounts: dict[str, list[float]] = {}
+    for r in rows:
+        cat_amounts.setdefault(r["type"], []).append(r["amount"])
+
+    cat_stats: dict[str, tuple[float, float]] = {}
+    for t, amounts in cat_amounts.items():
+        if len(amounts) < 3:
+            continue
+        mean = sum(amounts) / len(amounts)
+        std = math.sqrt(sum((a - mean) ** 2 for a in amounts) / len(amounts))
+        cat_stats[t] = (mean, std)
+
+    # Fetch income credits for this period
+    credit_rows = cursor.execute(
+        f"SELECT credit_type, strftime('%Y-%m', date) as mo, SUM(amount) as total "
+        f"FROM incomes WHERE credit_type IS NOT NULL "
+        f"AND strftime('%Y-%m', date) IN ({placeholders}) "
+        f"GROUP BY credit_type, mo",
+        months_list,
+    ).fetchall()
+
+    # Accumulate filtered sums
+    if by_type:
+        result: dict = {}
+        for r in rows:
+            stats = cat_stats.get(r["type"])
+            if stats and stats[1] > 0 and abs(r["amount"] - stats[0]) / stats[1] >= 1.5:
+                continue
+            result.setdefault(r["type"], {}).setdefault(r["mo"], 0.0)
+            result[r["type"]][r["mo"]] += r["amount"]
+        for cr in credit_rows:
+            t, mo = cr["credit_type"], cr["mo"]
+            if t in result and mo in result[t]:
+                result[t][mo] = max(0.0, result[t][mo] - cr["total"])
+        return result
+    else:
+        totals: dict[str, float] = {}
+        for r in rows:
+            stats = cat_stats.get(r["type"])
+            if stats and stats[1] > 0 and abs(r["amount"] - stats[0]) / stats[1] >= 1.5:
+                continue
+            totals[r["mo"]] = totals.get(r["mo"], 0.0) + r["amount"]
+        for cr in credit_rows:
+            mo = cr["mo"]
+            totals[mo] = max(0.0, totals.get(mo, 0.0) - cr["total"])
+        return totals
+
+
 def get_avg_monthly_expenses(conn, months: int = 3) -> float:
     """Average monthly expenses over last N complete months (excludes current month)."""
     today = date.today()
@@ -272,14 +344,7 @@ def get_avg_monthly_expenses(conn, months: int = 3) -> float:
         past_months.append(f"{y}-{m:02d}")
     if not past_months:
         return 0.0
-    placeholders = ",".join("?" * len(past_months))
-    cursor = conn.cursor()
-    cursor.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount),0) as total "
-        f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
-        past_months,
-    )
-    expense_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
+    expense_by_month = _outlier_filtered_totals(conn, past_months, by_type=False)
     totals = [expense_by_month.get(m, 0.0) for m in past_months]
     return round(sum(totals) / len(totals), 2)
 
@@ -304,15 +369,9 @@ def compute_budget_pacing(conn, month: str, lookback_months: int = 3) -> list:
     is_current = month == cur_month
     days_elapsed = today.day if is_current else days_in_month
 
-    cursor = conn.cursor()
-
-    # Actual spending in the target month
-    cursor.execute(
-        "SELECT type, COALESCE(SUM(amount), 0) as spent "
-        "FROM expenses WHERE strftime('%Y-%m', date) = ? GROUP BY type",
-        (month,),
-    )
-    month_spending = {row["type"]: round(row["spent"], 2) for row in cursor.fetchall()}
+    # Actual spending in the target month (outlier-filtered)
+    raw_month = _outlier_filtered_totals(conn, [month], by_type=True)
+    month_spending = {t: round(sum(mo_totals.values()), 2) for t, mo_totals in raw_month.items()}
 
     # Past months: no projection needed
     if not is_current:
@@ -333,16 +392,7 @@ def compute_budget_pacing(conn, month: str, lookback_months: int = 3) -> list:
 
     historical_daily: dict[str, float] = {}
     if past_months:
-        placeholders = ",".join("?" * len(past_months))
-        cursor.execute(
-            f"SELECT type, strftime('%Y-%m', date) as mo, COALESCE(SUM(amount), 0) as total "
-            f"FROM expenses WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY type, mo",
-            past_months,
-        )
-        by_type: dict[str, dict] = {}
-        for row in cursor.fetchall():
-            by_type.setdefault(row["type"], {})[row["mo"]] = row["total"]
-
+        by_type = _outlier_filtered_totals(conn, past_months, by_type=True)
         for t, month_totals in by_type.items():
             total_days = sum(calendar.monthrange(*map(int, mo.split("-")))[1] for mo in past_months)
             total_spent = sum(month_totals.get(mo, 0.0) for mo in past_months)

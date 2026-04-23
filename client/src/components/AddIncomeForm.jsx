@@ -1,17 +1,36 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useC } from '../colors'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import TextField from '@mui/material/TextField'
-import Button from '@mui/material/Button'
-import Alert from '@mui/material/Alert'
-import Stack from '@mui/material/Stack'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import api from '../api.js'
 import PolishedCheckbox from './PolishedCheckbox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
+
+function FieldGroup({ label, children }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-medium">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function ErrorMsg({ msg }) {
+  const C = useC()
+  if (!msg) return null
+  return (
+    <div
+      className="text-sm px-3 py-2 rounded-lg"
+      style={{ backgroundColor: `${C.overBudget}18`, border: `1px solid ${C.overBudget}40`, color: C.overBudget }}
+    >
+      {msg}
+    </div>
+  )
+}
 
 export default function AddIncomeForm({ onClose, onAdded, income }) {
   const C = useC()
@@ -22,8 +41,15 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
     date: income?.date ?? today(),
   })
   const [isRecurring, setIsRecurring] = useState(income?.is_recurring === 1)
+  const [creditEnabled, setCreditEnabled] = useState(Boolean(income?.credit_type))
+  const [creditType, setCreditType] = useState(income?.credit_type ?? '')
+  const [expenseTypes, setExpenseTypes] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/expense-types').then(r => setExpenseTypes(r.data)).catch(() => {})
+  }, [])
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
@@ -44,6 +70,7 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
         amount: parseFloat(form.amount),
         date: form.date,
         is_recurring: isRecurring ? 1 : 0,
+        credit_type: creditEnabled && creditType ? creditType : null,
       }
       const res = isEditing
         ? await api.put(`/incomes/${income.id}`, payload)
@@ -58,85 +85,83 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
   }
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      PaperProps={{
-        sx: {
-          bgcolor: 'background.paper',
-          border: `1px solid ${C.border}`,
-        },
-      }}
-    >
-      <DialogTitle sx={{ color: 'text.primary', fontWeight: 600 }}>
-        {isEditing ? 'Edit Income' : 'Add Income'}
-      </DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent sx={{ pt: 1 }}>
-          <Stack spacing={2.5}>
-            <TextField
+    <Dialog open onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? 'Edit Income' : 'Add Income'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <FieldGroup label="Source">
+            <Input
               name="name"
-              label="Source"
               placeholder="e.g. Salary, Freelance"
               value={form.name}
               onChange={handleChange}
               autoFocus
-              fullWidth
-              size="small"
-              variant="outlined"
             />
-            <TextField
+          </FieldGroup>
+          <FieldGroup label="Amount ($)">
+            <Input
               name="amount"
-              label="Amount ($)"
               type="number"
-              inputProps={{ min: '0.01', step: '0.01' }}
+              min="0.01"
+              step="0.01"
               placeholder="0.00"
               value={form.amount}
               onChange={handleChange}
-              fullWidth
-              size="small"
-              variant="outlined"
             />
-            <TextField
+          </FieldGroup>
+          <FieldGroup label="Date">
+            <Input
               name="date"
-              label="Date"
               type="date"
               value={form.date}
               onChange={handleChange}
-              fullWidth
-              size="small"
-              variant="outlined"
-              InputLabelProps={{ shrink: true }}
             />
-            <PolishedCheckbox
-              checked={isRecurring}
-              onChange={setIsRecurring}
-              label="Recurring monthly income"
-              accentColor={C.income}
-            />
-            {error && (
-              <Alert severity="error" sx={{ py: 0.5 }}>
-                {error}
-              </Alert>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="text" color="inherit" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={loading}
-            sx={{ bgcolor: C.income, '&:hover': { bgcolor: C.incomeButtonHover }, color: '#000' }}
+          </FieldGroup>
+          <PolishedCheckbox
+            checked={isRecurring}
+            onChange={setIsRecurring}
+            label="Recurring monthly income"
+            accentColor={C.income}
+          />
+          <PolishedCheckbox
+            checked={creditEnabled}
+            onChange={v => { setCreditEnabled(v); if (!v) setCreditType('') }}
+            label="Apply as spending credit"
+            accentColor={C.nearGoal}
+          />
+          <div
+            className="overflow-hidden transition-all duration-200"
+            style={{ maxHeight: creditEnabled ? '80px' : '0px' }}
           >
-            {loading ? (isEditing ? 'Saving…' : 'Adding…') : (isEditing ? 'Save Changes' : 'Add Income')}
-          </Button>
-        </DialogActions>
-      </form>
+            <FieldGroup label="Credit to category">
+              <select
+                value={creditType}
+                onChange={e => setCreditType(e.target.value)}
+                className="h-9 w-full rounded-lg border px-3 text-sm bg-transparent"
+                style={{ borderColor: C.borderLight, color: C.warmText }}
+              >
+                <option value="">Select category…</option>
+                {expenseTypes.map(t => (
+                  <option key={t.name} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+            </FieldGroup>
+          </div>
+          <ErrorMsg msg={error} />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              style={{ backgroundColor: C.income, color: '#000' }}
+            >
+              {loading ? (isEditing ? 'Saving…' : 'Adding…') : (isEditing ? 'Save Changes' : 'Add Income')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
     </Dialog>
   )
 }

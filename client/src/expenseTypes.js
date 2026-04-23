@@ -1,25 +1,43 @@
-import RestaurantIcon from '@mui/icons-material/Restaurant'
-import CommuteIcon from '@mui/icons-material/Commute'
-import HomeIcon from '@mui/icons-material/Home'
-import MovieIcon from '@mui/icons-material/Movie'
-import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
-import CategoryIcon from '@mui/icons-material/Category'
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
-import LocalCafeIcon from '@mui/icons-material/LocalCafe'
-import FlightIcon from '@mui/icons-material/Flight'
-import FitnessCenterIcon from '@mui/icons-material/FitnessCenter'
-import PetsIcon from '@mui/icons-material/Pets'
-import SchoolIcon from '@mui/icons-material/School'
-import WifiIcon from '@mui/icons-material/Wifi'
-import LocalGasStationIcon from '@mui/icons-material/LocalGasStation'
-import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid'
-import ChildCareIcon from '@mui/icons-material/ChildCare'
-import SavingsIcon from '@mui/icons-material/Savings'
-import BuildIcon from '@mui/icons-material/Build'
-import CardGiftcardIcon from '@mui/icons-material/CardGiftcard'
-import SportsEsportsIcon from '@mui/icons-material/SportsEsports'
+import React from 'react'
+import {
+  Utensils, Car, Home, Film, Hospital, LayoutGrid, ShoppingCart, Coffee,
+  Plane, Dumbbell, PawPrint, GraduationCap, Wifi, Fuel, Smartphone, Baby,
+  PiggyBank, Wrench, Gift, Gamepad2,
+} from 'lucide-react'
 
-// Icon key → MUI component. Keys match the `icon` field stored in the DB.
+// Shim: call sites use style={{ fontSize, color }} (MUI convention).
+// Lucide uses size + color props instead, so we translate here.
+function makeIcon(LucideIcon) {
+  return function IconWrapper({ style, ...props }) {
+    const size = style?.fontSize ?? 20
+    const color = style?.color
+    const { fontSize: _fs, color: _c, ...restStyle } = style ?? {}
+    return React.createElement(LucideIcon, { size, color, style: Object.keys(restStyle).length ? restStyle : undefined, ...props })
+  }
+}
+
+const RestaurantIcon      = makeIcon(Utensils)
+const CommuteIcon         = makeIcon(Car)
+const HomeIcon            = makeIcon(Home)
+const MovieIcon           = makeIcon(Film)
+const LocalHospitalIcon   = makeIcon(Hospital)
+const CategoryIcon        = makeIcon(LayoutGrid)
+const ShoppingCartIcon    = makeIcon(ShoppingCart)
+const LocalCafeIcon       = makeIcon(Coffee)
+const FlightIcon          = makeIcon(Plane)
+const FitnessCenterIcon   = makeIcon(Dumbbell)
+const PetsIcon            = makeIcon(PawPrint)
+const SchoolIcon          = makeIcon(GraduationCap)
+const WifiIcon            = makeIcon(Wifi)
+const LocalGasStationIcon = makeIcon(Fuel)
+const PhoneAndroidIcon    = makeIcon(Smartphone)
+const ChildCareIcon       = makeIcon(Baby)
+const SavingsIcon         = makeIcon(PiggyBank)
+const BuildIcon           = makeIcon(Wrench)
+const CardGiftcardIcon    = makeIcon(Gift)
+const SportsEsportsIcon   = makeIcon(Gamepad2)
+
+// Icon key → component. Keys match the `icon` field stored in the DB.
 export const ICON_REGISTRY = {
   Restaurant:      RestaurantIcon,
   Commute:         CommuteIcon,

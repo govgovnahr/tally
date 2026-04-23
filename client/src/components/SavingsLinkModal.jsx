@@ -1,29 +1,13 @@
 import { useState, useEffect } from 'react'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import Button from '@mui/material/Button'
-import Stack from '@mui/material/Stack'
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import TextField from '@mui/material/TextField'
-import Alert from '@mui/material/Alert'
-import Chip from '@mui/material/Chip'
-import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined'
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import { Sparkles, PiggyBank } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import api from '../api.js'
 import { useC } from '../colors'
-import { useMenuStyles } from '../menuStyles.js'
 
-// Returns the goal to auto-assign to:
-// 1. Lowest priority number among prioritized goals
-// 2. Otherwise first active goal (API returns by created_at ASC)
-// 3. null if no goals
 function getDefaultGoal(goals) {
   if (goals.length === 0) return null
   const prioritized = goals.filter(g => g.priority != null).sort((a, b) => a.priority - b.priority)
@@ -36,13 +20,21 @@ function autoLabel(defaultGoal) {
   return 'Auto-assigned · first active goal'
 }
 
-// expenses: [{id, name, amount, date}]
-// onClose: dismiss without saving
-// onDone: called after assignments are saved
+function ErrorMsg({ msg }) {
+  const C = useC()
+  if (!msg) return null
+  return (
+    <div
+      className="text-sm px-3 py-2 rounded-lg mt-3"
+      style={{ backgroundColor: `${C.overBudget}18`, border: `1px solid ${C.overBudget}40`, color: C.overBudget }}
+    >
+      {msg}
+    </div>
+  )
+}
+
 export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
   const C = useC()
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
-  const PRIMARY = C.primary
   const [goals, setGoals] = useState([])
   const [defaultGoal, setDefaultGoal] = useState(null)
   const [assignments, setAssignments] = useState({})
@@ -73,6 +65,7 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
 
   function handleSelectChange(expId, val) {
     if (val === 'new') patch(expId, { mode: 'new', goalId: '', auto: false })
+    else if (val === 'skip') patch(expId, { mode: 'skip', goalId: '', auto: false })
     else patch(expId, { mode: 'existing', goalId: val, auto: false })
   }
 
@@ -114,127 +107,110 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
     }
   }
 
-  const activeCount = Object.values(assignments).filter(a => a.mode !== 'skip').length
-
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-    >
-      <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
-        Assign Savings Transactions
-      </DialogTitle>
-      <DialogContent>
-        {defaultGoal ? (
-          <Alert
-            icon={<AutoAwesomeIcon fontSize="small" />}
-            severity="info"
-            sx={{ mb: 2, '& .MuiAlert-message': { fontSize: '0.8rem' } }}
-          >
-            Pre-assigned to <strong>{defaultGoal.name}</strong>
-            {defaultGoal.priority != null
-              ? ` (priority #${defaultGoal.priority} goal)`
-              : goals.length === 1 ? ' (your only active goal)' : ' (first active goal)'
-            }. Change or clear any below.
-          </Alert>
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {expenses.length === 1
-              ? 'This transaction was categorized as Savings. Assign it to a goal to track progress.'
-              : `${expenses.length} transactions were categorized as Savings. Assign each to a goal.`}
-          </Typography>
-        )}
+    <Dialog open={open} onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Assign Savings Transactions</DialogTitle>
+        </DialogHeader>
 
-        <Stack gap={1.5}>
-          {expenses.map(exp => {
-            const a = assignments[exp.id] ?? { mode: 'skip', goalId: '', newName: exp.name, newTarget: '', auto: false }
-            const selectValue = a.mode === 'skip' ? 'skip' : a.mode === 'new' ? 'new' : a.goalId
-            return (
-              <Box
-                key={exp.id}
-                sx={{
-                  border: `1px solid ${a.auto ? `${PRIMARY}40` : C.border}`,
-                  borderRadius: 1.5,
-                  p: 1.5,
-                  transition: 'border-color 0.15s',
-                }}
-              >
-                <Stack direction="row" alignItems="center" gap={0.75} mb={1.25}>
-                  <SavingsOutlinedIcon sx={{ fontSize: 15, color: PRIMARY }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{exp.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto', whiteSpace: 'nowrap' }}>
-                    ${exp.amount.toFixed(2)} · {exp.date}
-                  </Typography>
-                </Stack>
+        <div className="flex flex-col gap-4">
+          {defaultGoal ? (
+            <div
+              className="flex items-start gap-2 text-sm px-3 py-2.5 rounded-lg"
+              style={{ backgroundColor: `${C.primary}12`, border: `1px solid ${C.primary}30` }}
+            >
+              <Sparkles size={15} className="flex-shrink-0 mt-0.5" style={{ color: C.primary }} />
+              <span style={{ color: C.warmText }}>
+                Pre-assigned to <strong>{defaultGoal.name}</strong>
+                {defaultGoal.priority != null
+                  ? ` (priority #${defaultGoal.priority} goal)`
+                  : goals.length === 1 ? ' (your only active goal)' : ' (first active goal)'
+                }. Change or clear any below.
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: C.muted }}>
+              {expenses.length === 1
+                ? 'This transaction was categorized as Savings. Assign it to a goal to track progress.'
+                : `${expenses.length} transactions were categorized as Savings. Assign each to a goal.`}
+            </p>
+          )}
 
-                <FormControl size="small" fullWidth>
-                  <InputLabel>Assign to goal</InputLabel>
-                  <Select
+          <div className="flex flex-col gap-3">
+            {expenses.map(exp => {
+              const a = assignments[exp.id] ?? { mode: 'skip', goalId: '', newName: exp.name, newTarget: '', auto: false }
+              const selectValue = a.mode === 'skip' ? 'skip' : a.mode === 'new' ? 'new' : String(a.goalId)
+              return (
+                <div
+                  key={exp.id}
+                  className="rounded-xl p-3 transition-colors duration-150"
+                  style={{
+                    border: `1px solid ${a.auto ? `${C.primary}40` : C.border}`,
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <PiggyBank size={15} style={{ color: C.primary }} />
+                    <span className="text-sm font-medium">{exp.name}</span>
+                    <span className="text-xs ml-auto whitespace-nowrap" style={{ color: C.muted }}>
+                      ${exp.amount.toFixed(2)} · {exp.date}
+                    </span>
+                  </div>
+
+                  <select
                     value={selectValue}
-                    label="Assign to goal"
                     onChange={e => handleSelectChange(exp.id, e.target.value)}
-                    {...DROPDOWN_MENU_PROPS}
+                    className="h-9 w-full rounded-lg border px-3 text-sm bg-transparent"
+                    style={{ borderColor: C.borderLight, color: C.warmText }}
                   >
                     {goals.map(g => (
-                      <MenuItem key={g.id} value={g.id} sx={DROPDOWN_ITEM_SX}>{g.name}</MenuItem>
+                      <option key={g.id} value={String(g.id)}>{g.name}</option>
                     ))}
-                    <MenuItem value="new" sx={DROPDOWN_ITEM_SX}>+ Create new goal…</MenuItem>
-                  </Select>
-                </FormControl>
+                    <option value="new">+ Create new goal…</option>
+                    <option value="skip">Skip</option>
+                  </select>
 
-                {a.auto && (
-                  <Stack direction="row" alignItems="center" gap={0.5} mt={0.75}>
-                    <AutoAwesomeIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
-                    <Typography variant="caption" color="text.disabled">
-                      {autoLabel(defaultGoal)}
-                    </Typography>
-                  </Stack>
-                )}
+                  {a.auto && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Sparkles size={11} style={{ color: C.dimText }} />
+                      <span className="text-xs" style={{ color: C.dimText }}>{autoLabel(defaultGoal)}</span>
+                    </div>
+                  )}
 
-                {a.mode === 'new' && (
-                  <Stack direction="row" gap={1.5} mt={1.25}>
-                    <TextField
-                      label="Goal name"
-                      value={a.newName}
-                      onChange={e => patch(exp.id, { newName: e.target.value })}
-                      size="small"
-                      sx={{ flexGrow: 1 }}
-                    />
-                    <TextField
-                      label="Target ($)"
-                      value={a.newTarget}
-                      onChange={e => patch(exp.id, { newTarget: e.target.value })}
-                      type="number"
-                      size="small"
-                      sx={{ width: 120 }}
-                      slotProps={{ input: { inputProps: { min: 0, step: 0.01 } } }}
-                    />
-                  </Stack>
-                )}
-              </Box>
-            )
-          })}
-        </Stack>
+                  {a.mode === 'new' && (
+                    <div className="flex gap-3 mt-3">
+                      <Input
+                        placeholder="Goal name"
+                        value={a.newName}
+                        onChange={e => patch(exp.id, { newName: e.target.value })}
+                        className="flex-1"
+                      />
+                      <Input
+                        placeholder="Target ($)"
+                        value={a.newTarget}
+                        onChange={e => patch(exp.id, { newTarget: e.target.value })}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="w-28"
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
 
-        {error && <Alert severity="error" sx={{ mt: 1.5, py: 0.5 }}>{error}</Alert>}
+          <ErrorMsg msg={error} />
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleConfirm} disabled={saving}>
+            {saving ? 'Saving…' : `Assign ${expenses.length}`}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button variant="text" color="inherit" onClick={onClose} disabled={saving}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleConfirm}
-          disabled={saving}
-          sx={{ bgcolor: PRIMARY, '&:hover': { bgcolor: C.primaryHover } }}
-        >
-          {saving ? 'Saving…' : `Assign ${expenses.length}`}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }

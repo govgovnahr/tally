@@ -70,10 +70,12 @@ def get_pacing(month: str = Query(...), lookback_months: int = Query(3)):
         elif projected is None:
             # past month — no projection, compare actual spend
             status = "over_budget" if row["spent"] > budget_limit else "on_track"
-        elif projected > budget_limit:
+        elif projected > budget_limit * 1.05:
             status = "over_budget"
-        elif projected > budget_limit * 0.9:
+        elif projected > budget_limit * 1.01:
             status = "at_risk"
+        elif projected < budget_limit * 0.90:
+            status = "well_under"
         else:
             status = "on_track"
 
@@ -100,7 +102,7 @@ def get_pacing(month: str = Query(...), lookback_months: int = Query(3)):
 
 
 @router.get("/analysis/category-stats")
-def get_category_stats(months: int = Query(6)):
+def get_category_stats(months: int = Query(6), exclude_outliers: bool = Query(False)):
     """Per-category: avg monthly spend, over-budget frequency, trend, monthly breakdown."""
     month_list = _months_range(months)
     conn = get_connection()
@@ -112,22 +114,50 @@ def get_category_stats(months: int = Query(6)):
         f"GROUP BY month, type",
         month_list,
     ).fetchall()
+    credit_rows = conn.execute(
+        f"SELECT strftime('%Y-%m', date) as month, credit_type as type, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE credit_type IS NOT NULL AND strftime('%Y-%m', date) IN ({placeholders}) "
+        f"GROUP BY month, credit_type",
+        month_list,
+    ).fetchall()
     budget_map = {r["type"]: r["monthly_limit"]
                   for r in conn.execute("SELECT type, monthly_limit FROM budgets").fetchall()}
     conn.close()
 
-    by_type = {}
+    # Raw monthly totals (used for last_month, trend, over-budget stats, and monthly breakdown)
+    by_type: dict[str, dict] = {}
     for row in rows:
         t = row["type"]
-        if t not in by_type:
-            by_type[t] = {}
+        by_type.setdefault(t, {})
         by_type[t][row["month"]] = round(row["total"], 2)
+    for cr in credit_rows:
+        t, mo = cr["type"], cr["month"]
+        if t in by_type and mo in by_type[t]:
+            by_type[t][mo] = round(max(0.0, by_type[t][mo] - cr["total"]), 2)
+
+    # For avg_monthly: optionally exclude months whose total is a z≥1.5 outlier per category
+    if exclude_outliers:
+        avg_by_type: dict[str, dict] = {}
+        for t, month_totals in by_type.items():
+            non_zero = {mo: v for mo, v in month_totals.items() if v > 0}
+            if len(non_zero) >= 3:
+                vals = list(non_zero.values())
+                mean = sum(vals) / len(vals)
+                std = math.sqrt(sum((v - mean) ** 2 for v in vals) / len(vals))
+                if std > 0:
+                    avg_by_type[t] = {mo: v for mo, v in non_zero.items()
+                                      if abs(v - mean) / std < 1.5}
+                    continue
+            avg_by_type[t] = month_totals
+    else:
+        avg_by_type = by_type
 
     result = []
     for t, month_totals in by_type.items():
         monthly_vals = [month_totals.get(m, 0.0) for m in month_list]
-        non_zero = [v for v in monthly_vals if v > 0]
-        avg = round(sum(non_zero) / len(non_zero), 2) if non_zero else 0.0
+        avg_vals = [avg_by_type.get(t, {}).get(m, 0.0) for m in month_list]
+        non_zero_avg = [v for v in avg_vals if v > 0]
+        avg = round(sum(non_zero_avg) / len(non_zero_avg), 2) if non_zero_avg else 0.0
         budget_limit = budget_map.get(t)
 
         months_over = 0
@@ -233,10 +263,19 @@ def get_month_over_month(months: int = Query(6)):
 
     income_rows = conn.execute(
         f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"FROM incomes WHERE credit_type IS NULL AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
         month_list,
     ).fetchall()
     income_by_month = {r["month"]: round(r["total"], 2) for r in income_rows}
+
+    credit_rows = conn.execute(
+        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE credit_type IS NOT NULL AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        month_list,
+    ).fetchall()
+    for cr in credit_rows:
+        mo = cr["month"]
+        expense_by_month[mo] = round(max(0.0, expense_by_month.get(mo, 0.0) - cr["total"]), 2)
     conn.close()
 
     result = []

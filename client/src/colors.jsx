@@ -1,6 +1,6 @@
 // ─── Raw palette ──────────────────────────────────────────────────────────────
 // All hex values live here. Nothing else in the app should hard-code a hex.
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect } from 'react'
 
 export const palette = {
   // Brand accent colors (shared across modes)
@@ -27,12 +27,64 @@ export const palette = {
 
   // Light mode surfaces
   light: {
-    bg:            '#eef5ee',
-    paper:         '#ffffff',
-    elevated:      '#e6f0e6',
+    bg:            '#c0d8c0',
+    paper:         '#dae7da',
+    elevated:      '#d0e0d0',
     text:          '#111827',
     textSecondary: '#64748b',
   },
+}
+
+// ─── Color adaptation utilities ───────────────────────────────────────────────
+
+function hue2rgb(p, q, t) {
+  if (t < 0) t += 1
+  if (t > 1) t -= 1
+  if (t < 1/6) return p + (q - p) * 6 * t
+  if (t < 1/2) return q
+  if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
+  return p
+}
+
+function hexToHsl(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  let h = 0, s = 0, l = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break
+      case g: h = ((b - r) / d + 2) / 6; break
+      case b: h = ((r - g) / d + 4) / 6; break
+    }
+  }
+  return [h * 360, s * 100, l * 100]
+}
+
+function hslToHex(h, s, l) {
+  h /= 360; s /= 100; l /= 100
+  let r, g, b
+  if (s === 0) {
+    r = g = b = l
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+    const p = 2 * l - q
+    r = hue2rgb(p, q, h + 1/3)
+    g = hue2rgb(p, q, h)
+    b = hue2rgb(p, q, h - 1/3)
+  }
+  return '#' + [r, g, b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('')
+}
+
+// Darkens light colors for legibility on light backgrounds; identity on dark mode
+function darkenForLight(hex) {
+  if (!hex || !hex.startsWith('#') || hex.length < 7) return hex
+  const [h, s, l] = hexToHsl(hex)
+  if (l <= 52) return hex
+  return hslToHex(h, Math.min(s + 8, 85), 42)
 }
 
 // ─── Semantic token factories ─────────────────────────────────────────────────
@@ -48,6 +100,7 @@ function makeDarkC() {
 
     // Status
     onTrack:    palette.green,
+    nearGoal:   palette.teal,
     atRisk:     palette.amber,
     overBudget: palette.red,
     noBudget:   'rgba(228,232,240,0.12)',
@@ -80,21 +133,22 @@ function makeDarkC() {
     cardTintSelectedAlpha: '18',
     cardBorderAlpha:       '32',
 
-    // Surfaces & borders
-    surface:      palette.dark.paper,
-    surfaceAlt:   palette.dark.elevated,
-    subtleBg:     'rgba(228,232,240,0.03)',
-    border:       'rgba(228,232,240,0.09)',
-    borderSubtle: 'rgba(228,232,240,0.07)',
-    borderLight:  'rgba(228,232,240,0.11)',
-    borderMed:    'rgba(228,232,240,0.16)',
-    borderStrong: 'rgba(228,232,240,0.26)',
-    borderHover:  'rgba(228,232,240,0.32)',
+    // Surfaces & borders (rgba for glass effect)
+    surface:      'rgba(20,20,28,0.55)',
+    surfaceAlt:   'rgba(30,30,40,0.50)',
+    subtleBg:     'rgba(255,255,255,0.025)',
+    border:       'rgba(255,255,255,0.08)',
+    borderSubtle: 'rgba(255,255,255,0.06)',
+    borderLight:  'rgba(255,255,255,0.10)',
+    borderMed:    'rgba(255,255,255,0.14)',
+    borderStrong: 'rgba(255,255,255,0.22)',
+    borderHover:  'rgba(255,255,255,0.28)',
     refLine:      'rgba(228,232,240,0.16)',
     gridLine:     'rgba(228,232,240,0.05)',
     hover:        'rgba(228,232,240,0.04)',
     hoverMed:     'rgba(228,232,240,0.06)',
     hoverStrong:  'rgba(228,232,240,0.09)',
+    adaptColor:   hex => hex,
   }
 }
 
@@ -109,6 +163,7 @@ function makeLightC() {
 
     // Status
     onTrack:    '#16a34a',
+    nearGoal:   '#0d9488',
     atRisk:     '#ca8a04',
     overBudget: '#dc2626',
     noBudget:   'rgba(17,24,39,0.08)',
@@ -139,23 +194,24 @@ function makeLightC() {
     // Category card tint helpers (append to hex color: `${color}${cardTintAlpha}`)
     cardTintAlpha:         '0a',
     cardTintSelectedAlpha: '18',
-    cardBorderAlpha:       '00',
+    cardBorderAlpha:       '28',
 
-    // Surfaces & borders
-    surface:      '#ffffff',
-    surfaceAlt:   palette.light.elevated,
-    subtleBg:     'rgba(17,24,39,0.02)',
-    border:       'rgba(17,24,39,0.09)',
-    borderSubtle: 'rgba(17,24,39,0.07)',
-    borderLight:  'rgba(17,24,39,0.11)',
-    borderMed:    'rgba(17,24,39,0.15)',
-    borderStrong: 'rgba(17,24,39,0.22)',
-    borderHover:  'rgba(17,24,39,0.28)',
+    // Surfaces & borders (rgba for glass effect)
+    surface:      'rgba(255,255,255,0.52)',
+    surfaceAlt:   'rgba(230,242,230,0.45)',
+    subtleBg:     'rgba(255,255,255,0.20)',
+    border:       'rgba(255,255,255,0.72)',
+    borderSubtle: 'rgba(255,255,255,0.55)',
+    borderLight:  'rgba(255,255,255,0.72)',
+    borderMed:    'rgba(255,255,255,0.82)',
+    borderStrong: 'rgba(0,0,0,0.12)',
+    borderHover:  'rgba(0,0,0,0.18)',
     refLine:      'rgba(17,24,39,0.14)',
     gridLine:     'rgba(17,24,39,0.05)',
     hover:        'rgba(17,24,39,0.04)',
     hoverMed:     'rgba(17,24,39,0.06)',
     hoverStrong:  'rgba(17,24,39,0.09)',
+    adaptColor:   darkenForLight,
   }
 }
 
@@ -165,6 +221,11 @@ const ColorsContext = createContext(makeDarkC())
 
 export function ColorsProvider({ mode, children }) {
   const value = mode === 'light' ? makeLightC() : makeDarkC()
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', mode === 'dark')
+  }, [mode])
+
   return <ColorsContext.Provider value={value}>{children}</ColorsContext.Provider>
 }
 
@@ -172,7 +233,7 @@ export function useC() {
   return useContext(ColorsContext)
 }
 
-// Static export — dark defaults, used in non-component contexts (menuStyles, etc.)
+// Static export — dark defaults, used in non-component contexts
 export const C = makeDarkC()
 
 // ─── Type color picker palette ────────────────────────────────────────────────

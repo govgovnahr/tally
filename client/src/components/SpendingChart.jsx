@@ -1,5 +1,3 @@
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
 import {
   BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -16,27 +14,22 @@ function CustomTooltip({ active, payload, label }) {
   const spent = payload.find(p => p.dataKey === 'spent')
   const budget = payload.find(p => p.dataKey === 'budget')
   return (
-    <Box sx={{
-      bgcolor: C.surface,
-      border: `1px solid ${C.border}`,
-      borderRadius: 1,
-      px: 1.5,
-      py: 1,
-    }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
-        {label}
-      </Typography>
+    <div
+      className="rounded-lg px-3 py-2"
+      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+    >
+      <p className="text-sm font-semibold mb-1">{label}</p>
       {spent && (
-        <Typography variant="caption" sx={{ display: 'block', color: spent.fill }}>
+        <span className="block text-xs" style={{ color: spent.fill }}>
           Spent: {formatDollar(spent.value)}
-        </Typography>
+        </span>
       )}
       {budget && (
-        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+        <span className="block text-xs" style={{ color: C.muted }}>
           {budget.value > 0 ? `Budget: ${formatDollar(budget.value)}` : 'No limit set'}
-        </Typography>
+        </span>
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -49,8 +42,6 @@ export default function SpendingChart({ summary, budgets }) {
 
   if (Object.keys(budgets).length === 0) return null
 
-  // Use all types that have spending or a budget set — fixes the silent bug where
-  // custom/user-defined types were silently omitted when iterating a static array.
   const chartData = expenseTypes
     .filter(t => summary.some(s => s.type === t.name) || (budgets[t.name] ?? 0) > 0)
     .map(t => {
@@ -65,10 +56,8 @@ export default function SpendingChart({ summary, budgets }) {
   const xMax = Math.max(...chartData.map(d => Math.max(d.spent, d.budget)), 1) * 1.1
 
   return (
-    <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
-        Spent vs Budget
-      </Typography>
+    <div>
+      <p className="text-sm font-medium mb-2" style={{ color: C.muted }}>Spent vs Budget</p>
       <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 38)}>
         <BarChart
           layout="vertical"
@@ -106,6 +95,6 @@ export default function SpendingChart({ summary, budgets }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </Box>
+    </div>
   )
 }

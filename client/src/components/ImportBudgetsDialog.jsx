@@ -1,30 +1,15 @@
 import { useState, useRef } from 'react'
 import { useC } from '../colors'
-import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import Stack from '@mui/material/Stack'
-import Typography from '@mui/material/Typography'
-import Alert from '@mui/material/Alert'
-import Table from '@mui/material/Table'
-import TableHead from '@mui/material/TableHead'
-import TableBody from '@mui/material/TableBody'
-import TableRow from '@mui/material/TableRow'
-import TableCell from '@mui/material/TableCell'
-import TableContainer from '@mui/material/TableContainer'
-import TextField from '@mui/material/TextField'
-import CircularProgress from '@mui/material/CircularProgress'
-import Divider from '@mui/material/Divider'
-import UploadFileIcon from '@mui/icons-material/UploadFile'
+import { Upload, Loader2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
 import api from '../api.js'
-import { useMenuStyles } from '../menuStyles.js'
 
 const FIELDS = [
   { key: 'category',      label: 'Category',      required: true,  hint: 'The expense category name' },
@@ -50,7 +35,7 @@ function autoMap(headers) {
 function monthsAhead(count) {
   const result = [{ key: '', label: 'Default (no specific month)' }]
   const now = new Date()
-  let y = now.getFullYear(), m = now.getMonth() - 1  // start 2 months back
+  let y = now.getFullYear(), m = now.getMonth() - 1
   if (m <= 0) { m += 12; y -= 1 }
   for (let i = 0; i <= count + 2; i++) {
     const key = `${y}-${String(m).padStart(2, '0')}`
@@ -63,9 +48,41 @@ function monthsAhead(count) {
 
 const SELECTABLE_MONTHS = monthsAhead(12)
 
+function AlertBox({ severity, children }) {
+  const C = useC()
+  const colors = {
+    success: { bg: `${C.onTrack}15`, border: `${C.onTrack}40`, text: C.onTrack },
+    warning: { bg: `${C.atRisk}15`, border: `${C.atRisk}40`, text: C.atRisk },
+    error:   { bg: `${C.overBudget}15`, border: `${C.overBudget}40`, text: C.overBudget },
+  }
+  const s = colors[severity] ?? colors.error
+  return (
+    <div
+      className="text-sm px-3 py-2.5 rounded-lg"
+      style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function NativeSelect({ value, onChange, children, disabled }) {
+  const C = useC()
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      disabled={disabled}
+      className="h-9 w-full rounded-lg border px-3 text-sm bg-transparent"
+      style={{ borderColor: C.borderLight, color: C.warmText }}
+    >
+      {children}
+    </select>
+  )
+}
+
 export default function ImportBudgetsDialog({ onClose, onImported }) {
   const C = useC()
-  const { DROPDOWN_MENU_PROPS, DROPDOWN_ITEM_SX } = useMenuStyles()
   const [step, setStep] = useState(0)
   const [file, setFile] = useState(null)
   const [headers, setHeaders] = useState([])
@@ -150,205 +167,166 @@ export default function ImportBudgetsDialog({ onClose, onImported }) {
 
   const requiredMapped = FIELDS.filter(f => f.required).every(f => mapping[f.key])
 
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{ sx: { bgcolor: 'background.paper', border: `1px solid ${C.border}` } }}
-    >
-      <DialogTitle sx={{ fontWeight: 600, color: 'text.primary' }}>
-        Import Budget Goals {step === 1 ? '— Map Columns' : step === 2 ? '— Results' : ''}
-      </DialogTitle>
+  const title = `Import Budget Goals${step === 1 ? ' — Map Columns' : step === 2 ? ' — Results' : ''}`
 
-      <DialogContent>
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+
         {/* Step 0: Upload */}
         {step === 0 && (
-          <Stack spacing={2.5} pt={1}>
-            <Box
-              component="label"
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 1.5,
-                border: `2px dashed ${C.borderMed}`,
-                borderRadius: 2,
-                py: 5,
-                cursor: 'pointer',
-                '&:hover': { borderColor: 'primary.main', bgcolor: C.dropHoverBg },
-              }}
+          <div className="flex flex-col gap-5 pt-1">
+            <label
+              htmlFor="budget-import-file"
+              className="flex flex-col items-center gap-4 border-2 border-dashed rounded-2xl py-10 cursor-pointer transition-colors duration-150"
+              style={{ borderColor: C.borderMed }}
             >
-              <UploadFileIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">
+              <Upload size={40} style={{ color: C.muted }} />
+              <span className="text-sm" style={{ color: C.muted }}>
                 Click to upload a <strong>.csv</strong> or <strong>.xlsx</strong> file
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.6 }}>
+              </span>
+              <span className="text-xs opacity-60" style={{ color: C.muted }}>
                 Expected columns: category, monthly limit, and optionally a month
-              </Typography>
+              </span>
               <input
+                id="budget-import-file"
                 ref={fileInputRef}
                 type="file"
                 accept=".csv,.xlsx,.xls"
-                style={{ display: 'none' }}
+                className="hidden"
                 onChange={handleFileChange}
               />
-            </Box>
-            {loading && <Stack alignItems="center"><CircularProgress size={24} /></Stack>}
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
+            </label>
+            {loading && <div className="flex justify-center"><Loader2 className="animate-spin" size={24} style={{ color: C.primary }} /></div>}
+            {error && <AlertBox severity="error">{error}</AlertBox>}
+          </div>
         )}
 
         {/* Step 1: Column mapping */}
         {step === 1 && (
-          <Stack spacing={2} pt={1}>
+          <div className="flex flex-col gap-4 pt-1">
             {sheetNames.length > 1 && (
-              <FormControl size="small" fullWidth>
-                <InputLabel>Sheet</InputLabel>
-                <Select
-                  value={selectedSheet}
-                  label="Sheet"
-                  onChange={e => handleSheetChange(e.target.value)}
-                  disabled={loading}
-                  {...DROPDOWN_MENU_PROPS}
-                >
-                  {sheetNames.map(s => <MenuItem key={s} value={s} sx={DROPDOWN_ITEM_SX}>{s}</MenuItem>)}
-                </Select>
-              </FormControl>
+              <NativeSelect value={selectedSheet} onChange={handleSheetChange} disabled={loading}>
+                {sheetNames.map(s => <option key={s} value={s}>{s}</option>)}
+              </NativeSelect>
             )}
 
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="caption" color="text.secondary">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs" style={{ color: C.muted }}>
                 Headers detected on row {headerRow + 1} of <strong>{file?.name}</strong>
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{ color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+              </span>
+              <button
+                type="button"
                 onClick={() => setShowHeaderOverride(v => !v)}
+                className="text-xs bg-transparent border-none cursor-pointer font-[inherit] hover:underline"
+                style={{ color: C.primary }}
               >
                 Wrong row?
-              </Typography>
-            </Stack>
+              </button>
+            </div>
 
             {showHeaderOverride && (
-              <Stack direction="row" gap={1} alignItems="center">
-                <TextField
-                  label="Header row number"
+              <div className="flex gap-2 items-center">
+                <Input
                   type="number"
-                  size="small"
                   value={headerRowInput}
                   onChange={e => setHeaderRowInput(e.target.value)}
-                  inputProps={{ min: 1 }}
-                  sx={{ width: 160 }}
+                  min="1"
+                  className="w-36"
+                  placeholder="Row number"
                 />
-                <Button size="small" variant="outlined" onClick={handleHeaderRowOverride} disabled={loading}>
+                <Button size="sm" variant="outline" onClick={handleHeaderRowOverride} disabled={loading}>
                   {loading ? 'Loading…' : 'Apply'}
                 </Button>
-              </Stack>
+              </div>
             )}
 
-            {/* Target month picker — applies to all rows, overrides any month column */}
-            <FormControl size="small" fullWidth>
-              <InputLabel>Apply to month</InputLabel>
-              <Select
-                value={targetMonth}
-                label="Apply to month"
-                onChange={e => setTargetMonth(e.target.value)}
-                {...DROPDOWN_MENU_PROPS}
-              >
+            {/* Target month */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Apply to month</label>
+              <NativeSelect value={targetMonth} onChange={setTargetMonth}>
                 {SELECTABLE_MONTHS.map(({ key, label }) => (
-                  <MenuItem key={key} value={key} sx={DROPDOWN_ITEM_SX}>{label}</MenuItem>
+                  <option key={key} value={key}>{label}</option>
                 ))}
-              </Select>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, ml: 0.5 }}>
+              </NativeSelect>
+              <p className="text-xs" style={{ color: C.muted }}>
                 {targetMonth
                   ? 'All rows will be imported as overrides for this month'
                   : 'Saves as default budgets, or use the Month column below for per-row control'}
-              </Typography>
-            </FormControl>
+              </p>
+            </div>
 
-            <Divider sx={{ borderColor: C.hoverStrong }} />
+            <div className="h-px" style={{ backgroundColor: C.hoverStrong }} />
 
             {FIELDS.map(field => (
-              <FormControl key={field.key} size="small" fullWidth>
-                <InputLabel>{field.label}{field.required ? ' *' : ''}</InputLabel>
-                <Select
+              <div key={field.key} className="flex flex-col gap-1">
+                <label className="text-sm font-medium">
+                  {field.label}{field.required ? ' *' : ''}
+                </label>
+                <NativeSelect
                   value={mapping[field.key] ?? ''}
-                  label={`${field.label}${field.required ? ' *' : ''}`}
-                  onChange={e => setMapping(prev => ({ ...prev, [field.key]: e.target.value }))}
-                  {...DROPDOWN_MENU_PROPS}
+                  onChange={val => setMapping(prev => ({ ...prev, [field.key]: val }))}
                 >
-                  <MenuItem value="" sx={DROPDOWN_ITEM_SX}><em>{field.required ? 'Select a column' : 'Not mapped'}</em></MenuItem>
+                  <option value="">{field.required ? 'Select a column' : 'Not mapped'}</option>
                   {headers.map(h => (
-                    <MenuItem key={h} value={h} sx={DROPDOWN_ITEM_SX}>{h || <em>(blank header)</em>}</MenuItem>
+                    <option key={h} value={h}>{h || '(blank header)'}</option>
                   ))}
-                </Select>
-                {field.hint && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, ml: 0.5 }}>
-                    {field.hint}
-                  </Typography>
-                )}
-              </FormControl>
+                </NativeSelect>
+                {field.hint && <p className="text-xs" style={{ color: C.muted }}>{field.hint}</p>}
+              </div>
             ))}
 
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
+            {error && <AlertBox severity="error">{error}</AlertBox>}
+          </div>
         )}
 
         {/* Step 2: Results */}
         {step === 2 && results && (
-          <Stack spacing={2} pt={1}>
-            <Alert severity={results.imported === 0 ? 'error' : results.skipped > 0 ? 'warning' : 'success'}>
+          <div className="flex flex-col gap-4 pt-1">
+            <AlertBox severity={results.imported === 0 ? 'error' : results.skipped > 0 ? 'warning' : 'success'}>
               {results.imported} budget goal{results.imported !== 1 ? 's' : ''} imported
               {results.skipped > 0 && `, ${results.skipped} row${results.skipped !== 1 ? 's' : ''} skipped`}.
-            </Alert>
+            </AlertBox>
             {results.errors.length > 0 && (
-              <TableContainer sx={{ maxHeight: 240 }}>
-                <Table size="small">
-                  <TableHead>
+              <div className="max-h-60 overflow-y-auto rounded-lg" style={{ border: `1px solid ${C.border}` }}>
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell sx={{ color: 'text.secondary', fontWeight: 600, borderColor: C.hoverStrong }}>Row</TableCell>
-                      <TableCell sx={{ color: 'text.secondary', fontWeight: 600, borderColor: C.hoverStrong }}>Reason skipped</TableCell>
+                      <TableHead className="text-xs font-semibold" style={{ color: C.muted }}>Row</TableHead>
+                      <TableHead className="text-xs font-semibold" style={{ color: C.muted }}>Reason skipped</TableHead>
                     </TableRow>
-                  </TableHead>
+                  </TableHeader>
                   <TableBody>
                     {results.errors.map((e, i) => (
                       <TableRow key={i}>
-                        <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong }}>{e.row}</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', borderColor: C.hoverStrong }}>{e.reason}</TableCell>
+                        <TableCell className="text-xs" style={{ color: C.muted }}>{e.row}</TableCell>
+                        <TableCell className="text-xs" style={{ color: C.muted }}>{e.reason}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </TableContainer>
+              </div>
             )}
-          </Stack>
+          </div>
         )}
-      </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        {step < 2 && <Button variant="text" color="inherit" onClick={onClose}>Cancel</Button>}
-        {step === 1 && (
-          <Button
-            variant="contained"
-            onClick={handleImport}
-            disabled={loading || !requiredMapped}
-            sx={{ fontWeight: 600 }}
-          >
-            {loading ? 'Importing…' : 'Import'}
-          </Button>
-        )}
-        {step === 2 && (
-          <Button
-            variant="contained"
-            onClick={results?.imported > 0 ? onImported : onClose}
-            sx={{ fontWeight: 600 }}
-          >
-            Done
-          </Button>
-        )}
-      </DialogActions>
+        <DialogFooter>
+          {step < 2 && <Button variant="ghost" onClick={onClose}>Cancel</Button>}
+          {step === 1 && (
+            <Button onClick={handleImport} disabled={loading || !requiredMapped} className="font-semibold">
+              {loading ? <><Loader2 className="animate-spin mr-2" size={16} />Importing…</> : 'Import'}
+            </Button>
+          )}
+          {step === 2 && (
+            <Button onClick={results?.imported > 0 ? onImported : onClose} className="font-semibold">
+              Done
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   )
 }
