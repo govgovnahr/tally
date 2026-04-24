@@ -5,8 +5,9 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from database import get_connection
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -106,9 +107,7 @@ def _soft_match_type(raw: str, valid: list[str]) -> Optional[str]:
 
 
 def _infer_type(name: str, valid_types: list[str], rules: list[tuple] = []) -> str:
-    """Try to match a transaction name to an expense type using learned rules, then keywords, then fallback."""
     name_lower = name.lower()
-    # 1. User-defined rules (case-insensitive substring match)
     for pattern, expense_type in rules:
         if pattern.lower() in name_lower:
             matched = _soft_match_type(expense_type, valid_types)
@@ -131,13 +130,11 @@ def _infer_type(name: str, valid_types: list[str], rules: list[tuple] = []) -> s
     name_lower = name.lower()
     for category, keywords in KEYWORDS.items():
         if any(kw in name_lower for kw in keywords):
-            # Try to find a valid type whose name contains this category word
             matched = _soft_match_type(category, valid_types)
             if not matched:
                 matched = next((v for v in valid_types if category in v.lower()), None)
             if matched:
                 return matched
-    # Fall back to "Other" if it exists, else first type
     return next((v for v in valid_types if v.lower() == "other"), None) or (valid_types[0] if valid_types else "Other")
 
 
@@ -146,14 +143,12 @@ EXPENSE_SIGNALS = {"debit", "dr", "expense", "withdrawal", "purchase", "charge"}
 
 
 def _determine_record_type(amount_raw: float, record_type_col_val: str) -> str:
-    """Determine whether a row is 'expense' or 'income'."""
     if record_type_col_val:
         val = record_type_col_val.strip().lower()
         if any(s in val for s in INCOME_SIGNALS):
             return "income"
         if any(s in val for s in EXPENSE_SIGNALS):
             return "expense"
-    # Fall back to sign: negative = expense, positive = income
     return "expense" if amount_raw < 0 else "income"
 
 
@@ -168,10 +163,17 @@ def _get_raw_rows(content: bytes, filename: str, sheet_name: Optional[str] = Non
 
 
 @router.get("/import/infer-type")
-def infer_type_endpoint(name: str = Query(..., description="Transaction name/description to categorize")):
+def infer_type_endpoint(
+    name: str = Query(..., description="Transaction name/description to categorize"),
+    user_id: str = Depends(get_current_user),
+):
     with get_connection() as conn:
-        valid_types = [r[0] for r in conn.execute("SELECT name FROM expense_types ORDER BY sort_order").fetchall()]
-        rules = conn.execute("SELECT pattern, expense_type FROM import_rules").fetchall()
+        valid_types = [r[0] for r in conn.execute(
+            "SELECT name FROM expense_types WHERE user_id = ? ORDER BY sort_order", (user_id,)
+        ).fetchall()]
+        rules = conn.execute(
+            "SELECT pattern, expense_type FROM import_rules WHERE user_id = ?", (user_id,)
+        ).fetchall()
     if not valid_types:
         return {"type": "Other"}
     return {"type": _infer_type(name, valid_types, rules)}
@@ -191,7 +193,8 @@ async def import_budgets(
     mapping: str = Form(...),
     header_row: int = Form(...),
     sheet_name: Optional[str] = Form(None),
-    target_month: Optional[str] = Form(None),  # YYYY-MM — overrides per-row month column
+    target_month: Optional[str] = Form(None),
+    user_id: str = Depends(get_current_user),
 ):
     mapping_dict = json.loads(mapping)
     cat_col = mapping_dict.get("category", "")
@@ -202,9 +205,7 @@ async def import_budgets(
     raw_rows = _get_raw_rows(content, file.filename, sheet_name)
     _, data_rows = _rows_to_dicts(raw_rows, header_row)
 
-    # Aggregate: (normalized_category, month_or_None) → sum
     aggregated: dict[tuple, float] = {}
-    # Track original-case name per category
     display_name: dict[str, str] = {}
     errors = []
     skipped = 0
@@ -226,7 +227,6 @@ async def import_budgets(
             skipped += 1
             continue
 
-        # target_month takes priority over any per-row month column
         if target_month:
             month_key = target_month
         elif month_raw:
@@ -247,37 +247,34 @@ async def import_budgets(
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Existing types: lower-name → actual name
     existing = {r["name"].lower(): r["name"]
-                for r in cursor.execute("SELECT name FROM expense_types").fetchall()}
-    used_colors = {r["color"] for r in cursor.execute("SELECT color FROM expense_types").fetchall()}
+                for r in cursor.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,)).fetchall()}
+    used_colors = {r["color"] for r in cursor.execute("SELECT color FROM expense_types WHERE user_id = ?", (user_id,)).fetchall()}
 
-    # Create missing categories
     new_categories = {norm for norm, _ in aggregated} - existing.keys()
     available_colors = [c for c in _DEFAULT_COLORS if c not in used_colors] or _DEFAULT_COLORS
     for idx, norm in enumerate(sorted(new_categories)):
         name = display_name[norm]
         color = available_colors[idx % len(available_colors)]
-        sort_order = cursor.execute("SELECT COALESCE(MAX(sort_order)+1, 0) FROM expense_types").fetchone()[0]
+        sort_order = cursor.execute("SELECT COALESCE(MAX(sort_order)+1, 0) FROM expense_types WHERE user_id = ?", (user_id,)).fetchone()[0]
         cursor.execute(
-            "INSERT INTO expense_types (id, name, color, icon, sort_order) VALUES (?,?,?,?,?)",
-            (str(uuid.uuid4()), name, color, _DEFAULT_ICON, sort_order),
+            "INSERT INTO expense_types (id, name, color, icon, sort_order, user_id) VALUES (?,?,?,?,?,?)",
+            (str(uuid.uuid4()), name, color, _DEFAULT_ICON, sort_order, user_id),
         )
         existing[norm] = name
 
-    # Upsert budgets / monthly_budgets
     imported = 0
     for (norm, month_key), total in aggregated.items():
         type_name = existing[norm]
         if month_key:
             cursor.execute(
-                "INSERT OR REPLACE INTO monthly_budgets (type, month, monthly_limit) VALUES (?,?,?)",
-                (type_name, month_key, total),
+                "INSERT OR REPLACE INTO monthly_budgets (user_id, type, month, monthly_limit) VALUES (?,?,?,?)",
+                (user_id, type_name, month_key, total),
             )
         else:
             cursor.execute(
-                "INSERT OR REPLACE INTO budgets (type, monthly_limit) VALUES (?,?)",
-                (type_name, total),
+                "INSERT OR REPLACE INTO budgets (user_id, type, monthly_limit) VALUES (?,?,?)",
+                (user_id, type_name, total),
             )
         imported += 1
 
@@ -317,6 +314,7 @@ async def import_records(
     mapping: str = Form(...),
     header_row: int = Form(...),
     sheet_name: Optional[str] = Form(None),
+    user_id: str = Depends(get_current_user),
 ):
     try:
         col_map = json.loads(mapping)
@@ -329,9 +327,9 @@ async def import_records(
 
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM expense_types")
+    cursor.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,))
     valid_types = [r["name"] for r in cursor.fetchall()]
-    cursor.execute("SELECT pattern, expense_type FROM import_rules")
+    cursor.execute("SELECT pattern, expense_type FROM import_rules WHERE user_id = ?", (user_id,))
     rules = [(r["pattern"], r["expense_type"]) for r in cursor.fetchall()]
 
     imported = 0
@@ -358,7 +356,6 @@ async def import_records(
                 val = row.get(col_map["is_recurring"], "").strip().lower()
                 is_recurring = 1 if val in ("1", "true", "yes", "y") else 0
 
-            # Determine expense vs income per row
             record_type_col_val = row.get(col_map.get("record_type", ""), "") if col_map.get("record_type") else ""
             row_type = _determine_record_type(amount_float, record_type_col_val)
 
@@ -366,15 +363,13 @@ async def import_records(
             now = datetime.now().isoformat()
 
             if row_type == "expense":
-                # Resolve expense type
                 raw_type = row.get(col_map.get("type", ""), "").strip() if col_map.get("type") else ""
 
-                # Handle "Savings" type specially: auto-create the type if needed
                 if raw_type and raw_type.lower() == "savings":
                     if "Savings" not in valid_types:
                         cursor.execute(
-                            "INSERT OR IGNORE INTO expense_types (id, name, color, icon, sort_order, is_default) VALUES (?,?,?,?,?,?)",
-                            (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1),
+                            "INSERT OR IGNORE INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (?,?,?,?,?,?,?)",
+                            (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1, user_id),
                         )
                         valid_types.append("Savings")
                     expense_type = "Savings"
@@ -384,16 +379,16 @@ async def import_records(
                     expense_type = _infer_type(name, valid_types, rules)
 
                 cursor.execute(
-                    "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring) VALUES (?,?,?,?,?,?,?)",
-                    (new_id, name, amount, expense_type, date_str, now, is_recurring),
+                    "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (?,?,?,?,?,?,?,?)",
+                    (new_id, name, amount, expense_type, date_str, now, is_recurring, user_id),
                 )
 
                 if expense_type == "Savings":
                     savings_expenses.append({"id": new_id, "name": name, "amount": amount, "date": date_str})
             else:
                 cursor.execute(
-                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring) VALUES (?,?,?,?,?,?)",
-                    (new_id, name, amount, date_str, now, is_recurring),
+                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id) VALUES (?,?,?,?,?,?,?)",
+                    (new_id, name, amount, date_str, now, is_recurring, user_id),
                 )
 
             imported += 1

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from database import init_db, apply_recurring_expenses, apply_recurring_incomes
+from routers.auth_router import router as auth_router
 from routers.expenses_router import router as expenses_router
 from routers.budgets_router import router as budgets_router
 from routers.types_router import router as types_router
@@ -19,14 +20,16 @@ from routers.analysis_router import router as analysis_router
 
 app = FastAPI()
 
+_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(expenses_router)
 app.include_router(budgets_router)
 app.include_router(types_router)
@@ -36,6 +39,11 @@ app.include_router(import_rules_router)
 app.include_router(macrocategories_router)
 app.include_router(savings_goals_router)
 app.include_router(analysis_router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.on_event("startup")
@@ -64,8 +72,9 @@ def _open_browser():
 
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 3001))
     if _is_bundled():
         threading.Timer(1.5, _open_browser).start()
-        uvicorn.run(app, host="0.0.0.0", port=3001)
+        uvicorn.run(app, host="0.0.0.0", port=port)
     else:
-        uvicorn.run("server:app", host="0.0.0.0", port=3001, reload=True)
+        uvicorn.run("server:app", host="0.0.0.0", port=port, reload=True)

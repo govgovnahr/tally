@@ -1,49 +1,54 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from database import get_connection, seed_recurring_forward
 from models import Expense, Expenses, NewExpense, TypeSummary
+from auth import get_current_user
 
 router = APIRouter()
 
+_EXPENSE_COLS = "id, name, amount, type, date, created_at, is_recurring"
+_ALLOWED_SORT = {"name", "date", "amount"}
 
-def _valid_type_names(conn):
+
+def _valid_type_names(conn, user_id: str):
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM expense_types")
+    cursor.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,))
     return [row["name"] for row in cursor.fetchall()]
 
 
-_ALLOWED_SORT = {"name", "date", "amount"}
-
 @router.get("/expenses")
-def get_expenses(type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None,
-                 page: int = 1, page_size: int = 50, search: Optional[str] = None,
-                 sort_by: str = "date", sort_dir: str = "desc"):
+def get_expenses(
+    type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None,
+    page: int = 1, page_size: int = 50, search: Optional[str] = None,
+    sort_by: str = "date", sort_dir: str = "desc",
+    user_id: str = Depends(get_current_user),
+):
     col = sort_by if sort_by in _ALLOWED_SORT else "date"
     direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
     conn = get_connection()
     cursor = conn.cursor()
-    conditions = []
-    params = []
+    conditions = ["user_id = ?"]
+    params = [user_id]
     if type:
         conditions.append("type = ?")
         params.append(type)
     if macrocategory_id:
-        conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = ?)")
-        params.append(macrocategory_id)
+        conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = ? AND user_id = ?)")
+        params.extend([macrocategory_id, user_id])
     if month:
         conditions.append("strftime('%Y-%m', date) = ?")
         params.append(month)
     if search:
         conditions.append("name LIKE ?")
         params.append(f"%{search}%")
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where = f"WHERE {' AND '.join(conditions)}"
     cursor.execute(f"SELECT COUNT(*) FROM expenses {where}", params)
     total = cursor.fetchone()[0]
     offset = (page - 1) * page_size
     cursor.execute(
-        f"SELECT * FROM expenses {where} ORDER BY {col} {direction}, created_at DESC LIMIT ? OFFSET ?",
+        f"SELECT {_EXPENSE_COLS} FROM expenses {where} ORDER BY {col} {direction}, created_at DESC LIMIT ? OFFSET ?",
         params + [page_size, offset],
     )
     rows = cursor.fetchall()
@@ -53,9 +58,9 @@ def get_expenses(type: Optional[str] = None, month: Optional[str] = None, macroc
 
 
 @router.post("/expenses")
-def add_expense(new_expense: NewExpense):
+def add_expense(new_expense: NewExpense, user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    valid = _valid_type_names(conn)
+    valid = _valid_type_names(conn, user_id)
     if new_expense.type not in valid:
         conn.close()
         raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {valid}")
@@ -75,24 +80,25 @@ def add_expense(new_expense: NewExpense):
 
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring) VALUES (?,?,?,?,?,?,?)",
-        (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at, expense.is_recurring),
+        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (?,?,?,?,?,?,?,?)",
+        (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at, expense.is_recurring, user_id),
     )
     conn.commit()
     conn.close()
 
     if expense.is_recurring:
-        seed_recurring_forward(expense.name, expense.amount, expense.type, expense.date[:7])
+        seed_recurring_forward(expense.name, expense.amount, expense.type, expense.date[:7], user_id)
 
     return vars(expense)
 
 
 @router.get("/expenses/months")
-def get_months():
+def get_months(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT DISTINCT strftime('%Y-%m', date) as month FROM expenses ORDER BY month"
+        "SELECT DISTINCT strftime('%Y-%m', date) as month FROM expenses WHERE user_id = ? ORDER BY month",
+        (user_id,),
     )
     months = [row["month"] for row in cursor.fetchall()]
     conn.close()
@@ -100,17 +106,18 @@ def get_months():
 
 
 @router.get("/expenses/summary")
-def get_summary(month: Optional[str] = None):
+def get_summary(month: Optional[str] = None, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     if month:
         cursor.execute(
-            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE strftime('%Y-%m', date) = ? GROUP BY type ORDER BY total DESC",
-            (month,),
+            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ? GROUP BY type ORDER BY total DESC",
+            (user_id, month),
         )
     else:
         cursor.execute(
-            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses GROUP BY type ORDER BY total DESC"
+            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = ? GROUP BY type ORDER BY total DESC",
+            (user_id,),
         )
     rows = cursor.fetchall()
     conn.close()
@@ -118,14 +125,15 @@ def get_summary(month: Optional[str] = None):
 
 
 @router.get("/expenses/monthly-totals")
-def get_monthly_totals(months: int = 6):
+def get_monthly_totals(months: int = 6, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         f"SELECT strftime('%Y-%m', date) as month, SUM(amount) as total "
-        f"FROM expenses "
-        f"WHERE date >= date('now', 'start of month', '-{months - 1} months') "
-        f"GROUP BY month ORDER BY month ASC"
+        f"FROM expenses WHERE user_id = ? "
+        f"AND date >= date('now', 'start of month', '-{months - 1} months') "
+        f"GROUP BY month ORDER BY month ASC",
+        (user_id,),
     )
     rows = cursor.fetchall()
     conn.close()
@@ -133,14 +141,15 @@ def get_monthly_totals(months: int = 6):
 
 
 @router.get("/expenses/monthly-by-type")
-def get_monthly_by_type(months: int = 6):
+def get_monthly_by_type(months: int = 6, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         f"SELECT strftime('%Y-%m', date) as month, type, SUM(amount) as total "
-        f"FROM expenses "
-        f"WHERE date >= date('now', 'start of month', '-{months - 1} months') "
-        f"GROUP BY month, type ORDER BY month ASC"
+        f"FROM expenses WHERE user_id = ? "
+        f"AND date >= date('now', 'start of month', '-{months - 1} months') "
+        f"GROUP BY month, type ORDER BY month ASC",
+        (user_id,),
     )
     rows = cursor.fetchall()
     conn.close()
@@ -148,9 +157,9 @@ def get_monthly_by_type(months: int = 6):
 
 
 @router.put("/expenses/{expense_id}")
-def update_expense(expense_id: str, updated: NewExpense):
+def update_expense(expense_id: str, updated: NewExpense, user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    valid = _valid_type_names(conn)
+    valid = _valid_type_names(conn, user_id)
     if updated.type not in valid:
         conn.close()
         raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {valid}")
@@ -159,50 +168,49 @@ def update_expense(expense_id: str, updated: NewExpense):
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM expenses WHERE id = ?", (expense_id,))
+    cursor.execute("SELECT id FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
     if not cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Expense not found")
 
     cursor.execute(
-        "UPDATE expenses SET name=?, amount=?, type=?, date=?, is_recurring=? WHERE id=?",
-        (updated.name.strip(), round(updated.amount, 2), updated.type, updated.date, updated.is_recurring, expense_id),
+        "UPDATE expenses SET name=?, amount=?, type=?, date=?, is_recurring=? WHERE id=? AND user_id=?",
+        (updated.name.strip(), round(updated.amount, 2), updated.type, updated.date, updated.is_recurring, expense_id, user_id),
     )
     conn.commit()
     conn.close()
 
     if updated.is_recurring:
-        seed_recurring_forward(updated.name.strip(), round(updated.amount, 2), updated.type, updated.date[:7])
+        seed_recurring_forward(updated.name.strip(), round(updated.amount, 2), updated.type, updated.date[:7], user_id)
 
     return {"id": expense_id, "name": updated.name.strip(), "amount": round(updated.amount, 2),
             "type": updated.type, "date": updated.date, "is_recurring": updated.is_recurring}
 
 
 @router.delete("/transactions")
-def clear_transactions(month: Optional[str] = Query(None)):
+def clear_transactions(month: Optional[str] = Query(None), user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     if month:
-        cursor.execute("DELETE FROM expenses WHERE strftime('%Y-%m', date) = ?", (month,))
-        cursor.execute("DELETE FROM incomes WHERE strftime('%Y-%m', date) = ?", (month,))
+        cursor.execute("DELETE FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month))
+        cursor.execute("DELETE FROM incomes WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month))
     else:
-        cursor.execute("DELETE FROM expenses")
-        cursor.execute("DELETE FROM incomes")
+        cursor.execute("DELETE FROM expenses WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM incomes WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
     return {"cleared": True}
 
 
 @router.delete("/expenses/{expense_id}")
-def delete_expense(expense_id: str):
+def delete_expense(expense_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM expenses WHERE id = ?", (expense_id,))
-    row = cursor.fetchone()
-    if not row:
+    cursor.execute("SELECT id FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
+    if not cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Expense not found")
-    cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+    cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
     conn.commit()
     conn.close()
     return {"id": expense_id}
