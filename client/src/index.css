@@ -91,7 +91,7 @@
   --ring:                  142 55% 35%;
 
   /* Our semantic tokens - light */
-  --bg: linear-gradient(135deg, #bfdbfe 0%, #f0f9ff 45%, #fef3c7 100%);
+  --bg: #c0d8c0;
   --c-primary:           #2d8a50;
   --c-primary-hover:     #1e7a40;
   --c-surface:           #f0f5f0;
@@ -151,24 +151,24 @@
   --ring:                  142 55% 55%;
 
   /* Our semantic tokens - dark */
-  --bg: linear-gradient(135deg, #020e14 0%, #001a2e 45%, #0a0d00 100%);
+  --bg: #0b150b;
   --c-primary:           #52c97a;
   --c-primary-hover:     #3db864;
-  --c-surface:           #161618;
-  --c-surface-alt:       #1e1e22;
-  --c-subtle-bg:         rgba(228,232,240,0.03);
-  --c-border:            rgba(228,232,240,0.09);
-  --c-border-subtle:     rgba(228,232,240,0.07);
-  --c-border-light:      rgba(228,232,240,0.11);
-  --c-border-med:        rgba(228,232,240,0.16);
-  --c-border-strong:     rgba(228,232,240,0.26);
-  --c-border-hover:      rgba(228,232,240,0.32);
-  --c-hover:             rgba(228,232,240,0.04);
-  --c-hover-med:         rgba(228,232,240,0.06);
-  --c-hover-strong:      rgba(228,232,240,0.09);
-  --c-warm-text:         #e4e8f0;
-  --c-dim-text:          #9e9e9e;
-  --c-muted:             rgba(228,232,240,0.5);
+  --c-surface:           #141414;
+  --c-surface-alt:       #1c1c1c;
+  --c-subtle-bg:         rgba(82,201,122,0.04);
+  --c-border:            rgba(82,201,122,0.12);
+  --c-border-subtle:     rgba(82,201,122,0.09);
+  --c-border-light:      rgba(82,201,122,0.14);
+  --c-border-med:        rgba(82,201,122,0.18);
+  --c-border-strong:     rgba(82,201,122,0.26);
+  --c-border-hover:      rgba(82,201,122,0.32);
+  --c-hover:             rgba(82,201,122,0.06);
+  --c-hover-med:         rgba(82,201,122,0.09);
+  --c-hover-strong:      rgba(82,201,122,0.13);
+  --c-warm-text:         #e0ece0;
+  --c-dim-text:          #7a967a;
+  --c-muted:             rgba(200,228,200,0.55);
   --c-income:            #4db6ac;
   --c-spent:             #64b5f6;
   --c-net-positive:      #52c97a;
@@ -177,14 +177,14 @@
   --c-near-goal:         #4db6ac;
   --c-at-risk:           #f0c040;
   --c-over-budget:       #e07c7c;
-  --c-no-budget:         rgba(228,232,240,0.12);
+  --c-no-budget:         rgba(82,201,122,0.10);
   --c-primary-tint:      rgba(82,201,122,0.10);
   --c-menu-selected:     rgba(82,201,122,0.08);
   --c-income-button-bg:  #4db6ac;
   --c-trend-up:          #e07c7c;
   --c-trend-down:        #52c97a;
-  --c-ref-line:          rgba(228,232,240,0.16);
-  --c-grid-line:         rgba(228,232,240,0.05);
+  --c-ref-line:          rgba(82,201,122,0.15);
+  --c-grid-line:         rgba(82,201,122,0.06);
 }
 
 /* ─── Base styles ────────────────────────────────────────────────────────── */
@@ -195,21 +195,15 @@ body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(30%2C41%2C59%2C0.11)'/%3E%3C/svg%3E"),
-    var(--bg);
-  background-attachment: fixed;
-  background-size: 28px 28px, cover;
-  background-repeat: repeat, no-repeat;
-  background-position: 0 0, center;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(30%2C41%2C59%2C0.11)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
   min-height: 100vh;
   color: var(--c-warm-text);
 }
 
 .dark body {
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(203%2C213%2C225%2C0.11)'/%3E%3C/svg%3E"),
-    var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(203%2C213%2C225%2C0.11)'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar { width: 6px; }
@@ -246,100 +240,62 @@ body {
   }
 }
 
+/* ─── Spinner ────────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ─── Skeleton loader pulse ──────────────────────────────────────────────── */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
 
-/* ─── Glass blob animations ──────────────────────────────────────────────── */
-@keyframes blob-drift-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%       { transform: translate(40px, -30px) scale(1.08); }
-  66%       { transform: translate(-20px, 20px) scale(0.95); }
-}
-@keyframes blob-drift-2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%       { transform: translate(-50px, 30px) scale(1.05); }
-  66%       { transform: translate(30px, -40px) scale(1.1); }
-}
-@keyframes blob-drift-3 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%       { transform: translate(25px, 25px) scale(1.06); }
-}
-
-.glass-blob {
-  position: fixed;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 0;
-  will-change: transform;
-  /* Scale trick: render at 1/3 size with 1/3 blur, scale up 3x.
-     GPU blurs ~9x fewer pixels; visual result is identical.
-     No contain:paint here — blur must overflow element bounds. */
-}
-
-/* Dark mode: teal (top-left) + navy (bottom-right) */
-.dark .glass-blob-1 {
-  width: 140px; height: 140px; top: -20px; left: -13px;
-  background: radial-gradient(circle, rgba(0,180,160,0.32) 0%, rgba(0,180,160,0.12) 42%, transparent 80%);
-  filter: blur(14px);
-  transform: scale(3) translateZ(0);
-  transform-origin: top left;
-  animation: blob-drift-1 18s ease-in-out infinite;
-}
-.dark .glass-blob-2 {
-  width: 127px; height: 127px; bottom: -20px; right: -20px;
-  background: radial-gradient(circle, rgba(0,90,200,0.28) 0%, rgba(0,90,200,0.10) 42%, transparent 80%);
-  filter: blur(13px);
-  transform: scale(3) translateZ(0);
-  transform-origin: bottom right;
-  animation: blob-drift-2 22s ease-in-out infinite;
-}
-.dark .glass-blob-3 { display: none; }
-
-/* Light mode: sky blue (top-left) + peach (bottom-right) */
-:root:not(.dark) .glass-blob-1 {
-  width: 147px; height: 147px; top: -27px; left: -23px;
-  background: radial-gradient(circle, rgba(96,165,250,0.32) 0%, rgba(96,165,250,0.11) 42%, transparent 82%);
-  filter: blur(14px);
-  transform: scale(3) translateZ(0);
-  transform-origin: top left;
-  animation: blob-drift-1 20s ease-in-out infinite;
-}
-:root:not(.dark) .glass-blob-2 {
-  width: 127px; height: 127px; bottom: 0; right: -20px;
-  background: radial-gradient(circle, rgba(251,191,36,0.28) 0%, rgba(251,191,36,0.09) 42%, transparent 82%);
-  filter: blur(13px);
-  transform: scale(3) translateZ(0);
-  transform-origin: bottom right;
-  animation: blob-drift-2 25s ease-in-out infinite;
-}
-:root:not(.dark) .glass-blob-3 { display: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .glass-blob { animation: none !important; display: none !important; }
-}
-
 /* ─── glasscn-ui Card overrides ──────────────────────────────────────────── */
-/* Remove backdrop-filter from cards — blobs are already blurry, cards don't
-   need to re-sample behind themselves every frame. Use higher opacity instead. */
 :root:not(.dark) .bg-white\/70 {
-  background-color: rgba(255,255,255,0.52) !important;
+  background-color: #ffffff !important;
 }
 .dark .dark\:bg-gray-950\/50 {
-  background-color: rgba(10,10,20,0.52) !important;
+  background-color: #141414 !important;
 }
 [class*="backdrop-blur"] {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-/* Soften borders: replace solid HSL border-border with translucent white */
 :root:not(.dark) .border-border {
-  border-color: rgba(255,255,255,0.55) !important;
+  border-color: rgba(0,0,0,0.10) !important;
 }
 .dark .border-border {
-  border-color: rgba(255,255,255,0.12) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+
+/* ─── Hover tint on all clickable elements (both modes) ─────────────────── */
+/* ::after overlay works regardless of inline background-color.              */
+button:not(:disabled),
+[role="button"],
+.cursor-pointer {
+  position: relative;
+}
+button:not(:disabled)::after,
+[role="button"]::after,
+.cursor-pointer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: transparent;
+  transition: background-color 150ms ease;
+  pointer-events: none;
+}
+button:not(:disabled):hover::after,
+[role="button"]:hover::after,
+.cursor-pointer:hover::after {
+  background-color: var(--hover-tint, rgba(0,0,0,0.05));
+}
+.dark button:not(:disabled):hover::after,
+.dark [role="button"]:hover::after,
+.dark .cursor-pointer:hover::after {
+  background-color: var(--hover-tint, rgba(82,201,122,0.07));
 }
 
 /* ─── Uniform select styling (matches Input component) ───────────────────── */

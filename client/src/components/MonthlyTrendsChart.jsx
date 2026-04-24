@@ -47,7 +47,7 @@ function CustomTooltip({ active, payload, totalBudget, activeType, expenseTypes,
   return (
     <div
       className="rounded-lg px-3 py-2 min-w-[180px]"
-      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+      style={{ backgroundColor: C.surfacePopup, border: `1px solid ${C.border}` }}
     >
       <p className="text-sm font-semibold mb-1">{entry.fullLabel}</p>
       {activeType !== 'All'

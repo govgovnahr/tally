@@ -12,7 +12,7 @@ function CustomTooltip({ active, payload }) {
   return (
     <div
       className="rounded-lg px-3 py-2"
-      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+      style={{ backgroundColor: C.surfacePopup, border: `1px solid ${C.border}` }}
     >
       <p className="text-sm font-semibold">{d.name}</p>
       <span className="text-xs" style={{ color: C.muted }}>{fmt(d.value)} · {d.pct}%</span>

@@ -123,31 +123,32 @@ function makeDarkC() {
     dropHoverBg:       'rgba(82,201,122,0.04)',
 
     // Text / labels
-    warmText:  palette.dark.text,
-    dimText:   palette.grey,
-    tickLight: palette.greyLight,
-    muted:     palette.dark.textSecondary,
+    warmText:  '#e0ece0',
+    dimText:   '#7a967a',
+    tickLight: '#8aaa8a',
+    muted:     'rgba(200,228,200,0.55)',
 
     // Category card tint helpers (append to hex color: `${color}${cardTintAlpha}`)
     cardTintAlpha:         '00',
     cardTintSelectedAlpha: '18',
     cardBorderAlpha:       '32',
 
-    // Surfaces & borders (rgba for glass effect)
-    surface:      'rgba(20,20,28,0.55)',
-    surfaceAlt:   'rgba(30,30,40,0.50)',
-    subtleBg:     'rgba(255,255,255,0.025)',
-    border:       'rgba(255,255,255,0.08)',
-    borderSubtle: 'rgba(255,255,255,0.06)',
-    borderLight:  'rgba(255,255,255,0.10)',
-    borderMed:    'rgba(255,255,255,0.14)',
-    borderStrong: 'rgba(255,255,255,0.22)',
-    borderHover:  'rgba(255,255,255,0.28)',
-    refLine:      'rgba(228,232,240,0.16)',
-    gridLine:     'rgba(228,232,240,0.05)',
-    hover:        'rgba(228,232,240,0.04)',
-    hoverMed:     'rgba(228,232,240,0.06)',
-    hoverStrong:  'rgba(228,232,240,0.09)',
+    // Surfaces & borders
+    surface:      '#141414',
+    surfaceAlt:   '#1c1c1c',
+    surfacePopup: '#141414',
+    subtleBg:     'rgba(82,201,122,0.04)',
+    border:       'rgba(82,201,122,0.12)',
+    borderSubtle: 'rgba(82,201,122,0.09)',
+    borderLight:  'rgba(82,201,122,0.14)',
+    borderMed:    'rgba(82,201,122,0.18)',
+    borderStrong: 'rgba(82,201,122,0.26)',
+    borderHover:  'rgba(82,201,122,0.32)',
+    refLine:      'rgba(82,201,122,0.15)',
+    gridLine:     'rgba(82,201,122,0.06)',
+    hover:        'rgba(82,201,122,0.06)',
+    hoverMed:     'rgba(82,201,122,0.09)',
+    hoverStrong:  'rgba(82,201,122,0.13)',
     adaptColor:   hex => hex,
   }
 }
@@ -180,9 +181,9 @@ function makeLightC() {
     incomeButtonHoverBg: 'rgba(13,148,136,0.08)',
 
     // Primary color tints
-    primaryTint:       'rgba(45,138,80,0.09)',
-    menuSelected:      'rgba(45,138,80,0.08)',
-    menuSelectedHover: 'rgba(45,138,80,0.13)',
+    primaryTint:       'rgba(45,138,80,0.14)',
+    menuSelected:      'rgba(45,138,80,0.12)',
+    menuSelectedHover: 'rgba(45,138,80,0.19)',
     dropHoverBg:       'rgba(45,138,80,0.04)',
 
     // Text / labels
@@ -196,16 +197,17 @@ function makeLightC() {
     cardTintSelectedAlpha: '18',
     cardBorderAlpha:       '28',
 
-    // Surfaces & borders (rgba for glass effect)
-    surface:      'rgba(255,255,255,0.52)',
-    surfaceAlt:   'rgba(230,242,230,0.45)',
-    subtleBg:     'rgba(255,255,255,0.20)',
-    border:       'rgba(255,255,255,0.72)',
-    borderSubtle: 'rgba(255,255,255,0.55)',
-    borderLight:  'rgba(255,255,255,0.72)',
-    borderMed:    'rgba(255,255,255,0.82)',
-    borderStrong: 'rgba(0,0,0,0.12)',
-    borderHover:  'rgba(0,0,0,0.18)',
+    // Surfaces & borders
+    surface:      '#ffffff',
+    surfaceAlt:   '#f4faf4',
+    surfacePopup: '#ffffff',
+    subtleBg:     'rgba(0,0,0,0.03)',
+    border:       'rgba(0,0,0,0.10)',
+    borderSubtle: 'rgba(0,0,0,0.07)',
+    borderLight:  'rgba(0,0,0,0.10)',
+    borderMed:    'rgba(0,0,0,0.14)',
+    borderStrong: 'rgba(0,0,0,0.18)',
+    borderHover:  'rgba(0,0,0,0.24)',
     refLine:      'rgba(17,24,39,0.14)',
     gridLine:     'rgba(17,24,39,0.05)',
     hover:        'rgba(17,24,39,0.04)',

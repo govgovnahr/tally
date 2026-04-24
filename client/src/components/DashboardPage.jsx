@@ -101,7 +101,15 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
       return (b.spent / (b.budget_limit || 1)) - (a.spent / (a.budget_limit || 1))
     })
 
-  const spentColor = totalBudget > 0 && totalSpent > totalBudget ? C.overBudget : C.warmText
+  const spentColor = (() => {
+    if (totalBudget === 0) return C.warmText
+    const proj = isCurrentMonth && totalProjected != null ? totalProjected : totalSpent
+    const ratio = proj / totalBudget
+    if (ratio > 1)    return C.overBudget
+    if (ratio > 0.90) return C.atRisk
+    if (ratio > 0.75) return C.nearGoal
+    return C.onTrack
+  })()
   const netColor = net >= 0 ? C.primary : C.overBudget
   const savingsColor = savingsRate == null ? C.muted
     : savingsRate >= 10 ? C.primary

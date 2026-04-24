@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon } from 'lucide-react'
+import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, LogOut } from 'lucide-react'
 import api from './api.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import { ColorsProvider, useC } from './colors'
@@ -9,6 +9,7 @@ import BudgetGoals from './components/BudgetGoals.jsx'
 import SavingsPage from './components/SavingsPage.jsx'
 import AnalysisPage from './components/AnalysisPage.jsx'
 import DashboardPage from './components/DashboardPage.jsx'
+import AuthPage from './components/AuthPage.jsx'
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -22,7 +23,7 @@ const NAV_ITEMS = [
   { value: 'all-expenses', label: 'Expenses',  Icon: Receipt },
 ]
 
-function AppContent({ mode, onToggleMode }) {
+function AppContent({ mode, onToggleMode, onLogout }) {
   const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
   const [refreshKey, setRefreshKey] = useState(0)
@@ -67,22 +68,13 @@ function AppContent({ mode, onToggleMode }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
-      {/* Blobs in their own stacking context so filter doesn't bleed into content */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', isolation: 'isolate' }} aria-hidden="true">
-        <div className="glass-blob glass-blob-1" />
-        <div className="glass-blob glass-blob-2" />
-        <div className="glass-blob glass-blob-3" />
-      </div>
-
+    <div style={{ minHeight: '100vh' }}>
       {/* Desktop top nav */}
       <header
         className="hidden sm:flex items-center sticky top-0 z-50 px-6 gap-6"
         style={{
           height: 64,
-          backgroundColor: mode === 'dark' ? 'rgba(14,14,22,0.62)' : 'rgba(255,255,255,0.58)',
-          backdropFilter: 'blur(18px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          backgroundColor: mode === 'dark' ? '#0b150b' : '#ffffff',
           borderBottom: `1px solid ${C.border}`,
         }}
       >
@@ -121,20 +113,31 @@ function AppContent({ mode, onToggleMode }) {
           })}
         </div>
 
-        {/* Theme toggle */}
-        <button
-          type="button"
-          onClick={onToggleMode}
-          className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
-          style={{ color: C.muted, backgroundColor: 'transparent' }}
-        >
-          {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+        {/* Theme toggle + logout */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleMode}
+            className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
+            style={{ color: C.muted, backgroundColor: 'transparent' }}
+          >
+            {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
+            style={{ color: C.muted, backgroundColor: 'transparent' }}
+            title="Sign out"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
       </header>
 
       {/* Mobile top bar */}
       <div
-        className="flex sm:hidden items-center justify-between px-4 backdrop-blur-xl"
+        className="flex sm:hidden items-center justify-between px-4"
         style={{
           height: 52,
           backgroundColor: C.surface,
@@ -167,9 +170,7 @@ function AppContent({ mode, onToggleMode }) {
         className="flex sm:hidden fixed bottom-0 left-0 right-0 z-50"
         style={{
           height: 60,
-          backgroundColor: mode === 'dark' ? 'rgba(14,14,22,0.62)' : 'rgba(255,255,255,0.58)',
-          backdropFilter: 'blur(18px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          backgroundColor: mode === 'dark' ? '#0b150b' : '#ffffff',
           borderTop: `1px solid ${C.border}`,
         }}
       >
@@ -216,12 +217,35 @@ function AppContent({ mode, onToggleMode }) {
 
 function ThemedApp() {
   const [mode, setMode] = useState('dark')
+  const [user, setUser] = useState(undefined)
   const toggleMode = () => setMode(m => m === 'dark' ? 'light' : 'dark')
+
+  useEffect(() => {
+    api.get('/auth/me')
+      .then(res => setUser(res.data))
+      .catch(() => setUser(null))
+  }, [])
+
+  const handleLogout = () => {
+    api.post('/auth/logout').finally(() => setUser(null))
+  }
+
+  if (user === undefined) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(128,128,128,0.2)', borderTopColor: '#7c6aff', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
+
+  if (user === null) return (
+    <ColorsProvider mode={mode}>
+      <AuthPage onAuth={() => api.get('/auth/me').then(r => setUser(r.data))} mode={mode} onToggleMode={toggleMode} />
+    </ColorsProvider>
+  )
 
   return (
     <ColorsProvider mode={mode}>
       <ExpenseTypesProvider>
-        <AppContent mode={mode} onToggleMode={toggleMode} />
+        <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} />
       </ExpenseTypesProvider>
     </ColorsProvider>
   )

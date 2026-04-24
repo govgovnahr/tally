@@ -91,7 +91,7 @@ function ToggleGroup({ value, onChange, options }) {
             key={val}
             type="button"
             onClick={() => onChange(val)}
-            className="text-xs font-medium px-3 py-1.5 bg-transparent border-none cursor-pointer transition-colors duration-150 font-[inherit]"
+            className="text-xs font-medium px-3 py-1.5 bg-transparent border-none cursor-pointer transition-colors duration-150 font-[inherit] rounded-md"
             style={{
               color: active ? C.primary : C.muted,
               backgroundColor: active ? C.primaryTint : 'transparent',

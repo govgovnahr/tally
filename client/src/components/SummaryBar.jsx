@@ -87,7 +87,8 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
 
   return (
     <div
-      className="rounded-2xl p-4 sm:p-6 mb-6"
+      className="rounded-2xl p-4 sm:p-6 mb-6 cursor-pointer"
+      onClick={() => setCategoriesOpen(o => !o)}
       style={{
         backgroundColor: C.surface,
         backdropFilter: 'none',
@@ -101,7 +102,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
           {/* Spending header */}
           <div
             className="rounded-2xl p-5 mb-6"
-            style={{ background: `linear-gradient(160deg, ${C.surfaceAlt} 0%, transparent 100%)` }}
+            style={{ background: C.surfaceAlt }}
           >
             <div className="flex items-start justify-between mb-6">
               <div>
@@ -218,9 +219,8 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
 
       {/* Category cards toggle header */}
       <div
-        className="flex items-center justify-between cursor-pointer select-none"
-        style={{ marginBottom: categoriesOpen ? 16 : 0 }}
-        onClick={() => setCategoriesOpen(o => !o)}
+        className="flex items-center justify-between select-none -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 rounded-2xl"
+        style={{ marginBottom: categoriesOpen ? 8 : 0 }}
       >
         <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>
           All Categories
@@ -234,6 +234,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
       <div
         className="transition-[grid-template-rows] duration-300"
         style={{ display: 'grid', gridTemplateRows: categoriesOpen ? '1fr' : '0fr' }}
+        onClick={e => e.stopPropagation()}
       >
         <div className="overflow-hidden">
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">

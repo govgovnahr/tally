@@ -16,7 +16,7 @@ function CustomTooltip({ active, payload, label }) {
   return (
     <div
       className="rounded-lg px-3 py-2"
-      style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}
+      style={{ backgroundColor: C.surfacePopup, border: `1px solid ${C.border}` }}
     >
       <p className="text-sm font-semibold mb-1">{label}</p>
       {spent && (

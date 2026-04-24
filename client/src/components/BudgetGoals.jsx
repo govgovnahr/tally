@@ -367,7 +367,9 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
               style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 200 }}
             >
               {OVERRIDE_MONTH_OPTIONS.map(({ key, label }) => (
-                <option key={key} value={key}>{label}{key === currentMonth() ? ' (current)' : ''}</option>
+                <option key={key} value={key}>
+                  {overrideMonths.includes(key) ? '● ' : ''}{label}{key === currentMonth() ? ' (current)' : ''}
+                </option>
               ))}
             </select>
             {isNextMonth && (

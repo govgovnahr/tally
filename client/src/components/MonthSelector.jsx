@@ -89,7 +89,7 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
             <div
               className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 rounded-2xl overflow-y-auto shadow-2xl py-1.5"
               style={{
-                backgroundColor: C.surface,
+                backgroundColor: C.surfacePopup,
                 border: `1px solid ${C.border}`,
                 minWidth: 200,
                 maxHeight: 360,

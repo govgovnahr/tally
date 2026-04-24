@@ -31,13 +31,13 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       aria-describedby={undefined}
       className={cn(
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 p-6 rounded-2xl border",
-        "bg-white/75 dark:bg-[#0e0e16]/80",
-        "border-white/70 dark:border-white/10",
-        "shadow-[0_20px_48px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_32px_64px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)]",
+        "bg-white dark:bg-[#141414]",
+        "border-black/10 dark:border-white/10",
+        "shadow-[0_20px_48px_rgba(0,0,0,0.12)] dark:shadow-[0_32px_64px_rgba(0,0,0,0.6)]",
         "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-top-[2%] data-[state=open]:slide-in-from-top-[2%]",
         className
       )}
-      style={{ backdropFilter: 'blur(28px) saturate(180%)', WebkitBackdropFilter: 'blur(28px) saturate(180%)' }}
+      style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
       {...props}>
       {children}
       <DialogPrimitive.Close

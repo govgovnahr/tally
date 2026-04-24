@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: budget-app
+    runtime: python
+    buildCommand: >-
+      pip install -r server/requirements.txt &&
+      cd client && npm install && npm run build && cd .. &&
+      mkdir -p server/static && cp -r client/dist/. server/static/
+    startCommand: cd server && uvicorn server:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: budget-db
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BUDGET_DATA_DIR
+        value: /data
+      - key: REGISTRATION_OPEN
+        value: "true"
+      - key: PLAID_CLIENT_ID
+        value: ""
+      - key: PLAID_SECRET
+        value: ""
+      - key: PLAID_ENV
+        value: "sandbox"

@@ -244,10 +244,11 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               type="button"
               data-active={isActive}
               onClick={() => handleTypeChange(tab)}
-              className="px-3 py-2.5 text-sm whitespace-nowrap bg-transparent border-none cursor-pointer font-[inherit] flex-shrink-0 border-b-2 transition-colors duration-150"
+              className="px-3 py-2.5 text-sm whitespace-nowrap bg-transparent border-none cursor-pointer font-[inherit] flex-shrink-0 border-b-2 transition-colors duration-150 rounded-lg"
               style={{
                 color: isActive ? tabColor : C.muted,
                 borderBottomColor: isActive ? tabColor : 'transparent',
+                '--hover-tint': `${tabColor}22`,
               }}
             >
               {tab}
