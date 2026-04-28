@@ -31,10 +31,20 @@ function AppContent({ mode, onToggleMode, onLogout }) {
   const [page, setPage] = useState('home')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [outlierMonth, setOutlierMonth] = useState(null)
+  const [initialExpenseType, setInitialExpenseType] = useState(null)
+  const [initialExpenseId, setInitialExpenseId] = useState(null)
+  const [initialExpenseMonth, setInitialExpenseMonth] = useState(null)
 
   const handleNavigate = useCallback((pg, opts = {}) => {
     setPage(pg)
     if (opts.outlierMonth !== undefined) setOutlierMonth(opts.outlierMonth)
+  }, [])
+
+  const handleShowInExpenses = useCallback((expense) => {
+    setInitialExpenseType(expense.type)
+    setInitialExpenseId(expense.id)
+    setInitialExpenseMonth(expense.date.slice(0, 7))
+    setPage('all-expenses')
   }, [])
 
   useEffect(() => {
@@ -203,12 +213,19 @@ function AppContent({ mode, onToggleMode, onLogout }) {
           />
         )}
         {page === 'analysis' && (
-          <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} />
+          <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} onShowInExpenses={handleShowInExpenses} />
         )}
         {page === 'savings' && <SavingsPage />}
         {page === 'budgets' && <BudgetGoals onSaved={refresh} />}
         {page === 'all-expenses' && (
-          <ExpenseList refreshKey={refreshKey} onRefresh={refresh} />
+          <ExpenseList
+            refreshKey={refreshKey}
+            onRefresh={refresh}
+            initialType={initialExpenseType}
+            initialHighlightId={initialExpenseId}
+            initialMonth={initialExpenseMonth}
+            onInitialTypeConsumed={() => { setInitialExpenseType(null); setInitialExpenseId(null); setInitialExpenseMonth(null) }}
+          />
         )}
       </main>
     </div>
@@ -216,7 +233,7 @@ function AppContent({ mode, onToggleMode, onLogout }) {
 }
 
 function ThemedApp() {
-  const [mode, setMode] = useState('dark')
+  const [mode, setMode] = useState('light')
   const [user, setUser] = useState(undefined)
   const toggleMode = () => setMode(m => m === 'dark' ? 'light' : 'dark')
 

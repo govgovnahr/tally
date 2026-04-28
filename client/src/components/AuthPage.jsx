@@ -48,7 +48,7 @@ export default function AuthPage({ onAuth, mode, onToggleMode }) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: mode === 'dark' ? '#0b150b' : '#c0d8c0',
+      background: mode === 'dark' ? '#0e0e10' : '#c0d8c0',
       padding: 16,
       position: 'relative',
     }}>

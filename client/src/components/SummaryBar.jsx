@@ -52,6 +52,8 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
   const [editingIncome, setEditingIncome] = useState(null)
   const [showAllCards, setShowAllCards] = useState(false)
   const [categoriesOpen, setCategoriesOpen] = useState(!defaultCollapsed)
+  const [cardHovered, setCardHovered] = useState(false)
+  const [headerHovered, setHeaderHovered] = useState(false)
 
   const fetchData = useCallback(() => {
     Promise.all([
@@ -87,10 +89,12 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
 
   return (
     <div
-      className="rounded-2xl p-4 sm:p-6 mb-6 cursor-pointer"
+      className="rounded-2xl p-4 sm:p-6 mb-6 transition-colors duration-150"
       onClick={() => setCategoriesOpen(o => !o)}
+      onMouseEnter={() => setCardHovered(true)}
+      onMouseLeave={() => setCardHovered(false)}
       style={{
-        backgroundColor: C.surface,
+        backgroundColor: (cardHovered && !categoriesOpen) || headerHovered ? C.hover : C.surface,
         backdropFilter: 'none',
         WebkitBackdropFilter: 'none',
         border: `1px solid ${C.border}`,
@@ -220,7 +224,9 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
       {/* Category cards toggle header */}
       <div
         className="flex items-center justify-between select-none -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 rounded-2xl"
-        style={{ marginBottom: categoriesOpen ? 8 : 0 }}
+        style={{ marginBottom: categoriesOpen ? 8 : 0, cursor: 'pointer' }}
+        onMouseEnter={() => setHeaderHovered(true)}
+        onMouseLeave={() => setHeaderHovered(false)}
       >
         <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>
           All Categories
@@ -271,11 +277,10 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                 <div
                   key={s.type}
                   onClick={() => onTypeChange?.(isSelected ? 'All' : s.type)}
-                  className="rounded-xl p-3 transition-colors duration-150 min-w-0"
+                  className={`rounded-xl p-3 transition-colors duration-150 min-w-0 ${onTypeChange ? 'cursor-pointer' : ''}`}
                   style={{
                     backgroundColor: isSelected ? `${catColor}${C.cardTintSelectedAlpha}` : `${catColor}${C.cardTintAlpha}`,
                     border: isSelected ? `1.5px solid ${catColor}` : `1px solid ${catColor}${C.cardBorderAlpha}`,
-                    cursor: onTypeChange ? 'pointer' : 'default',
                     viewTransitionName: `vt-card-${s.type.replace(/[^a-zA-Z0-9]/g, '-')}`,
                   }}
                 >

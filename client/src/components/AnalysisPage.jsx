@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { startTransition } from 'react'
-import { TrendingUp, TrendingDown, Minus, TriangleAlert, ArrowUp, ArrowDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, TriangleAlert, ArrowUp, ArrowDown, X } from 'lucide-react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -21,6 +21,9 @@ import MonthSelector from './MonthSelector.jsx'
 import { useC } from '../colors'
 import AddExpenseForm from './AddExpenseForm.jsx'
 import { Card } from 'glasscn-ui'
+import MonthSlider from './MonthSlider.jsx'
+import { ExpandableCard } from './ui/expandable-card.jsx'
+import CategoryAnalysisDialog from './CategoryAnalysisDialog.jsx'
 
 function currentMonth() {
   const now = new Date()
@@ -80,30 +83,6 @@ function StatusBadge({ status }) {
   )
 }
 
-function ToggleGroup({ value, onChange, options }) {
-  const C = useC()
-  return (
-    <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderLight}` }}>
-      {options.map(({ label, val }) => {
-        const active = value === val
-        return (
-          <button
-            key={val}
-            type="button"
-            onClick={() => onChange(val)}
-            className="text-xs font-medium px-3 py-1.5 bg-transparent border-none cursor-pointer transition-colors duration-150 font-[inherit] rounded-md"
-            style={{
-              color: active ? C.primary : C.muted,
-              backgroundColor: active ? C.primaryTint : 'transparent',
-            }}
-          >
-            {label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 function ShowMoreToggle({ shown, total, label, onToggle }) {
   const C = useC()
@@ -125,7 +104,7 @@ function ShowMoreToggle({ shown, total, label, onToggle }) {
 
 // ─── Pacing Section ───────────────────────────────────────────────────────────
 
-function PacingSection({ month, onMonthChange }) {
+function PacingSection({ month, onMonthChange, maxMonths = 12 }) {
   const C = useC()
   const STATUS_COLORS = useStatusColors()
   const { typeMap } = useExpenseTypes()
@@ -135,7 +114,6 @@ function PacingSection({ month, onMonthChange }) {
 
   useEffect(() => {
     setData(null)
-    setShowAllPacing(false)
     api.get('/analysis/pacing', { params: { month, lookback_months: lookbackMonths } })
       .then(r => setData(r.data))
   }, [month, lookbackMonths])
@@ -161,13 +139,9 @@ function PacingSection({ month, onMonthChange }) {
             </span>
           )}
           {!isPast && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm" style={{ color: C.muted }}>History:</span>
-              <ToggleGroup
-                value={lookbackMonths}
-                onChange={v => setLookbackMonths(v)}
-                options={[{ label: '1M', val: 1 }, { label: '3M', val: 3 }, { label: '6M', val: 6 }]}
-              />
+            <div className="flex items-center gap-2" style={{ minWidth: 220 }}>
+              <span className="text-sm flex-shrink-0" style={{ color: C.muted }}>History:</span>
+              <MonthSlider value={lookbackMonths} onChange={setLookbackMonths} min={1} max={maxMonths} />
             </div>
           )}
         </div>
@@ -267,6 +241,8 @@ function BudgetPerformanceSection({ months }) {
     flat: <Minus size={16} style={{ color: C.dimText }} />,
   }
 
+  const [analysisCategory, setAnalysisCategory] = useState(null)
+
   useEffect(() => {
     setShowAllOffenders(false)
     api.get('/analysis/category-stats', { params: { months } }).then(r => setData(r.data))
@@ -280,6 +256,7 @@ function BudgetPerformanceSection({ months }) {
   const offenders = data.filter(d => d.months_over > 0 && d.budget_limit)
 
   return (
+    <>
     <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6 mt-4">
       <h2 className="text-base sm:text-lg font-semibold mb-0.5" style={{ color: C.warmText }}>Budget Performance</h2>
       <p className="text-sm mb-5" style={{ color: C.muted }}>Average monthly spend vs budget over the selected period</p>
@@ -316,8 +293,11 @@ function BudgetPerformanceSection({ months }) {
                   return (
                     <div
                       key={d.type}
-                      className="px-4 py-3 rounded-xl"
-                      style={{ backgroundColor: C.subtleBg, border: `1px solid ${C.border}`, viewTransitionName: `vt-offender-${d.type.replace(/[^a-zA-Z0-9]/g, '-')}` }}
+                      className="px-4 py-3 rounded-xl cursor-pointer transition-colors duration-150"
+                      style={{ backgroundColor: C.subtleBg, border: `1px solid ${C.border}` }}
+                      onClick={() => setAnalysisCategory({ name: d.type, color: typeEntry.color, icon: typeEntry.icon })}
+                      onMouseEnter={ev => { ev.currentTarget.style.backgroundColor = `${catColor}18`; ev.currentTarget.style.borderColor = C.borderMed }}
+                      onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = C.subtleBg; ev.currentTarget.style.borderColor = C.border }}
                     >
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <div className="flex items-center gap-2">
@@ -345,12 +325,164 @@ function BudgetPerformanceSection({ months }) {
         </>
       )}
     </Card>
+    {analysisCategory && (
+      <CategoryAnalysisDialog
+        typeName={analysisCategory.name}
+        typeColor={analysisCategory.color}
+        typeIcon={analysisCategory.icon}
+        onClose={() => setAnalysisCategory(null)}
+      />
+    )}
+  </>
+  )
+}
+
+// ─── Outlier Expanded Content ─────────────────────────────────────────────────
+
+function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, onClose }) {
+  const C = useC()
+  const { typeMap } = useExpenseTypes()
+  const [recent, setRecent] = useState(null)
+
+  const typeEntry = typeMap[expense.type] || { color: C.dimText }
+  const catColor = C.adaptColor(typeEntry.color)
+  const severity = expense.z_score >= 3 ? C.overBudget : expense.z_score >= 2 ? C.atRisk : C.spent
+  const severityLabel = expense.z_score >= 3 ? 'Very unusual' : expense.z_score >= 2 ? 'Notably high' : 'Somewhat high'
+  const max = Math.max(expense.amount, expense.category_avg)
+  const thisWidth = max > 0 ? Math.min(100, (expense.amount / max) * 100) : 0
+  const avgWidth = max > 0 ? Math.min(100, (expense.category_avg / max) * 100) : 0
+
+  useEffect(() => {
+    const month = expense.date.slice(0, 7)
+    api.get('/expenses', { params: { type: expense.type, month, sort_by: 'date', sort_dir: 'desc', page_size: 5 } })
+      .then(async r => {
+        const fromMonth = r.data.expenses ?? []
+        if (fromMonth.length < 5) {
+          const more = await api.get('/expenses', { params: { type: expense.type, sort_by: 'date', sort_dir: 'desc', page_size: 10 } })
+          const seen = new Set(fromMonth.map(e => e.id))
+          const extra = (more.data.expenses ?? []).filter(e => !seen.has(e.id)).slice(0, 5 - fromMonth.length)
+          setRecent([...fromMonth, ...extra])
+        } else {
+          setRecent(fromMonth)
+        }
+      })
+  }, [expense.id])
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-base font-semibold" style={{ color: C.warmText }}>{expense.name}</p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${catColor}22`, color: catColor, border: `1px solid ${catColor}44` }}>{expense.type}</span>
+            <span className="text-sm" style={{ color: C.muted }}>{fmtDate(expense.date)}</span>
+            <span className="text-sm font-bold" style={{ color: C.warmText }}>${expense.amount.toFixed(2)}</span>
+            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: severity, color: '#fff' }}>+{expense.pct_above_avg}%</span>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-full bg-transparent border-none cursor-pointer flex-shrink-0 transition-colors duration-150"
+          style={{ color: C.muted }}
+          onMouseEnter={e => { e.currentTarget.style.color = C.warmText }}
+          onMouseLeave={e => { e.currentTarget.style.color = C.muted }}
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="h-px mx-4" style={{ backgroundColor: `${catColor}30` }} />
+
+      <div className="px-4 py-4 flex flex-col gap-5">
+        {/* Z-score context */}
+        <p className="text-sm" style={{ color: C.muted }}>
+          <strong style={{ color: severity }}>{expense.z_score.toFixed(1)}σ</strong> above average — {severityLabel}
+        </p>
+
+        {/* Bar visualization */}
+        <div className="flex flex-col gap-2.5">
+          {[
+            { label: 'This expense', width: thisWidth, color: severity, value: `$${expense.amount.toFixed(0)}` },
+            { label: 'Category avg', width: avgWidth, color: catColor, value: `$${expense.category_avg.toFixed(0)}/avg`, muted: true },
+          ].map(({ label, width, color, value, muted }) => (
+            <div key={label} className="flex items-center gap-2">
+              <span className="text-[11px] w-24 flex-shrink-0" style={{ color: C.muted }}>{label}</span>
+              <div className="flex-1 h-2.5 rounded-full" style={{ backgroundColor: C.hoverStrong }}>
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${width}%`, backgroundColor: color, opacity: muted ? 0.65 : 1 }} />
+              </div>
+              <span className="text-[11px] w-20 text-right flex-shrink-0 font-medium" style={{ color: muted ? C.muted : C.warmText }}>{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Recent in category */}
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: C.dimText }}>Recent in {expense.type}</p>
+          {recent === null ? (
+            <div className="flex flex-col gap-1.5">
+              {[1, 2, 3].map(i => <div key={i} className="h-7 rounded-lg" style={{ backgroundColor: C.hoverStrong, animation: 'pulse 1.5s ease-in-out infinite' }} />)}
+            </div>
+          ) : recent.length === 0 ? (
+            <p className="text-sm" style={{ color: C.dimText }}>No other expenses found.</p>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {recent.map(r => {
+                const isThis = r.id === expense.id
+                return (
+                  <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                    style={{
+                      backgroundColor: isThis ? `${catColor}15` : 'transparent',
+                      border: isThis ? `1px solid ${catColor}30` : '1px solid transparent',
+                    }}>
+                    <span className="text-[11px] flex-shrink-0 w-14" style={{ color: C.dimText }}>{fmtDate(r.date)}</span>
+                    <span className="text-xs flex-1 truncate" style={{ color: isThis ? C.warmText : C.muted, fontWeight: isThis ? 600 : 400 }}>{r.name}</span>
+                    <span className="text-xs font-medium flex-shrink-0" style={{ color: isThis ? severity : C.muted }}>${r.amount.toFixed(2)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 flex-wrap pt-1 border-t" style={{ borderColor: C.hoverStrong }}>
+          <button
+            onClick={() => { onEdit(expense); onClose() }}
+            className="flex-1 h-9 rounded-xl text-sm font-medium bg-transparent border cursor-pointer transition-colors duration-150"
+            style={{ borderColor: C.border, color: C.warmText, minWidth: 80 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = C.hover }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => { onShowInExpenses(expense); onClose() }}
+            className="flex-1 h-9 rounded-xl text-sm font-medium bg-transparent border cursor-pointer transition-colors duration-150"
+            style={{ borderColor: C.border, color: C.warmText, minWidth: 80 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = C.hover }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
+          >
+            Show in Expenses
+          </button>
+          <button
+            onClick={() => { onDismiss(expense.id); onClose() }}
+            className="flex-1 h-9 rounded-xl text-sm font-medium bg-transparent border cursor-pointer transition-colors duration-150"
+            style={{ borderColor: C.borderMed, color: C.dimText, minWidth: 80 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = C.overBudget; e.currentTarget.style.color = C.overBudget }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.borderMed; e.currentTarget.style.color = C.dimText }}
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
 // ─── Outliers Section ─────────────────────────────────────────────────────────
 
-function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
+function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInExpenses }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
   const [data, setData] = useState([])
@@ -361,6 +493,24 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
   const [sortBy, setSortBy] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
   const sectionRef = useRef(null)
+  const [dismissedIds, setDismissedIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('budget_dismissed_outliers') ?? '[]')) }
+    catch { return new Set() }
+  })
+
+  function handleDismiss(id) {
+    setDismissedIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      localStorage.setItem('budget_dismissed_outliers', JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  function handleUndoDismiss() {
+    setDismissedIds(new Set())
+    localStorage.removeItem('budget_dismissed_outliers')
+  }
 
   useEffect(() => {
     if (defaultMonth) {
@@ -384,7 +534,8 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
   }, [fetchMonths])
 
   const availableMonths = [...new Set(data.map(e => e.date.slice(0, 7)))].sort().reverse()
-  const filtered = filterMonth ? data.filter(e => e.date.startsWith(filterMonth)) : data
+  const filtered = (filterMonth ? data.filter(e => e.date.startsWith(filterMonth)) : data)
+    .filter(e => !dismissedIds.has(e.id))
   const sorted = [...filtered].sort((a, b) => {
     let cmp = 0
     if (sortBy === 'amount') cmp = a.amount - b.amount
@@ -401,12 +552,24 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
         blur="xl"
         className="rounded-xl p-4 sm:p-6 mt-4"
       >
-        <div className="flex items-start gap-2 mb-0.5">
-          <TriangleAlert size={20} className="flex-shrink-0 mt-0.5" style={{ color: C.atRisk }} />
-          <h2 className="text-base sm:text-lg font-semibold" style={{ color: C.warmText }}>Unusual Expenses</h2>
+        <div className="flex items-start justify-between gap-2 mb-0.5">
+          <div className="flex items-start gap-2">
+            <TriangleAlert size={20} className="flex-shrink-0 mt-0.5" style={{ color: C.atRisk }} />
+            <h2 className="text-base sm:text-lg font-semibold" style={{ color: C.warmText }}>Unusual Expenses</h2>
+          </div>
+          {dismissedIds.size > 0 && (
+            <button
+              type="button"
+              onClick={handleUndoDismiss}
+              className="text-xs bg-transparent border-none cursor-pointer flex-shrink-0"
+              style={{ color: C.muted }}
+            >
+              {dismissedIds.size} dismissed · undo
+            </button>
+          )}
         </div>
         <p className="text-sm mb-4" style={{ color: C.muted }}>
-          Individual expenses significantly above their category average
+          Individual expenses significantly above their category average. Click to explore.
         </p>
 
         {data.length > 0 && (
@@ -470,69 +633,55 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth }) {
               const typeEntry = typeMap[e.type] || { color: C.dimText }
               const catColor = C.adaptColor(typeEntry.color)
               const severity = e.z_score >= 3 ? C.overBudget : e.z_score >= 2 ? C.atRisk : C.spent
-              return (
+              const cardTrigger = (
                 <div
-                  key={e.id}
-                  onClick={() => setEditingExpense(e)}
-                  className="px-4 py-3 rounded-xl cursor-pointer transition-colors duration-150"
-                  style={{ border: `1px solid ${C.border}`, backgroundColor: C.subtleBg, viewTransitionName: `vt-outlier-${e.id}` }}
+                  className="px-4 py-3 rounded-xl transition-colors duration-150"
+                  style={{ border: `1px solid ${C.border}`, backgroundColor: C.surface }}
                   onMouseEnter={ev => { ev.currentTarget.style.backgroundColor = `${catColor}18`; ev.currentTarget.style.borderColor = C.borderMed }}
-                  onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = C.subtleBg; ev.currentTarget.style.borderColor = C.border }}
+                  onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = C.surface; ev.currentTarget.style.borderColor = C.border }}
                 >
                   {/* Desktop */}
                   <div className="hidden sm:flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium break-words" style={{ color: C.warmText }}>{e.name}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span
-                          className="text-[11px] px-1.5 py-0.5 rounded-full"
-                          style={{ backgroundColor: `${catColor}22`, color: catColor, border: `1px solid ${catColor}44` }}
-                        >
-                          {e.type}
-                        </span>
-                        <span className="text-sm" style={{ color: C.muted }}>
-                          {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)} in this category
-                        </span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${catColor}22`, color: catColor, border: `1px solid ${catColor}44` }}>{e.type}</span>
+                        <span className="text-sm" style={{ color: C.muted }}>{fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)} in this category</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-sm font-bold" style={{ color: C.warmText }}>${e.amount.toFixed(2)}</span>
-                      <span
-                        className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: severity, color: '#fff' }}
-                      >
-                        +{e.pct_above_avg}%
-                      </span>
+                      <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: severity, color: '#fff' }}>+{e.pct_above_avg}%</span>
                     </div>
                   </div>
-
                   {/* Mobile */}
                   <div className="sm:hidden">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold truncate flex-shrink" style={{ color: C.warmText }}>{e.name}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-sm font-bold" style={{ color: C.warmText }}>${e.amount.toFixed(2)}</span>
-                        <span
-                          className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
-                          style={{ backgroundColor: severity, color: '#fff' }}
-                        >
-                          +{e.pct_above_avg}%
-                        </span>
+                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: severity, color: '#fff' }}>+{e.pct_above_avg}%</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-1">
-                      <span
-                        className="text-[11px] px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44` }}
-                      >
-                        {e.type}
-                      </span>
-                      <span className="text-xs" style={{ color: C.muted }}>
-                        {fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)}
-                      </span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${typeEntry.color}22`, color: typeEntry.color, border: `1px solid ${typeEntry.color}44` }}>{e.type}</span>
+                      <span className="text-xs" style={{ color: C.muted }}>{fmtDate(e.date)} · avg ${e.category_avg.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
+              )
+              return (
+                <ExpandableCard key={e.id} id={e.id} trigger={cardTrigger} accentColor={catColor}>
+                  {(close) => (
+                    <OutlierExpandedContent
+                      expense={e}
+                      onEdit={setEditingExpense}
+                      onDismiss={handleDismiss}
+                      onShowInExpenses={onShowInExpenses}
+                      onClose={close}
+                    />
+                  )}
+                </ExpandableCard>
               )
             })}
             {sorted.length > 3 && (
@@ -620,10 +769,15 @@ function MonthOverMonthSection({ months }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AnalysisPage({ outlierMonth, onClearOutlierMonth }) {
+export default function AnalysisPage({ outlierMonth, onClearOutlierMonth, onShowInExpenses }) {
   const C = useC()
   const [pacingMonth, setPacingMonth] = useState(currentMonth())
   const [historyMonths, setHistoryMonths] = useState(6)
+  const [maxMonths, setMaxMonths] = useState(12)
+
+  useEffect(() => {
+    api.get('/analysis/months-available').then(r => setMaxMonths(Math.max(r.data.months, 2)))
+  }, [])
 
   return (
     <div>
@@ -632,16 +786,14 @@ export default function AnalysisPage({ outlierMonth, onClearOutlierMonth }) {
           <h1 className="text-xl sm:text-2xl font-bold" style={{ color: C.warmText }}>Spending Analysis</h1>
           <p className="text-sm mt-0.5" style={{ color: C.muted }}>Pacing, budget performance, outliers, and trends</p>
         </div>
-        <ToggleGroup
-          value={historyMonths}
-          onChange={v => setHistoryMonths(v)}
-          options={[{ label: '3M', val: 3 }, { label: '6M', val: 6 }, { label: '12M', val: 12 }]}
-        />
+        <div style={{ minWidth: 240 }}>
+          <MonthSlider value={historyMonths} onChange={setHistoryMonths} min={1} max={maxMonths} />
+        </div>
       </div>
 
-      <PacingSection month={pacingMonth} onMonthChange={setPacingMonth} />
+      <PacingSection month={pacingMonth} onMonthChange={setPacingMonth} maxMonths={maxMonths} />
       <BudgetPerformanceSection months={historyMonths} />
-      <OutliersSection months={historyMonths} defaultMonth={outlierMonth} onClearDefaultMonth={onClearOutlierMonth} />
+      <OutliersSection months={historyMonths} defaultMonth={outlierMonth} onClearDefaultMonth={onClearOutlierMonth} onShowInExpenses={onShowInExpenses} />
       <MonthOverMonthSection months={historyMonths} />
     </div>
   )

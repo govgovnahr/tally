@@ -7,8 +7,7 @@ import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
 import { Card } from 'glasscn-ui'
-
-const MONTH_OPTIONS = [6, 12, 24]
+import MonthSlider from './MonthSlider.jsx'
 
 function shortLabel(m) {
   const [y, mo] = m.split('-').map(Number)
@@ -81,11 +80,16 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
   const AXIS_LINE = { stroke: C.border }
   const { expenseTypes, macroMap } = useExpenseTypes()
   const [monthsToShow, setMonthsToShow] = useState(6)
+  const [maxMonths, setMaxMonths] = useState(12)
   const [chartData, setChartData] = useState([])
   const [totalBudget, setTotalBudget] = useState(0)
   const [budgetByType, setBudgetByType] = useState({})
   const [hasOverrides, setHasOverrides] = useState(false)
   const [hoveredBar, setHoveredBar] = useState(false)
+
+  useEffect(() => {
+    api.get('/analysis/months-available').then(r => setMaxMonths(Math.max(r.data.months, 2)))
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -182,21 +186,8 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
           )}
         </p>
         <div className="flex items-center gap-3">
-          <div className="flex gap-0.5">
-            {MONTH_OPTIONS.map(n => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setMonthsToShow(n)}
-                className="min-h-[40px] min-w-[36px] flex items-center justify-center cursor-pointer bg-transparent border-none font-[inherit] text-sm transition-colors duration-150"
-                style={{
-                  fontWeight: monthsToShow === n ? 600 : 400,
-                  color: monthsToShow === n ? C.primary : C.dimText,
-                }}
-              >
-                {n}m
-              </button>
-            ))}
+          <div style={{ minWidth: 200 }}>
+            <MonthSlider value={monthsToShow} onChange={setMonthsToShow} min={1} max={maxMonths} />
           </div>
           {activeMacro ? (
             <button

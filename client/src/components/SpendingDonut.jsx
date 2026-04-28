@@ -9,10 +9,13 @@ function CustomTooltip({ active, payload }) {
   const C = useC()
   if (!active || !payload?.length) return null
   const d = payload[0].payload
+  const shadow = C.mode === 'dark'
+    ? '0 4px 16px rgba(0,0,0,0.5)'
+    : '0 4px 16px rgba(0,0,0,0.13)'
   return (
     <div
       className="rounded-lg px-3 py-2"
-      style={{ backgroundColor: C.surfacePopup, border: `1px solid ${C.border}` }}
+      style={{ backgroundColor: C.surfacePopup, border: `1px solid ${C.border}`, boxShadow: shadow }}
     >
       <p className="text-sm font-semibold">{d.name}</p>
       <span className="text-xs" style={{ color: C.muted }}>{fmt(d.value)} · {d.pct}%</span>

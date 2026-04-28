@@ -117,6 +117,8 @@ export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey
                           color: isSelected ? C.primary : C.warmText,
                           fontWeight: isSelected ? 700 : 400,
                         }}
+                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = C.hover }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
                       >
                         {shortMonth(m)}
                         {m === cur && (

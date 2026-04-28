@@ -27,6 +27,7 @@
     "clsx": "^2.1.1",
     "glasscn-ui": "^0.7.1",
     "lucide-react": "^1.8.0",
+    "motion": "^12.38.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.8.1",

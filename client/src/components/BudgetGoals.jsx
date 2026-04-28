@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, Plus, Pencil, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Pencil, Trash2, Upload, BarChart2 } from 'lucide-react'
+import CategoryAnalysisDialog from './CategoryAnalysisDialog.jsx'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -410,7 +411,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
                   style={{ border: `1px solid ${C.hoverStrong}`, opacity: enabled[t.name] ? 1 : 0.55 }}
                 >
                   <div className="flex items-center gap-3 px-3 py-2"
-                    onMouseEnter={e => e.currentTarget.parentElement.style.backgroundColor = C.subtleBg}
+                    onMouseEnter={e => e.currentTarget.parentElement.style.backgroundColor = `${tColor}14`}
                     onMouseLeave={e => e.currentTarget.parentElement.style.backgroundColor = 'transparent'}>
                     <div
                       onClick={() => { setEnabled(prev => ({ ...prev, [t.name]: !prev[t.name] })); setSaved(false) }}
@@ -633,7 +634,7 @@ function MacrocategoryManager() {
           ) : (
             <div key={m.id} className="flex items-center gap-3 px-3 py-2 rounded-xl transition-colors duration-150"
               style={{ border: `1px solid ${C.hoverStrong}` }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = `${m.color}14`}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
               <span className="text-sm font-medium flex-1" style={{ color: C.warmText }}>{m.name}</span>
@@ -700,6 +701,7 @@ export default function BudgetGoals({ onSaved }) {
   const [editTarget, setEditTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [analysisCategory, setAnalysisCategory] = useState(null)
 
   const currentMonthShort = new Date().toLocaleString('en-US', { month: 'short' })
 
@@ -768,7 +770,7 @@ export default function BudgetGoals({ onSaved }) {
         key={t.id}
         className="rounded-xl px-3 py-2 transition-colors duration-150"
         style={{ border: `1px solid ${C.hoverStrong}` }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = `${tColor}14`}
         onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         {/* Desktop */}
@@ -792,6 +794,13 @@ export default function BudgetGoals({ onSaved }) {
             </select>
           )}
           {inputField}
+          <button type="button" title="View analysis" onClick={() => setAnalysisCategory({ name: t.name, color: t.color, icon: t.icon })}
+            className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
+            style={{ color: C.muted }}
+            onMouseEnter={e => e.currentTarget.style.color = C.primary}
+            onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+            <BarChart2 size={14} />
+          </button>
           <button type="button" title="Edit category" onClick={() => { setEditTarget(t); setFormOpen(true) }}
             className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
             style={{ color: C.muted }}
@@ -938,6 +947,14 @@ export default function BudgetGoals({ onSaved }) {
           onDeleted={handleTypeDeleted}
           type={deleteTarget}
           otherTypes={expenseTypes.filter(t => t.id !== deleteTarget.id)}
+        />
+      )}
+      {analysisCategory && (
+        <CategoryAnalysisDialog
+          typeName={analysisCategory.name}
+          typeColor={analysisCategory.color}
+          typeIcon={analysisCategory.icon}
+          onClose={() => setAnalysisCategory(null)}
         />
       )}
     </Card>

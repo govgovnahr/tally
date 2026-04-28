@@ -298,6 +298,49 @@ button:not(:disabled):hover::after,
   background-color: var(--hover-tint, rgba(82,201,122,0.07));
 }
 
+/* ─── Month slider ───────────────────────────────────────────────────────── */
+input[type="range"].month-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+}
+input[type="range"].month-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transition: transform 120ms ease;
+}
+input[type="range"].month-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+input[type="range"].month-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+input[type="range"].month-slider::-moz-range-progress {
+  background: var(--c-primary);
+  height: 4px;
+  border-radius: 2px;
+}
+input[type="range"].month-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
 /* ─── Uniform select styling (matches Input component) ───────────────────── */
 :root:not(.dark) select {
   background-color: rgba(255, 255, 255, 0.8);

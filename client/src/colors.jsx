@@ -201,7 +201,7 @@ function makeLightC() {
     surface:      '#ffffff',
     surfaceAlt:   '#f4faf4',
     surfacePopup: '#ffffff',
-    subtleBg:     'rgba(0,0,0,0.03)',
+    subtleBg:     'rgba(45,138,80,0.06)',
     border:       'rgba(0,0,0,0.10)',
     borderSubtle: 'rgba(0,0,0,0.07)',
     borderLight:  'rgba(0,0,0,0.10)',
@@ -210,9 +210,9 @@ function makeLightC() {
     borderHover:  'rgba(0,0,0,0.24)',
     refLine:      'rgba(17,24,39,0.14)',
     gridLine:     'rgba(17,24,39,0.05)',
-    hover:        'rgba(17,24,39,0.04)',
-    hoverMed:     'rgba(17,24,39,0.06)',
-    hoverStrong:  'rgba(17,24,39,0.09)',
+    hover:        'rgba(45,138,80,0.08)',
+    hoverMed:     'rgba(45,138,80,0.12)',
+    hoverStrong:  'rgba(45,138,80,0.16)',
     adaptColor:   darkenForLight,
   }
 }
@@ -222,7 +222,7 @@ function makeLightC() {
 const ColorsContext = createContext(makeDarkC())
 
 export function ColorsProvider({ mode, children }) {
-  const value = mode === 'light' ? makeLightC() : makeDarkC()
+  const value = { ...(mode === 'light' ? makeLightC() : makeDarkC()), mode }
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', mode === 'dark')

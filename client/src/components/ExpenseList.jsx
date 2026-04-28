@@ -49,13 +49,21 @@ function SortBtn({ col, sortBy, sortDir, onSort, children, className = '' }) {
   )
 }
 
-export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange }) {
+export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed }) {
   const C = useC()
   const { typeNames, typeMap, macroMap } = useExpenseTypes()
 
-  const [internalType, setInternalType] = useState('All')
+  const [internalType, setInternalType] = useState(initialType ?? 'All')
   const activeType = propActiveType ?? internalType
   const handleTypeChange = onTypeChange ?? setInternalType
+  const [highlightId, setHighlightId] = useState(initialHighlightId ?? null)
+  const [internalMonth] = useState(initialMonth ?? null)
+  const effectiveMonth = month ?? internalMonth
+
+  useEffect(() => {
+    onInitialTypeConsumed?.()
+  }, [])
+
   const tabsRef = useRef(null)
 
   useEffect(() => {
@@ -76,6 +84,16 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const [expenses, setExpenses] = useState([])
   const [incomes, setIncomes] = useState([])
   const [total, setTotal] = useState(0)
+
+  useEffect(() => {
+    if (!highlightId) return
+    const frame = requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-expense-id="${highlightId}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    const t = setTimeout(() => setHighlightId(null), 5000)
+    return () => { cancelAnimationFrame(frame); clearTimeout(t) }
+  }, [highlightId, expenses])
   const [page, setPage] = useState(1)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
@@ -105,12 +123,12 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
     }
   }
 
-  useEffect(() => { setPage(1) }, [activeType, activeMacro, month, refreshKey, search, sortBy, sortDir])
+  useEffect(() => { setPage(1) }, [activeType, activeMacro, effectiveMonth, refreshKey, search, sortBy, sortDir])
 
   useEffect(() => {
     if (activeType === 'Income') {
       const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
-      if (month) params.month = month
+      if (effectiveMonth) params.month = effectiveMonth
       if (search) params.search = search
       api.get('/incomes', { params }).then(res => {
         const update = () => { setIncomes(res.data.incomes); setTotal(res.data.total) }
@@ -120,14 +138,14 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
       if (activeMacro) params.macrocategory_id = activeMacro
       else if (activeType !== 'All') params.type = activeType
-      if (month) params.month = month
+      if (effectiveMonth) params.month = effectiveMonth
       if (search) params.search = search
       api.get('/expenses', { params }).then(res => {
         const update = () => { setExpenses(res.data.expenses); setTotal(res.data.total) }
         update()
       })
     }
-  }, [refreshKey, activeType, activeMacro, month, page, search, sortBy, sortDir])
+  }, [refreshKey, activeType, activeMacro, effectiveMonth, page, search, sortBy, sortDir])
 
   async function handleDeleteExpense(id) {
     setExpenses(prev => prev.filter(e => e.id !== id))
@@ -137,7 +155,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
     } catch {
       const params = { page, page_size: PAGE_SIZE }
       if (activeType !== 'All') params.type = activeType
-      if (month) params.month = month
+      if (effectiveMonth) params.month = effectiveMonth
       api.get('/expenses', { params }).then(res => setExpenses(res.data.expenses))
     }
   }
@@ -149,13 +167,13 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       onRefresh()
     } catch {
       const params = { page, page_size: PAGE_SIZE }
-      if (month) params.month = month
+      if (effectiveMonth) params.month = effectiveMonth
       api.get('/incomes', { params }).then(res => setIncomes(res.data.incomes))
     }
   }
 
   async function handleClearAll() {
-    const params = month ? { month } : {}
+    const params = effectiveMonth ? { month: effectiveMonth } : {}
     await api.delete('/transactions', { params })
     setShowClearConfirm(false)
     onRefresh()
@@ -178,17 +196,17 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-3">
         <h2 className="text-base font-semibold" style={{ color: C.warmText }}>
           {isIncome
-            ? month ? `${formatMonthLabel(month)}'s Income` : 'All Income'
+            ? effectiveMonth ? `${formatMonthLabel(effectiveMonth)}'s Income` : 'All Income'
             : macroName
-              ? month ? `${formatMonthLabel(month)} · ${macroName}` : macroName
-              : month ? `${formatMonthLabel(month)}'s Expenses` : 'All Expenses'}
+              ? effectiveMonth ? `${formatMonthLabel(effectiveMonth)} · ${macroName}` : macroName
+              : effectiveMonth ? `${formatMonthLabel(effectiveMonth)}'s Expenses` : 'All Expenses'}
         </h2>
 
         {/* Desktop buttons */}
         <div className="hidden sm:flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowClearConfirm(true)}
             className="font-semibold text-red-500 border-red-400 hover:bg-red-50 dark:hover:bg-red-950">
-            {month ? 'Clear Month' : 'Clear All'}
+            {effectiveMonth ? 'Clear Month' : 'Clear All'}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="font-semibold">
             <Upload size={14} className="mr-1" />Import
@@ -292,14 +310,23 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       {/* Mobile card list */}
       {!isEmpty && (
         <div className="sm:hidden">
-          {rows.map(row => (
+          {rows.map(row => {
+            const isHighlighted = !isIncome && highlightId === row.id
+            return (
             <div
               key={row.id}
+              data-expense-id={row.id}
               onClick={() => { setDetailItem(row); setDetailIsIncome(isIncome) }}
-              className="px-4 py-3 cursor-pointer select-none transition-colors duration-150"
-              style={{ borderBottom: `1px solid ${C.hoverStrong}` }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+              className="px-4 py-3 cursor-pointer select-none"
+              style={{
+                borderBottom: `1px solid ${C.hoverStrong}`,
+                backgroundColor: isHighlighted ? `${C.primary}18` : 'transparent',
+                outline: isHighlighted ? `2px solid ${C.primary}55` : 'none',
+                outlineOffset: '-2px',
+                transition: 'background-color 0.5s, outline 0.5s',
+              }}
+              onMouseEnter={e => { if (!isHighlighted) e.currentTarget.style.backgroundColor = !isIncome && typeMap[row.type]?.color ? `${C.adaptColor(typeMap[row.type].color)}14` : C.subtleBg }}
+              onMouseLeave={e => { if (!isHighlighted) e.currentTarget.style.backgroundColor = isHighlighted ? `${C.primary}18` : 'transparent' }}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-shrink">
@@ -327,7 +354,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                 <span className="text-xs" style={{ color: C.muted }}>{formatDate(row.date)}</span>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 
@@ -354,7 +381,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
               {isIncome
                 ? incomes.map(inc => (
                   <TableRow key={inc.id} style={{ borderColor: C.hoverStrong, viewTransitionName: `row-inc-${inc.id}` }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = C.subtleBg}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = `${C.income}14`}
                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
                     <TableCell className="max-w-0 w-full" style={{ color: C.warmText }}>
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -397,10 +424,22 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                     </TableCell>
                   </TableRow>
                 ))
-                : expenses.map(e => (
-                  <TableRow key={e.id} style={{ borderColor: C.hoverStrong, viewTransitionName: `row-exp-${e.id}` }}
-                    onMouseEnter={ev => ev.currentTarget.style.backgroundColor = C.subtleBg}
-                    onMouseLeave={ev => ev.currentTarget.style.backgroundColor = 'transparent'}>
+                : expenses.map(e => {
+                  const isHighlighted = highlightId === e.id
+                  return (
+                  <TableRow
+                    key={e.id}
+                    data-expense-id={e.id}
+                    style={{
+                      borderColor: C.hoverStrong,
+                      viewTransitionName: `row-exp-${e.id}`,
+                      backgroundColor: isHighlighted ? `${C.primary}18` : 'transparent',
+                      outline: isHighlighted ? `2px solid ${C.primary}55` : 'none',
+                      outlineOffset: '-2px',
+                      transition: 'background-color 0.5s, outline 0.5s',
+                    }}
+                    onMouseEnter={ev => { if (!isHighlighted) ev.currentTarget.style.backgroundColor = typeMap[e.type]?.color ? `${C.adaptColor(typeMap[e.type].color)}14` : C.subtleBg }}
+                    onMouseLeave={ev => { if (!isHighlighted) ev.currentTarget.style.backgroundColor = 'transparent' }}>
                     <TableCell className="max-w-0 w-full" style={{ color: C.warmText }}>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{e.name}</span>
@@ -440,7 +479,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                )})
               }
             </TableBody>
           </Table>
@@ -481,11 +520,11 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       <Dialog open={showClearConfirm} onOpenChange={open => { if (!open) setShowClearConfirm(false) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{month ? `Clear ${formatMonthLabel(month)}?` : 'Clear all transactions?'}</DialogTitle>
+            <DialogTitle>{effectiveMonth ? `Clear ${formatMonthLabel(effectiveMonth)}?` : 'Clear all transactions?'}</DialogTitle>
           </DialogHeader>
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-            {month
-              ? `This will permanently delete all expenses and income for ${formatMonthLabel(month)}. This cannot be undone.`
+            {effectiveMonth
+              ? `This will permanently delete all expenses and income for ${formatMonthLabel(effectiveMonth)}. This cannot be undone.`
               : 'This will permanently delete all expenses and income records. This cannot be undone.'}
           </p>
           <DialogFooter>

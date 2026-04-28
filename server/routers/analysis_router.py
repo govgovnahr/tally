@@ -247,6 +247,21 @@ def get_avg_expenses(months: int = Query(3), user_id: str = Depends(get_current_
     return {"avg_monthly_expenses": avg, "months": months}
 
 
+@router.get("/analysis/months-available")
+def get_months_available(user_id: str = Depends(get_current_user)):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT MIN(substr(date,1,7)) as earliest FROM expenses WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+    if not row or not row["earliest"]:
+        return {"months": 6}
+    ey, em = map(int, row["earliest"].split("-"))
+    today = date.today()
+    months = (today.year - ey) * 12 + (today.month - em) + 1
+    return {"months": max(months, 1)}
+
+
 @router.get("/analysis/month-over-month")
 def get_month_over_month(months: int = Query(6), user_id: str = Depends(get_current_user)):
     month_list = _months_range(months)

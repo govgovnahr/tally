@@ -1,6 +1,5 @@
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -30,7 +29,7 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       ref={ref}
       aria-describedby={undefined}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 p-6 rounded-2xl border",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 p-6 rounded-2xl border overflow-hidden",
         "bg-white dark:bg-[#141414]",
         "border-black/10 dark:border-white/10",
         "shadow-[0_20px_48px_rgba(0,0,0,0.12)] dark:shadow-[0_32px_64px_rgba(0,0,0,0.6)]",
@@ -40,11 +39,6 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       style={{ backdropFilter: 'none', WebkitBackdropFilter: 'none' }}
       {...props}>
       {children}
-      <DialogPrimitive.Close
-        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
 ))
