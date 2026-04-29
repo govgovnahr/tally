@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { PiggyBank, Sun, Moon } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import { supabase } from '../supabase.js'
 import { useC } from '../colors'
+import { TallyLogo } from './TallyLogo.jsx'
 
 export default function AuthPage({ mode, onToggleMode }) {
   const C = useC()
@@ -34,9 +35,9 @@ export default function AuthPage({ mode, onToggleMode }) {
     width: '100%',
     padding: '10px 14px',
     borderRadius: 10,
-    border: `1px solid ${C.border}`,
-    background: mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-    color: C.text,
+    border: `1px solid ${C.borderMed}`,
+    background: mode === 'dark' ? 'rgba(61,45,34,0.5)' : C.surfaceAlt,
+    color: C.warmText,
     fontSize: 14,
     outline: 'none',
     boxSizing: 'border-box',
@@ -101,25 +102,26 @@ export default function AuthPage({ mode, onToggleMode }) {
   const card = {
     width: '100%',
     maxWidth: 380,
-    background: mode === 'dark' ? '#16161c' : '#ffffff',
+    background: C.surface,
     borderRadius: 20,
-    border: `1px solid ${C.border}`,
+    border: `1px solid ${C.borderMed}`,
     padding: '32px 28px',
-    boxShadow: mode === 'dark' ? '0 8px 40px rgba(0,0,0,0.4)' : '0 8px 40px rgba(0,0,0,0.08)',
+    boxShadow: mode === 'dark'
+      ? '0 8px 40px rgba(0,0,0,0.5)'
+      : '0 8px 40px rgba(74,55,40,0.10)',
+  }
+
+  const primaryBtn = {
+    marginTop: 4, padding: '11px 0', borderRadius: 10, border: 'none',
+    background: C.primary, color: 'var(--color-primary-action-text)',
+    fontWeight: 700, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer',
+    opacity: loading ? 0.7 : 1, fontFamily: 'inherit', transition: 'opacity 0.15s',
+    width: '100%',
   }
 
   const logo = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10,
-        background: C.primary,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <PiggyBank size={18} color="#fff" />
-      </div>
-      <span style={{ fontWeight: 800, fontSize: 16, color: C.warmText, letterSpacing: '-0.02em' }}>
-        Budget
-      </span>
+    <div style={{ marginBottom: 28 }}>
+      <TallyLogo dark={C.mode === 'dark'} />
     </div>
   )
 
@@ -130,7 +132,7 @@ export default function AuthPage({ mode, onToggleMode }) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: mode === 'dark' ? '#0e0e10' : '#c0d8c0',
+      background: 'var(--bg)',
       padding: 16,
       position: 'relative',
     }}>
@@ -158,13 +160,8 @@ export default function AuthPage({ mode, onToggleMode }) {
           onChange={e => setNewPassword(e.target.value)} required style={inputStyle} />
         <input type="password" placeholder="Confirm new password" value={newConfirm}
           onChange={e => setNewConfirm(e.target.value)} required style={inputStyle} />
-        {error && <p style={{ margin: 0, fontSize: 13, color: '#e57373', textAlign: 'center' }}>{error}</p>}
-        <button type="submit" disabled={loading} style={{
-          marginTop: 4, padding: '11px 0', borderRadius: 10, border: 'none',
-          background: C.primary, color: '#fff', fontWeight: 700, fontSize: 14,
-          cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
-          fontFamily: 'inherit', transition: 'opacity 0.15s',
-        }}>
+        {error && <p style={{ margin: 0, fontSize: 13, color: C.overBudget, textAlign: 'center' }}>{error}</p>}
+        <button type="submit" disabled={loading} style={primaryBtn}>
           {loading ? '…' : 'Set new password'}
         </button>
       </form>
@@ -175,7 +172,7 @@ export default function AuthPage({ mode, onToggleMode }) {
     if (forgotSent) {
       return wrap(<>
         {logo}
-        <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 15, color: C.text }}>Check your email</p>
+        <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 15, color: C.warmText }}>Check your email</p>
         <p style={{ margin: '0 0 20px', fontSize: 13, color: C.muted }}>
           If an account exists for {forgotEmail}, a reset link is on its way.
         </p>
@@ -193,12 +190,7 @@ export default function AuthPage({ mode, onToggleMode }) {
       <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <input type="email" placeholder="Email" value={forgotEmail}
           onChange={e => setForgotEmail(e.target.value)} required style={inputStyle} />
-        <button type="submit" disabled={loading} style={{
-          marginTop: 4, padding: '11px 0', borderRadius: 10, border: 'none',
-          background: C.primary, color: '#fff', fontWeight: 700, fontSize: 14,
-          cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
-          fontFamily: 'inherit', transition: 'opacity 0.15s',
-        }}>
+        <button type="submit" disabled={loading} style={primaryBtn}>
           {loading ? '…' : 'Send reset link'}
         </button>
         <button type="button" onClick={() => setShowForgot(false)}
@@ -214,7 +206,7 @@ export default function AuthPage({ mode, onToggleMode }) {
 
     <div style={{
       display: 'flex', gap: 4, marginBottom: 24,
-      background: mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+      background: mode === 'dark' ? 'rgba(61,45,34,0.5)' : `${C.borderMed}80`,
       borderRadius: 10, padding: 4,
     }}>
       {['login', 'register'].map(t => (
@@ -225,9 +217,9 @@ export default function AuthPage({ mode, onToggleMode }) {
           style={{
             flex: 1, padding: '7px 0', borderRadius: 7, border: 'none',
             cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-            background: tab === t ? (mode === 'dark' ? 'rgba(255,255,255,0.12)' : '#fff') : 'transparent',
-            color: tab === t ? C.text : C.muted,
-            boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+            background: tab === t ? C.surface : 'transparent',
+            color: tab === t ? C.warmText : C.muted,
+            boxShadow: tab === t ? '0 1px 4px rgba(74,55,40,0.12)' : 'none',
             transition: 'all 0.15s',
           }}
         >
@@ -246,15 +238,10 @@ export default function AuthPage({ mode, onToggleMode }) {
           onChange={e => setConfirm(e.target.value)} required style={inputStyle} />
       )}
 
-      {info && <p style={{ margin: 0, fontSize: 13, color: '#4caf50', textAlign: 'center' }}>{info}</p>}
-      {error && <p style={{ margin: 0, fontSize: 13, color: '#e57373', textAlign: 'center' }}>{error}</p>}
+      {info && <p style={{ margin: 0, fontSize: 13, color: C.onTrack, textAlign: 'center' }}>{info}</p>}
+      {error && <p style={{ margin: 0, fontSize: 13, color: C.overBudget, textAlign: 'center' }}>{error}</p>}
 
-      <button type="submit" disabled={loading} style={{
-        marginTop: 4, padding: '11px 0', borderRadius: 10, border: 'none',
-        background: C.primary, color: '#fff', fontWeight: 700, fontSize: 14,
-        cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
-        fontFamily: 'inherit', transition: 'opacity 0.15s',
-      }}>
+      <button type="submit" disabled={loading} style={primaryBtn}>
         {loading ? '…' : tab === 'login' ? 'Sign in' : 'Create account'}
       </button>
 
@@ -267,9 +254,9 @@ export default function AuthPage({ mode, onToggleMode }) {
     </form>
 
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 4px' }}>
-      <div style={{ flex: 1, height: 1, background: C.border }} />
+      <div style={{ flex: 1, height: 1, background: C.borderMed }} />
       <span style={{ fontSize: 12, color: C.muted }}>or</span>
-      <div style={{ flex: 1, height: 1, background: C.border }} />
+      <div style={{ flex: 1, height: 1, background: C.borderMed }} />
     </div>
 
     <button
@@ -277,8 +264,8 @@ export default function AuthPage({ mode, onToggleMode }) {
       onClick={handleGoogle}
       style={{
         width: '100%', marginTop: 12, padding: '10px 0', borderRadius: 10,
-        border: `1px solid ${C.border}`, background: 'transparent',
-        color: C.text, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+        border: `1px solid ${C.borderMed}`, background: 'transparent',
+        color: C.warmText, fontWeight: 600, fontSize: 14, cursor: 'pointer',
         fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       }}
     >

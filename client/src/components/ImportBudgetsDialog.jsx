@@ -32,21 +32,10 @@ function autoMap(headers) {
   return result
 }
 
-function monthsAhead(count) {
-  const result = [{ key: '', label: 'Default (no specific month)' }]
+function currentYearMonth() {
   const now = new Date()
-  let y = now.getFullYear(), m = now.getMonth() - 1
-  if (m <= 0) { m += 12; y -= 1 }
-  for (let i = 0; i <= count + 2; i++) {
-    const key = `${y}-${String(m).padStart(2, '0')}`
-    const label = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-    result.push({ key, label })
-    if (++m > 12) { m = 1; y++ }
-  }
-  return result
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
-
-const SELECTABLE_MONTHS = monthsAhead(12)
 
 function AlertBox({ severity, children }) {
   const C = useC()
@@ -247,11 +236,29 @@ export default function ImportBudgetsDialog({ onClose, onImported }) {
             {/* Target month */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium">Apply to month</label>
-              <NativeSelect value={targetMonth} onChange={setTargetMonth}>
-                {SELECTABLE_MONTHS.map(({ key, label }) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </NativeSelect>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="month"
+                  value={targetMonth}
+                  onChange={e => setTargetMonth(e.target.value)}
+                  className="h-9 flex-1 rounded-lg border px-3 text-sm bg-transparent"
+                  style={{
+                    borderColor: C.borderLight,
+                    color: targetMonth ? C.warmText : C.muted,
+                    colorScheme: C.mode === 'dark' ? 'dark' : 'light',
+                  }}
+                />
+                {targetMonth && (
+                  <button
+                    type="button"
+                    onClick={() => setTargetMonth('')}
+                    className="text-xs bg-transparent border-none cursor-pointer font-[inherit] hover:underline shrink-0"
+                    style={{ color: C.muted }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
               <p className="text-xs" style={{ color: C.muted }}>
                 {targetMonth
                   ? 'All rows will be imported as overrides for this month'

@@ -1,0 +1,217 @@
+/* ============================================================
+   TALLY — Design Tokens
+   Full color system: light mode + dark mode
+   Import this file in your main CSS / index.css
+   ============================================================ */
+
+:root {
+  /* ── Earth tones ── */
+  --color-walnut:      #4A3728;
+  --color-clay:        #7A5C48;
+  --color-sand:        #C4AFA6;
+  --color-linen:       #D3C4B0;
+  --color-parchment:   #EDE8DF;
+  --color-cream:       #F7F3EE;
+
+  /* ── Greens ── */
+  --color-forest:      #2D5016;
+  --color-moss:        #3B6D11;
+  --color-fern:        #639922;
+  --color-sage:        #8BAF5A;
+  --color-sprout:      #C0DD97;
+  --color-mist:        #EAF3DE;
+
+  /* ── Semantic — status badges ── */
+  --color-on-track-bg:      #EAF3DE;
+  --color-on-track-text:    #2D5016;
+  --color-on-track-border:  #8BAF5A;
+
+  --color-under-budget-bg:      #F0F7E8;
+  --color-under-budget-text:    #3B6D11;
+  --color-under-budget-border:  #C0DD97;
+
+  --color-warning-bg:       #FEF3E2;
+  --color-warning-text:     #7A4A00;
+  --color-warning-border:   #E8A838;
+
+  --color-over-budget-bg:   #FDECEA;
+  --color-over-budget-text: #7A1F1F;
+  --color-over-budget-border: #E06060;
+
+  --color-no-limit-bg:      #F2EDE8;
+  --color-no-limit-text:    #5C4535;
+  --color-no-limit-border:  #C4AFA6;
+
+  /* ── Semantic — terracotta (danger, over budget) ── */
+  --color-terracotta-dark:  #8B3A2A;
+  --color-terracotta-mid:   #C4604A;
+  --color-terracotta-light: #FAD5CC;
+
+  /* ── Semantic — amber (warning, approaching limit) ── */
+  --color-amber-dark:   #A0722A;
+  --color-amber-mid:    #E8A838;
+  --color-amber-light:  #FEF3E2;
+
+  /* ── App surfaces (light mode) ── */
+  --surface-page:       #EDE8DF;   /* page background */
+  --surface-card:       #F7F3EE;   /* card / panel background */
+  --surface-nav:        #4A3728;   /* top nav bar */
+  --surface-input:      #FFFFFF;   /* form inputs */
+
+  /* ── Text (light mode) ── */
+  --text-primary:       #2A1F17;   /* headings, strong values */
+  --text-secondary:     #7A5C48;   /* labels, meta */
+  --text-tertiary:      #C4AFA6;   /* placeholder, disabled */
+  --text-on-nav:        #F7F3EE;   /* text on dark nav */
+  --text-on-nav-muted:  #8BAF5A;   /* inactive nav links */
+  --text-income:        #3B6D11;   /* positive amounts */
+  --text-expense:       #8B3A2A;   /* negative / danger amounts */
+  --text-warning:       #A0722A;   /* warning amounts */
+
+  /* ── Borders (light mode) ── */
+  --border-default:     #D3C4B0;
+  --border-subtle:      #EDE8DF;
+  --border-strong:      #C4AFA6;
+
+  /* ── Interactive ── */
+  --color-primary-action:       #3B6D11;   /* primary buttons, CTAs */
+  --color-primary-action-hover: #2D5016;
+  --color-primary-action-text:  #EAF3DE;
+  --color-link:                 #639922;
+}
+
+/* ── Dark mode ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* App surfaces */
+    --surface-page:       #1A120C;
+    --surface-card:       #251A13;
+    --surface-nav:        #160E08;
+    --surface-input:      #2D1F15;
+
+    /* Text */
+    --text-primary:       #F7F3EE;
+    --text-secondary:     #C4AFA6;
+    --text-tertiary:      #7A5C48;
+    --text-on-nav:        #F7F3EE;
+    --text-on-nav-muted:  #8BAF5A;
+    --text-income:        #97C459;
+    --text-expense:       #E08070;
+    --text-warning:       #E8A838;
+
+    /* Borders */
+    --border-default:     #3D2D22;
+    --border-subtle:      #2D1F15;
+    --border-strong:      #5C4535;
+
+    /* Semantic status — dark mode */
+    --color-on-track-bg:      #1A2E10;
+    --color-on-track-text:    #C0DD97;
+    --color-on-track-border:  #3B6D11;
+
+    --color-under-budget-bg:      #162608;
+    --color-under-budget-text:    #C0DD97;
+    --color-under-budget-border:  #2D5016;
+
+    --color-warning-bg:       #2A1E08;
+    --color-warning-text:     #FAC775;
+    --color-warning-border:   #A0722A;
+
+    --color-over-budget-bg:   #2A1010;
+    --color-over-budget-text: #FAD5CC;
+    --color-over-budget-border: #8B3A2A;
+
+    --color-no-limit-bg:      #251A13;
+    --color-no-limit-text:    #C4AFA6;
+    --color-no-limit-border:  #5C4535;
+
+    /* Interactive */
+    --color-primary-action:       #639922;
+    --color-primary-action-hover: #8BAF5A;
+    --color-primary-action-text:  #1A2E10;
+    --color-link:                 #97C459;
+  }
+}
+
+/* ── Tally class also supports [data-theme="dark"] for manual toggle ── */
+[data-theme="dark"] {
+  --surface-page:       #1A120C;
+  --surface-card:       #251A13;
+  --surface-nav:        #160E08;
+  --surface-input:      #2D1F15;
+  --text-primary:       #F7F3EE;
+  --text-secondary:     #C4AFA6;
+  --text-tertiary:      #7A5C48;
+  --text-on-nav:        #F7F3EE;
+  --text-on-nav-muted:  #8BAF5A;
+  --text-income:        #97C459;
+  --text-expense:       #E08070;
+  --text-warning:       #E8A838;
+  --border-default:     #3D2D22;
+  --border-subtle:      #2D1F15;
+  --border-strong:      #5C4535;
+  --color-on-track-bg:      #1A2E10;
+  --color-on-track-text:    #C0DD97;
+  --color-on-track-border:  #3B6D11;
+  --color-under-budget-bg:      #162608;
+  --color-under-budget-text:    #C0DD97;
+  --color-under-budget-border:  #2D5016;
+  --color-warning-bg:       #2A1E08;
+  --color-warning-text:     #FAC775;
+  --color-warning-border:   #A0722A;
+  --color-over-budget-bg:   #2A1010;
+  --color-over-budget-text: #FAD5CC;
+  --color-over-budget-border: #8B3A2A;
+  --color-no-limit-bg:      #251A13;
+  --color-no-limit-text:    #C4AFA6;
+  --color-no-limit-border:  #5C4535;
+  --color-primary-action:       #639922;
+  --color-primary-action-hover: #8BAF5A;
+  --color-primary-action-text:  #1A2E10;
+  --color-link:                 #97C459;
+}
+
+/* ============================================================
+   STATUS BADGE UTILITY CLASSES
+   Usage: <span class="tally-badge tally-badge--on-track">On track</span>
+   ============================================================ */
+
+.tally-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.tally-badge--on-track {
+  background: var(--color-on-track-bg);
+  color: var(--color-on-track-text);
+  border-color: var(--color-on-track-border);
+}
+
+.tally-badge--under-budget {
+  background: var(--color-under-budget-bg);
+  color: var(--color-under-budget-text);
+  border-color: var(--color-under-budget-border);
+}
+
+.tally-badge--warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-color: var(--color-warning-border);
+}
+
+.tally-badge--over-budget {
+  background: var(--color-over-budget-bg);
+  color: var(--color-over-budget-text);
+  border-color: var(--color-over-budget-border);
+}
+
+.tally-badge--no-limit {
+  background: var(--color-no-limit-bg);
+  color: var(--color-no-limit-text);
+  border-color: var(--color-no-limit-border);
+}

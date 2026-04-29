@@ -1,3 +1,4 @@
+@import './styles/tokens.css';
 @import "tailwindcss";
 @source "../../node_modules/glasscn-ui/dist/index.js";
 
@@ -69,141 +70,144 @@
 :root {
   --radius: 0.75rem;
 
-  /* shadcn/ui HSL tokens - light */
-  --background:            138 18% 88%;
-  --foreground:            220 40% 10%;
-  --card:                  138 10% 96%;
-  --card-foreground:       220 40% 10%;
-  --popover:               138 10% 96%;
-  --popover-foreground:    220 40% 10%;
-  --primary:               142 55% 35%;
-  --primary-foreground:    0 0% 100%;
-  --secondary:             138 14% 86%;
-  --secondary-foreground:  220 40% 10%;
-  --muted:                 138 14% 84%;
-  --muted-foreground:      215 20% 45%;
-  --accent:                138 14% 84%;
-  --accent-foreground:     220 40% 10%;
-  --destructive:           0 72% 50%;
-  --destructive-foreground:0 0% 100%;
-  --border:                138 14% 78%;
-  --input:                 138 14% 78%;
-  --ring:                  142 55% 35%;
+  /* shadcn/ui HSL tokens - light (Tally earth palette) */
+  --background:            39 28% 90%;   /* #EDE8DF parchment */
+  --foreground:            26 29% 13%;   /* #2A1F17 dark walnut */
+  --card:                  33 37% 95%;   /* #F7F3EE cream */
+  --card-foreground:       26 29% 13%;
+  --popover:               33 37% 95%;
+  --popover-foreground:    26 29% 13%;
+  --primary:               93 73% 25%;   /* #3B6D11 moss */
+  --primary-foreground:    86 47% 91%;   /* #EAF3DE mist */
+  --secondary:             35 28% 76%;   /* #D3C4B0 linen */
+  --secondary-foreground:  26 29% 13%;
+  --muted:                 35 28% 80%;
+  --muted-foreground:      24 26% 38%;   /* #7A5C48 clay */
+  --accent:                35 28% 80%;
+  --accent-foreground:     26 29% 13%;
+  --destructive:           10 54% 36%;   /* #8B3A2A terracotta */
+  --destructive-foreground:33 37% 95%;
+  --border:                35 28% 76%;   /* #D3C4B0 linen */
+  --input:                 35 28% 76%;
+  --ring:                  93 73% 25%;
 
   /* Our semantic tokens - light */
-  --bg: #c0d8c0;
-  --c-primary:           #2d8a50;
-  --c-primary-hover:     #1e7a40;
-  --c-surface:           #f0f5f0;
-  --c-surface-alt:       #d0e0d0;
-  --c-subtle-bg:         rgba(17,24,39,0.02);
-  --c-border:            rgba(17,24,39,0.09);
-  --c-border-subtle:     rgba(17,24,39,0.07);
-  --c-border-light:      rgba(17,24,39,0.11);
-  --c-border-med:        rgba(17,24,39,0.15);
-  --c-border-strong:     rgba(17,24,39,0.22);
-  --c-border-hover:      rgba(17,24,39,0.28);
-  --c-hover:             rgba(17,24,39,0.04);
-  --c-hover-med:         rgba(17,24,39,0.06);
-  --c-hover-strong:      rgba(17,24,39,0.09);
-  --c-warm-text:         #111827;
-  --c-dim-text:          #9ca3af;
-  --c-muted:             #64748b;
-  --c-income:            #0d9488;
-  --c-spent:             #3b82f6;
-  --c-net-positive:      #16a34a;
-  --c-net-negative:      #dc2626;
-  --c-on-track:          #16a34a;
-  --c-near-goal:         #0d9488;
-  --c-at-risk:           #ca8a04;
-  --c-over-budget:       #dc2626;
-  --c-no-budget:         rgba(17,24,39,0.08);
-  --c-primary-tint:      rgba(45,138,80,0.09);
-  --c-menu-selected:     rgba(45,138,80,0.08);
-  --c-income-button-bg:  #0d9488;
-  --c-trend-up:          #dc2626;
-  --c-trend-down:        #16a34a;
-  --c-ref-line:          rgba(17,24,39,0.14);
-  --c-grid-line:         rgba(17,24,39,0.05);
+  --bg: #EDE8DF;
+  --c-primary:           #3B6D11;
+  --c-primary-hover:     #2D5016;
+  --c-surface:           #F7F3EE;
+  --c-surface-alt:       #EDE8DF;
+  --c-subtle-bg:         rgba(59,109,17,0.05);
+  --c-border:            rgba(211,196,176,0.8);
+  --c-border-subtle:     rgba(211,196,176,0.5);
+  --c-border-light:      rgba(211,196,176,0.9);
+  --c-border-med:        #D3C4B0;
+  --c-border-strong:     #C4AFA6;
+  --c-border-hover:      #7A5C48;
+  --c-hover:             rgba(59,109,17,0.05);
+  --c-hover-med:         rgba(59,109,17,0.08);
+  --c-hover-strong:      rgba(59,109,17,0.12);
+  --c-warm-text:         #2A1F17;
+  --c-dim-text:          #C4AFA6;
+  --c-muted:             #7A5C48;
+  --c-income:            #3B6D11;
+  --c-spent:             #7A5C48;
+  --c-net-positive:      #3B6D11;
+  --c-net-negative:      #8B3A2A;
+  --c-on-track:          #3B6D11;
+  --c-near-goal:         #639922;
+  --c-at-risk:           #A0722A;
+  --c-over-budget:       #8B3A2A;
+  --c-no-budget:         rgba(74,55,40,0.08);
+  --c-primary-tint:      rgba(59,109,17,0.09);
+  --c-menu-selected:     rgba(59,109,17,0.08);
+  --c-income-button-bg:  #3B6D11;
+  --c-trend-up:          #8B3A2A;
+  --c-trend-down:        #3B6D11;
+  --c-ref-line:          rgba(74,55,40,0.14);
+  --c-grid-line:         rgba(74,55,40,0.05);
 }
 
 /* ─── Dark mode ──────────────────────────────────────────────────────────── */
 .dark {
-  /* shadcn/ui HSL tokens - dark */
-  --background:            240 3% 6%;
-  --foreground:            220 20% 92%;
-  --card:                  240 3% 9%;
-  --card-foreground:       220 20% 92%;
-  --popover:               240 3% 9%;
-  --popover-foreground:    220 20% 92%;
-  --primary:               142 55% 55%;
-  --primary-foreground:    0 0% 10%;
-  --secondary:             240 3% 12%;
-  --secondary-foreground:  220 20% 92%;
-  --muted:                 240 3% 14%;
-  --muted-foreground:      215 20% 60%;
-  --accent:                240 3% 14%;
-  --accent-foreground:     220 20% 92%;
-  --destructive:           0 62% 68%;
-  --destructive-foreground:0 0% 10%;
-  --border:                240 5% 16%;
-  --input:                 240 5% 16%;
-  --ring:                  142 55% 55%;
+  /* shadcn/ui HSL tokens - dark (Tally dark earth palette) */
+  --background:            26 37% 7%;    /* #1A120C */
+  --foreground:            33 37% 95%;   /* #F7F3EE cream */
+  --card:                  23 32% 11%;   /* #251A13 */
+  --card-foreground:       33 37% 95%;
+  --popover:               23 32% 11%;
+  --popover-foreground:    33 37% 95%;
+  --primary:               87 64% 37%;   /* #639922 fern */
+  --primary-foreground:    100 48% 12%;  /* #1A2E10 */
+  --secondary:             23 32% 15%;
+  --secondary-foreground:  33 37% 95%;
+  --muted:                 23 32% 18%;
+  --muted-foreground:      18 20% 71%;   /* #C4AFA6 sand */
+  --accent:                23 32% 18%;
+  --accent-foreground:     33 37% 95%;
+  --destructive:           10 54% 56%;   /* lighter terracotta */
+  --destructive-foreground:23 32% 11%;
+  --border:                23 32% 18%;
+  --input:                 23 32% 18%;
+  --ring:                  87 64% 37%;
 
   /* Our semantic tokens - dark */
-  --bg: #0b150b;
-  --c-primary:           #52c97a;
-  --c-primary-hover:     #3db864;
-  --c-surface:           #141414;
-  --c-surface-alt:       #1c1c1c;
-  --c-subtle-bg:         rgba(82,201,122,0.04);
-  --c-border:            rgba(82,201,122,0.12);
-  --c-border-subtle:     rgba(82,201,122,0.09);
-  --c-border-light:      rgba(82,201,122,0.14);
-  --c-border-med:        rgba(82,201,122,0.18);
-  --c-border-strong:     rgba(82,201,122,0.26);
-  --c-border-hover:      rgba(82,201,122,0.32);
-  --c-hover:             rgba(82,201,122,0.06);
-  --c-hover-med:         rgba(82,201,122,0.09);
-  --c-hover-strong:      rgba(82,201,122,0.13);
-  --c-warm-text:         #e0ece0;
-  --c-dim-text:          #7a967a;
-  --c-muted:             rgba(200,228,200,0.55);
-  --c-income:            #4db6ac;
-  --c-spent:             #64b5f6;
-  --c-net-positive:      #52c97a;
-  --c-net-negative:      #e07c7c;
-  --c-on-track:          #52c97a;
-  --c-near-goal:         #4db6ac;
-  --c-at-risk:           #f0c040;
-  --c-over-budget:       #e07c7c;
-  --c-no-budget:         rgba(82,201,122,0.10);
-  --c-primary-tint:      rgba(82,201,122,0.10);
-  --c-menu-selected:     rgba(82,201,122,0.08);
-  --c-income-button-bg:  #4db6ac;
-  --c-trend-up:          #e07c7c;
-  --c-trend-down:        #52c97a;
-  --c-ref-line:          rgba(82,201,122,0.15);
-  --c-grid-line:         rgba(82,201,122,0.06);
+  --bg: #1A120C;
+  --c-primary:           #639922;
+  --c-primary-hover:     #8BAF5A;
+  --c-surface:           #251A13;
+  --c-surface-alt:       #2D1F15;
+  --c-subtle-bg:         rgba(99,153,34,0.04);
+  --c-border:            rgba(61,45,34,0.9);
+  --c-border-subtle:     rgba(61,45,34,0.6);
+  --c-border-light:      #3D2D22;
+  --c-border-med:        #3D2D22;
+  --c-border-strong:     #5C4535;
+  --c-border-hover:      #7A5C48;
+  --c-hover:             rgba(196,175,166,0.05);
+  --c-hover-med:         rgba(196,175,166,0.08);
+  --c-hover-strong:      rgba(196,175,166,0.12);
+  --c-warm-text:         #F7F3EE;
+  --c-dim-text:          #7A5C48;
+  --c-muted:             #C4AFA6;
+  --c-income:            #97C459;
+  --c-spent:             #8BAF5A;
+  --c-net-positive:      #97C459;
+  --c-net-negative:      #E08070;
+  --c-on-track:          #97C459;
+  --c-near-goal:         #C0DD97;
+  --c-at-risk:           #E8A838;
+  --c-over-budget:       #E08070;
+  --c-no-budget:         rgba(196,175,166,0.12);
+  --c-primary-tint:      rgba(99,153,34,0.10);
+  --c-menu-selected:     rgba(99,153,34,0.08);
+  --c-income-button-bg:  #639922;
+  --c-trend-up:          #E08070;
+  --c-trend-down:        #97C459;
+  --c-ref-line:          rgba(99,153,34,0.15);
+  --c-grid-line:         rgba(99,153,34,0.06);
 }
 
 /* ─── Base styles ────────────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
 *, *::before, *::after { box-sizing: border-box; }
+button, a, [role="button"], input[type="submit"], input[type="button"], label[for] {
+  touch-action: manipulation;
+}
 
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(30%2C41%2C59%2C0.11)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(74%2C55%2C40%2C0.07)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   min-height: 100vh;
   color: var(--c-warm-text);
 }
 
 .dark body {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(203%2C213%2C225%2C0.11)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='0.85' fill='rgba(196%2C175%2C166%2C0.06)'/%3E%3C/svg%3E");
 }
 
 ::-webkit-scrollbar { width: 6px; }
@@ -253,10 +257,10 @@ body {
 
 /* ─── glasscn-ui Card overrides ──────────────────────────────────────────── */
 :root:not(.dark) .bg-white\/70 {
-  background-color: #ffffff !important;
+  background-color: #F7F3EE !important;
 }
 .dark .dark\:bg-gray-950\/50 {
-  background-color: #141414 !important;
+  background-color: #251A13 !important;
 }
 [class*="backdrop-blur"] {
   backdrop-filter: none !important;
@@ -295,7 +299,7 @@ button:not(:disabled):hover::after,
 .dark button:not(:disabled):hover::after,
 .dark [role="button"]:hover::after,
 .dark .cursor-pointer:hover::after {
-  background-color: var(--hover-tint, rgba(82,201,122,0.07));
+  background-color: var(--hover-tint, rgba(196,175,166,0.07));
 }
 
 /* ─── Month slider ───────────────────────────────────────────────────────── */

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useC } from '../colors'
 import { Card } from 'glasscn-ui'
-import { Wallet, Receipt, Landmark, PiggyBank, BarChart2 } from 'lucide-react'
+import { Receipt, Landmark, PiggyBank, BarChart2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../expenseTypes.js'
+import { TallyLogo } from './TallyLogo.jsx'
 
 const FEATURES = [
   { icon: Receipt,   label: 'Expense Tracking', desc: 'Log and categorize spending with custom types' },
@@ -35,8 +36,8 @@ function WelcomeStep({ onStart, onSkip }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col items-center gap-3">
-        <Wallet size={52} style={{ color: C.primary }} />
-        <h2 className="text-xl font-bold text-center">Welcome to Budget Tracker</h2>
+        <TallyLogo dark={C.mode === 'dark'} />
+        <h2 className="text-xl font-bold text-center">Welcome to Tally</h2>
         <p className="text-sm text-center max-w-[360px]" style={{ color: C.muted }}>
           A personal finance tool built around four core areas. Set up in under a minute, or skip and explore on your own.
         </p>
@@ -47,7 +48,7 @@ function WelcomeStep({ onStart, onSkip }) {
           <div
             key={label}
             className="rounded-xl p-3"
-            style={{ border: `1px solid ${C.borderSubtle}`, backgroundColor: 'rgba(255,255,255,0.03)' }}
+            style={{ border: `1px solid ${C.borderMed}`, backgroundColor: C.subtleBg }}
           >
             <div className="flex items-center gap-2 mb-1">
               <Icon size={18} style={{ color: C.primary }} />
@@ -294,7 +295,7 @@ export default function BudgetSetup({ onComplete }) {
                 Skip all
               </button>
             </div>
-            <div className="h-[3px] rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+            <div className="h-[3px] rounded-full" style={{ backgroundColor: C.borderMed }}>
               <div
                 className="h-full rounded-full transition-all duration-300"
                 style={{ width: `${((stepIndex + 1) / STEPS.length) * 100}%`, backgroundColor: C.primary }}

@@ -1,0 +1,494 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="800"
+   height="400"
+   viewBox="0 0 800 400"
+   version="1.1"
+   id="svg35"
+   sodipodi:docname="logo.svg"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs
+     id="defs35" />
+  <sodipodi:namedview
+     id="namedview35"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.98994126"
+     inkscape:cx="272.23837"
+     inkscape:cy="266.68249"
+     inkscape:window-width="1712"
+     inkscape:window-height="1045"
+     inkscape:window-x="0"
+     inkscape:window-y="34"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg35" />
+  <title
+     id="title1">Tally logo — all variants</title>
+  <!-- Light mode: primary lockup -->
+  <rect
+     x="0"
+     y="0"
+     width="800"
+     height="200"
+     fill="#EDE8DF"
+     id="rect1" />
+  <circle
+     cx="60"
+     cy="100"
+     r="44"
+     fill="#4A3728"
+     id="circle1" />
+  <g
+     id="g35"
+     transform="translate(-3.2424927e-5,1.5000076)">
+    <line
+       x1="38.000034"
+       y1="115.49999"
+       x2="38.000034"
+       y2="83.499992"
+       stroke="#f7f3ee"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line1" />
+    <line
+       x1="52.000034"
+       y1="115.49999"
+       x2="52.000034"
+       y2="83.499992"
+       stroke="#f7f3ee"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line2" />
+    <line
+       x1="66.000031"
+       y1="115.49999"
+       x2="66.000031"
+       y2="83.499992"
+       stroke="#f7f3ee"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line3" />
+    <line
+       x1="80.000031"
+       y1="115.49999"
+       x2="80.000031"
+       y2="83.499992"
+       stroke="#f7f3ee"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line4" />
+    <line
+       x1="31.000034"
+       y1="119.49999"
+       x2="89.000031"
+       y2="77.499992"
+       stroke="#97c459"
+       stroke-width="3.5"
+       stroke-linecap="round"
+       id="line5" />
+  </g>
+  <text
+     x="124"
+     y="94"
+     font-family="Georgia, serif"
+     font-size="52"
+     font-weight="500"
+     fill="#4A3728"
+     id="text5">Tally</text>
+  <text
+     x="126"
+     y="118"
+     font-family="sans-serif"
+     font-size="14"
+     fill="#7A5C48"
+     letter-spacing="0.5"
+     id="text6">every dollar counted</text>
+  <!-- Icon only (for favicon/app icon) -->
+  <rect
+     x="340"
+     y="40"
+     width="80"
+     height="80"
+     rx="18"
+     fill="#4A3728"
+     id="rect6" />
+  <g
+     id="g38"
+     transform="translate(2,1)">
+    <line
+       x1="371"
+       y1="96"
+       x2="371"
+       y2="64"
+       stroke="#f7f3ee"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line7" />
+    <g
+       id="g37">
+      <line
+         x1="358"
+         y1="96"
+         x2="358"
+         y2="64"
+         stroke="#f7f3ee"
+         stroke-width="4"
+         stroke-linecap="round"
+         id="line6" />
+      <line
+         x1="384"
+         y1="96"
+         x2="384"
+         y2="64"
+         stroke="#f7f3ee"
+         stroke-width="4"
+         stroke-linecap="round"
+         id="line8" />
+      <line
+         x1="397"
+         y1="96"
+         x2="397"
+         y2="64"
+         stroke="#f7f3ee"
+         stroke-width="4"
+         stroke-linecap="round"
+         id="line9" />
+      <line
+         x1="351"
+         y1="100"
+         x2="405"
+         y2="58"
+         stroke="#97c459"
+         stroke-width="3.5"
+         stroke-linecap="round"
+         id="line10" />
+    </g>
+  </g>
+  <!-- Nav compact lockup -->
+  <circle
+     cx="500"
+     cy="80"
+     r="24"
+     fill="#4A3728"
+     id="circle10" />
+  <g
+     id="g40"
+     transform="translate(0.5,1)">
+    <line
+       x1="484"
+       y1="92"
+       x2="484"
+       y2="68"
+       stroke="#f7f3ee"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line11" />
+    <line
+       x1="494"
+       y1="92"
+       x2="494"
+       y2="68"
+       stroke="#f7f3ee"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line12" />
+    <line
+       x1="504"
+       y1="92"
+       x2="504"
+       y2="68"
+       stroke="#f7f3ee"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line13" />
+    <line
+       x1="514"
+       y1="92"
+       x2="514"
+       y2="68"
+       stroke="#f7f3ee"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line14" />
+    <line
+       x1="479"
+       y1="96"
+       x2="520"
+       y2="62"
+       stroke="#97c459"
+       stroke-width="2.5"
+       stroke-linecap="round"
+       id="line15" />
+  </g>
+  <text
+     x="536"
+     y="90"
+     font-family="Georgia, serif"
+     font-size="28"
+     font-weight="500"
+     fill="#4A3728"
+     id="text15">Tally</text>
+  <!-- Label -->
+  <text
+     x="16"
+     y="168"
+     font-family="sans-serif"
+     font-size="11"
+     fill="#7A5C48"
+     id="text16">primary lockup</text>
+  <text
+     x="344"
+     y="148"
+     font-family="sans-serif"
+     font-size="11"
+     fill="#7A5C48"
+     id="text17">app icon</text>
+  <text
+     x="468"
+     y="148"
+     font-family="sans-serif"
+     font-size="11"
+     fill="#7A5C48"
+     id="text18">nav compact</text>
+  <!-- Dark mode variants -->
+  <rect
+     x="0"
+     y="200"
+     width="800"
+     height="200"
+     fill="#2A1F17"
+     id="rect18" />
+  <circle
+     cx="60"
+     cy="300"
+     r="44"
+     fill="#3B6D11"
+     id="circle18" />
+  <g
+     id="g36"
+     transform="translate(0.49997616,1.5)">
+    <line
+       x1="37.500027"
+       y1="315.5"
+       x2="37.500027"
+       y2="283.5"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line18" />
+    <line
+       x1="51.500027"
+       y1="315.5"
+       x2="51.500027"
+       y2="283.5"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line19" />
+    <line
+       x1="65.500023"
+       y1="315.5"
+       x2="65.500023"
+       y2="283.5"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line20" />
+    <line
+       x1="79.500023"
+       y1="315.5"
+       x2="79.500023"
+       y2="283.5"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line21" />
+    <line
+       x1="30.500025"
+       y1="319.5"
+       x2="88.500023"
+       y2="277.5"
+       stroke="#c0dd97"
+       stroke-width="3.5"
+       stroke-linecap="round"
+       id="line22" />
+  </g>
+  <text
+     x="124"
+     y="294"
+     font-family="Georgia, serif"
+     font-size="52"
+     font-weight="500"
+     fill="#F7F3EE"
+     id="text22">Tally</text>
+  <text
+     x="126"
+     y="318"
+     font-family="sans-serif"
+     font-size="14"
+     fill="#C4AFA6"
+     letter-spacing="0.5"
+     id="text23">every dollar counted</text>
+  <rect
+     x="340"
+     y="240"
+     width="80"
+     height="80"
+     rx="18"
+     fill="#3B6D11"
+     id="rect23" />
+  <g
+     id="g39"
+     transform="translate(2,1)">
+    <line
+       x1="358"
+       y1="296"
+       x2="358"
+       y2="264"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line23" />
+    <line
+       x1="371"
+       y1="296"
+       x2="371"
+       y2="264"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line24" />
+    <line
+       x1="384"
+       y1="296"
+       x2="384"
+       y2="264"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line25" />
+    <line
+       x1="397"
+       y1="296"
+       x2="397"
+       y2="264"
+       stroke="#eaf3de"
+       stroke-width="4"
+       stroke-linecap="round"
+       id="line26" />
+    <line
+       x1="351"
+       y1="300"
+       x2="405"
+       y2="258"
+       stroke="#c0dd97"
+       stroke-width="3.5"
+       stroke-linecap="round"
+       id="line27" />
+  </g>
+  <circle
+     cx="500"
+     cy="280"
+     r="24"
+     fill="#3B6D11"
+     id="circle27" />
+  <g
+     id="g41"
+     transform="translate(0.5,1)">
+    <line
+       x1="484"
+       y1="292"
+       x2="484"
+       y2="268"
+       stroke="#eaf3de"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line28" />
+    <line
+       x1="494"
+       y1="292"
+       x2="494"
+       y2="268"
+       stroke="#eaf3de"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line29" />
+    <line
+       x1="504"
+       y1="292"
+       x2="504"
+       y2="268"
+       stroke="#eaf3de"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line30" />
+    <line
+       x1="514"
+       y1="292"
+       x2="514"
+       y2="268"
+       stroke="#eaf3de"
+       stroke-width="3"
+       stroke-linecap="round"
+       id="line31" />
+    <line
+       x1="479"
+       y1="296"
+       x2="520"
+       y2="262"
+       stroke="#c0dd97"
+       stroke-width="2.5"
+       stroke-linecap="round"
+       id="line32" />
+  </g>
+  <text
+     x="536"
+     y="290"
+     font-family="Georgia, serif"
+     font-size="28"
+     font-weight="500"
+     fill="#F7F3EE"
+     id="text32">Tally</text>
+  <text
+     x="16"
+     y="368"
+     font-family="sans-serif"
+     font-size="11"
+     fill="#8BAF5A"
+     id="text33">dark mode — primary lockup</text>
+  <text
+     x="344"
+     y="348"
+     font-family="sans-serif"
+     font-size="11"
+     fill="#8BAF5A"
+     id="text34">dark app icon</text>
+  <text
+     x="468"
+     y="348"
+     font-family="sans-serif"
+     font-size="11"
+     fill="#8BAF5A"
+     id="text35">dark nav compact</text>
+  <metadata
+     id="metadata41">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Tally logo — all variants</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

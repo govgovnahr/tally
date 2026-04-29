@@ -3,35 +3,35 @@
 import { createContext, useContext, useEffect } from 'react'
 
 export const palette = {
-  // Brand accent colors (shared across modes)
-  green:     '#52c97a',
-  red:       '#e07c7c',
-  amber:     '#f0c040',
-  teal:      '#4db6ac',
-  blue:      '#64b5f6',
-  lavender:  '#b39ddb',
-  orange:    '#e8a87c',
-  grey:      '#9e9e9e',
-  greyLight: '#bdbdbd',
-  peach:     '#f4a261',
-  purple:    '#9575cd',
+  // Tally greens
+  green:     '#639922',   // fern
+  red:       '#C4604A',   // terracotta mid
+  amber:     '#E8A838',   // amber mid
+  teal:      '#8BAF5A',   // sage
+  blue:      '#7A5C48',   // clay (used as "spent" neutral)
+  lavender:  '#A0722A',   // amber dark
+  orange:    '#C4604A',   // terracotta mid
+  grey:      '#C4AFA6',   // sand
+  greyLight: '#D3C4B0',   // linen
+  peach:     '#FAD5CC',   // terracotta light
+  purple:    '#4A3728',   // walnut
 
   // Dark mode surfaces
   dark: {
-    bg:            '#0e0e10',
-    paper:         '#161618',
-    elevated:      '#1e1e22',
-    text:          '#e4e8f0',
-    textSecondary: 'rgba(228,232,240,0.5)',
+    bg:            '#1A120C',
+    paper:         '#251A13',
+    elevated:      '#2D1F15',
+    text:          '#F7F3EE',
+    textSecondary: 'rgba(247,243,238,0.5)',
   },
 
   // Light mode surfaces
   light: {
-    bg:            '#c0d8c0',
-    paper:         '#dae7da',
-    elevated:      '#d0e0d0',
-    text:          '#111827',
-    textSecondary: '#64748b',
+    bg:            '#EDE8DF',
+    paper:         '#F7F3EE',
+    elevated:      '#EDE8DF',
+    text:          '#2A1F17',
+    textSecondary: '#7A5C48',
   },
 }
 
@@ -92,128 +92,134 @@ function darkenForLight(hex) {
 function makeDarkC() {
   return {
     // Chart / data
-    income:      palette.teal,
-    spent:       palette.blue,
-    netPositive: palette.green,
-    netNegative: palette.red,
-    netLine:     palette.orange,
+    income:      '#97C459',   // sprout — income on dark bg
+    spent:       '#8BAF5A',   // sage
+    netPositive: '#97C459',
+    netNegative: '#E08070',   // terracotta light
 
     // Status
-    onTrack:    palette.green,
-    nearGoal:   palette.teal,
-    atRisk:     palette.amber,
-    overBudget: palette.red,
-    noBudget:   'rgba(228,232,240,0.12)',
+    onTrack:    '#97C459',
+    nearGoal:   '#C0DD97',
+    atRisk:     '#E8A838',    // amber mid
+    overBudget: '#E08070',    // terracotta light
+    noBudget:   'rgba(196,175,166,0.12)',
 
     // Trend direction (lower spend = good)
-    trendUp:   palette.red,
-    trendDown: palette.green,
+    trendUp:   '#E08070',
+    trendDown: '#97C459',
 
     // Primary UI
-    primary:             palette.green,
-    primaryHover:        '#3db864',
-    incomeButtonBg:      palette.teal,
-    incomeButtonHover:   '#3da099',
-    incomeButtonHoverBg: 'rgba(77,182,172,0.08)',
+    primary:             '#639922',   // fern
+    primaryHover:        '#8BAF5A',   // sage
+    incomeButtonBg:      '#639922',
+    incomeButtonHover:   '#8BAF5A',
+    incomeButtonHoverBg: 'rgba(99,153,34,0.08)',
 
     // Primary color tints
-    primaryTint:       'rgba(82,201,122,0.10)',
-    menuSelected:      'rgba(82,201,122,0.08)',
-    menuSelectedHover: 'rgba(82,201,122,0.14)',
-    dropHoverBg:       'rgba(82,201,122,0.04)',
+    primaryTint:       'rgba(99,153,34,0.10)',
+    menuSelected:      'rgba(99,153,34,0.08)',
+    menuSelectedHover: 'rgba(99,153,34,0.14)',
+    dropHoverBg:       'rgba(99,153,34,0.04)',
 
     // Text / labels
-    warmText:  '#e0ece0',
-    dimText:   '#7a967a',
-    tickLight: '#8aaa8a',
-    muted:     'rgba(200,228,200,0.55)',
+    warmText:  '#F7F3EE',
+    dimText:   '#7A5C48',
+    tickLight: '#8BAF5A',
+    muted:     '#C4AFA6',
 
-    // Category card tint helpers (append to hex color: `${color}${cardTintAlpha}`)
+    // Category card tint helpers
     cardTintAlpha:         '00',
     cardTintSelectedAlpha: '18',
     cardBorderAlpha:       '32',
 
     // Surfaces & borders
-    surface:      '#141414',
-    surfaceAlt:   '#1c1c1c',
-    surfacePopup: '#141414',
-    subtleBg:     'rgba(82,201,122,0.04)',
-    border:       'rgba(82,201,122,0.12)',
-    borderSubtle: 'rgba(82,201,122,0.09)',
-    borderLight:  'rgba(82,201,122,0.14)',
-    borderMed:    'rgba(82,201,122,0.18)',
-    borderStrong: 'rgba(82,201,122,0.26)',
-    borderHover:  'rgba(82,201,122,0.32)',
-    refLine:      'rgba(82,201,122,0.15)',
-    gridLine:     'rgba(82,201,122,0.06)',
-    hover:        'rgba(82,201,122,0.06)',
-    hoverMed:     'rgba(82,201,122,0.09)',
-    hoverStrong:  'rgba(82,201,122,0.13)',
+    surface:      '#251A13',
+    surfaceAlt:   '#2D1F15',
+    surfacePopup: '#251A13',
+    subtleBg:     'rgba(99,153,34,0.04)',
+    border:       'rgba(61,45,34,0.9)',
+    borderSubtle: 'rgba(61,45,34,0.6)',
+    borderLight:  '#3D2D22',
+    borderMed:    '#3D2D22',
+    borderStrong: '#5C4535',
+    borderHover:  '#7A5C48',
+    refLine:      'rgba(99,153,34,0.15)',
+    gridLine:     'rgba(99,153,34,0.06)',
+    hover:        'rgba(196,175,166,0.05)',
+    hoverMed:     'rgba(196,175,166,0.08)',
+    hoverStrong:  'rgba(196,175,166,0.12)',
     adaptColor:   hex => hex,
+
+    // Nav
+    nav:     '#160E08',
+    navText: '#F7F3EE',
   }
 }
 
 function makeLightC() {
   return {
-    // Chart / data — darker variants for legibility on white
-    income:      '#0d9488',
-    spent:       '#3b82f6',
-    netPositive: '#16a34a',
-    netNegative: '#dc2626',
-    netLine:     '#ea580c',
+    // Chart / data
+    income:      '#3B6D11',   // moss
+    spent:       '#7A5C48',   // clay
+    netPositive: '#3B6D11',
+    netNegative: '#8B3A2A',   // terracotta dark
 
     // Status
-    onTrack:    '#16a34a',
-    nearGoal:   '#0d9488',
-    atRisk:     '#ca8a04',
-    overBudget: '#dc2626',
-    noBudget:   'rgba(17,24,39,0.08)',
+    onTrack:    '#3B6D11',
+    nearGoal:   '#639922',    // fern
+    atRisk:     '#A0722A',    // amber dark
+    overBudget: '#8B3A2A',    // terracotta dark
+    noBudget:   'rgba(74,55,40,0.08)',
 
     // Trend direction
-    trendUp:   '#dc2626',
-    trendDown: '#16a34a',
+    trendUp:   '#8B3A2A',
+    trendDown: '#3B6D11',
 
     // Primary UI
-    primary:             '#2d8a50',
-    primaryHover:        '#1e7a40',
-    incomeButtonBg:      '#0d9488',
-    incomeButtonHover:   '#0f766e',
-    incomeButtonHoverBg: 'rgba(13,148,136,0.08)',
+    primary:             '#3B6D11',
+    primaryHover:        '#2D5016',
+    incomeButtonBg:      '#3B6D11',
+    incomeButtonHover:   '#2D5016',
+    incomeButtonHoverBg: 'rgba(59,109,17,0.08)',
 
     // Primary color tints
-    primaryTint:       'rgba(45,138,80,0.14)',
-    menuSelected:      'rgba(45,138,80,0.12)',
-    menuSelectedHover: 'rgba(45,138,80,0.19)',
-    dropHoverBg:       'rgba(45,138,80,0.04)',
+    primaryTint:       'rgba(59,109,17,0.09)',
+    menuSelected:      'rgba(59,109,17,0.08)',
+    menuSelectedHover: 'rgba(59,109,17,0.14)',
+    dropHoverBg:       'rgba(59,109,17,0.04)',
 
     // Text / labels
-    warmText:  '#111827',
-    dimText:   '#9ca3af',
-    tickLight: '#6b7280',
-    muted:     '#64748b',
+    warmText:  '#2A1F17',
+    dimText:   '#C4AFA6',
+    tickLight: '#7A5C48',
+    muted:     '#7A5C48',
 
-    // Category card tint helpers (append to hex color: `${color}${cardTintAlpha}`)
+    // Category card tint helpers
     cardTintAlpha:         '0a',
     cardTintSelectedAlpha: '18',
     cardBorderAlpha:       '28',
 
     // Surfaces & borders
-    surface:      '#ffffff',
-    surfaceAlt:   '#f4faf4',
-    surfacePopup: '#ffffff',
-    subtleBg:     'rgba(45,138,80,0.06)',
-    border:       'rgba(0,0,0,0.10)',
-    borderSubtle: 'rgba(0,0,0,0.07)',
-    borderLight:  'rgba(0,0,0,0.10)',
-    borderMed:    'rgba(0,0,0,0.14)',
-    borderStrong: 'rgba(0,0,0,0.18)',
-    borderHover:  'rgba(0,0,0,0.24)',
-    refLine:      'rgba(17,24,39,0.14)',
-    gridLine:     'rgba(17,24,39,0.05)',
-    hover:        'rgba(45,138,80,0.08)',
-    hoverMed:     'rgba(45,138,80,0.12)',
-    hoverStrong:  'rgba(45,138,80,0.16)',
+    surface:      '#F7F3EE',
+    surfaceAlt:   '#EDE8DF',
+    surfacePopup: '#F7F3EE',
+    subtleBg:     'rgba(59,109,17,0.06)',
+    border:       'rgba(211,196,176,0.8)',
+    borderSubtle: 'rgba(211,196,176,0.5)',
+    borderLight:  'rgba(211,196,176,0.9)',
+    borderMed:    '#D3C4B0',
+    borderStrong: '#C4AFA6',
+    borderHover:  '#7A5C48',
+    refLine:      'rgba(74,55,40,0.14)',
+    gridLine:     'rgba(74,55,40,0.05)',
+    hover:        'rgba(59,109,17,0.05)',
+    hoverMed:     'rgba(59,109,17,0.08)',
+    hoverStrong:  'rgba(59,109,17,0.12)',
     adaptColor:   darkenForLight,
+
+    // Nav
+    nav:     '#4A3728',
+    navText: '#F7F3EE',
   }
 }
 
@@ -226,6 +232,7 @@ export function ColorsProvider({ mode, children }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', mode === 'dark')
+    document.documentElement.setAttribute('data-theme', mode)
   }, [mode])
 
   return <ColorsContext.Provider value={value}>{children}</ColorsContext.Provider>
@@ -241,7 +248,20 @@ export const C = makeDarkC()
 // ─── Type color picker palette ────────────────────────────────────────────────
 
 export const TYPE_PALETTE = [
-  palette.orange, palette.blue, palette.lavender, palette.amber, palette.teal, palette.grey,
-  '#ef9a9a', '#90caf9', '#a5d6a7', '#ffcc80', '#ce93d8', '#f48fb1',
-  '#ff8a65', '#4db6ac', '#7986cb', '#aed581',
+  '#3B6D11', // moss
+  '#639922', // fern
+  '#8BAF5A', // sage
+  '#C0DD97', // sprout
+  '#7A5C48', // clay
+  '#A0722A', // amber dark
+  '#8B3A2A', // terracotta dark
+  '#4A3728', // walnut
+  '#C4AFA6', // sand
+  '#E8A838', // amber mid
+  '#C4604A', // terracotta mid
+  '#97C459', // light sage
+  '#2D5016', // forest
+  '#FAD5CC', // terracotta light
+  '#D3C4B0', // linen
+  '#5C4535', // clay dark
 ]

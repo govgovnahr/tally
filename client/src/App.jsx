@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle } from 'lucide-react'
+import { TallyLogo } from './components/TallyLogo.jsx'
 import api from './api.js'
 import { supabase } from './supabase.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
@@ -86,21 +87,14 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
         className="hidden sm:flex items-center sticky top-0 z-50 px-6 gap-6"
         style={{
           height: 64,
-          backgroundColor: mode === 'dark' ? '#0b150b' : '#ffffff',
-          borderBottom: `1px solid ${C.border}`,
+          backgroundColor: C.nav,
+          borderBottom: `1px solid ${C.borderMed}`,
+          '--hover-tint': 'rgba(247,243,238,0.12)',
         }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div
-            className="w-8 h-8 rounded-[10px] flex items-center justify-center"
-            style={{ backgroundColor: C.primary }}
-          >
-            <PiggyBank size={16} color="#fff" />
-          </div>
-          <span className="font-extrabold text-base tracking-tight" style={{ color: C.warmText }}>
-            Budget
-          </span>
+        <div className="flex items-center flex-shrink-0">
+          <TallyLogo dark />
         </div>
 
         {/* Nav tabs */}
@@ -115,8 +109,8 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
                 className="px-4 py-1.5 rounded-full text-sm font-[inherit] border-none cursor-pointer transition-colors duration-150"
                 style={{
                   fontWeight: active ? 700 : 500,
-                  color: active ? C.primary : C.muted,
-                  backgroundColor: active ? C.primaryTint : 'transparent',
+                  color: active ? C.navText : 'var(--text-on-nav-muted)',
+                  backgroundColor: active ? 'rgba(247,243,238,0.15)' : 'transparent',
                 }}
               >
                 {label}
@@ -131,7 +125,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             type="button"
             onClick={onToggleMode}
             className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
-            style={{ color: C.muted, backgroundColor: 'transparent' }}
+            style={{ color: 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
           >
             {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
@@ -139,7 +133,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             type="button"
             onClick={() => setPage('account')}
             className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
-            style={{ color: page === 'account' ? C.primary : C.muted, backgroundColor: 'transparent' }}
+            style={{ color: page === 'account' ? C.navText : 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
             title="Account settings"
           >
             <UserCircle size={18} />
@@ -152,27 +146,20 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
         className="flex sm:hidden items-center justify-between px-4"
         style={{
           height: 52,
-          backgroundColor: C.surface,
-          borderBottom: `1px solid ${C.border}`,
+          backgroundColor: C.nav,
+          borderBottom: `1px solid ${C.borderMed}`,
+          '--hover-tint': 'rgba(247,243,238,0.12)',
         }}
       >
-        <div className="flex items-center gap-2">
-          <div
-            className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center"
-            style={{ backgroundColor: C.primary }}
-          >
-            <PiggyBank size={14} color="#fff" />
-          </div>
-          <span className="font-extrabold text-[0.9rem] tracking-tight" style={{ color: C.warmText }}>
-            Budget
-          </span>
+        <div className="flex items-center">
+          <TallyLogo compact dark />
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onToggleMode}
             className="p-1.5 rounded-lg border-none cursor-pointer"
-            style={{ color: C.muted, backgroundColor: 'transparent' }}
+            style={{ color: 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
           >
             {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -180,7 +167,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             type="button"
             onClick={() => setPage('account')}
             className="p-1.5 rounded-lg border-none cursor-pointer"
-            style={{ color: page === 'account' ? C.primary : C.muted, backgroundColor: 'transparent' }}
+            style={{ color: page === 'account' ? C.navText : 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
           >
             <UserCircle size={16} />
           </button>
@@ -192,8 +179,9 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
         className="flex sm:hidden fixed bottom-0 left-0 right-0 z-50"
         style={{
           height: 60,
-          backgroundColor: mode === 'dark' ? '#0b150b' : '#ffffff',
-          borderTop: `1px solid ${C.border}`,
+          backgroundColor: C.nav,
+          borderTop: `1px solid ${C.borderMed}`,
+          '--hover-tint': 'rgba(247,243,238,0.12)',
         }}
       >
         {NAV_ITEMS.map(({ value, label, Icon }) => {
@@ -204,7 +192,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
               type="button"
               onClick={() => setPage(value)}
               className="flex-1 flex flex-col items-center justify-center gap-0.5 border-none cursor-pointer bg-transparent font-[inherit]"
-              style={{ color: active ? C.primary : C.dimText }}
+              style={{ color: active ? C.navText : 'var(--text-on-nav-muted)' }}
             >
               <Icon size={20} />
               <span className="text-[0.65rem] font-semibold leading-none">{label}</span>
@@ -246,9 +234,13 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
 }
 
 function ThemedApp() {
-  const [mode, setMode] = useState('light')
+  const [mode, setMode] = useState(() => localStorage.getItem('theme') || 'light')
   const [user, setUser] = useState(undefined)
-  const toggleMode = () => setMode(m => m === 'dark' ? 'light' : 'dark')
+  const toggleMode = () => setMode(m => {
+    const next = m === 'dark' ? 'light' : 'dark'
+    localStorage.setItem('theme', next)
+    return next
+  })
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -279,7 +271,7 @@ function ThemedApp() {
 
   if (user === undefined) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(128,128,128,0.2)', borderTopColor: '#7c6aff', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(74,55,40,0.15)', borderTopColor: '#3B6D11', animation: 'spin 0.8s linear infinite' }} />
     </div>
   )
 

@@ -11,11 +11,35 @@ import AddIncomeForm from './AddIncomeForm.jsx'
 
 const CARD_LIMIT = 9
 
-function StatusBadge({ label, color }) {
+const BADGE_TOKENS = {
+  over_budget: {
+    backgroundColor: 'var(--color-over-budget-bg)',
+    color: 'var(--color-over-budget-text)',
+    border: '1px solid var(--color-over-budget-border)',
+  },
+  at_risk: {
+    backgroundColor: 'var(--color-warning-bg)',
+    color: 'var(--color-warning-text)',
+    border: '1px solid var(--color-warning-border)',
+  },
+  well_under: {
+    backgroundColor: 'var(--color-under-budget-bg)',
+    color: 'var(--color-under-budget-text)',
+    border: '1px solid var(--color-under-budget-border)',
+  },
+  on_track: {
+    backgroundColor: 'var(--color-on-track-bg)',
+    color: 'var(--color-on-track-text)',
+    border: '1px solid var(--color-on-track-border)',
+  },
+}
+
+function StatusBadge({ status, label }) {
+  const style = BADGE_TOKENS[status] ?? BADGE_TOKENS.on_track
   return (
     <span
       className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full"
-      style={{ backgroundColor: color, color: '#fff' }}
+      style={style}
     >
       {label}
     </span>
@@ -94,7 +118,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
       onMouseEnter={() => setCardHovered(true)}
       onMouseLeave={() => setCardHovered(false)}
       style={{
-        backgroundColor: (cardHovered && !categoriesOpen) || headerHovered ? C.hover : C.surface,
+        backgroundColor: (cardHovered && !categoriesOpen) || headerHovered ? C.surfaceAlt : C.surface,
         backdropFilter: 'none',
         WebkitBackdropFilter: 'none',
         border: `1px solid ${C.border}`,
@@ -309,11 +333,11 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
                     </span>
                     {isCurrentMonth && pac?.status && pac.status !== 'no_budget' ? (
                       <StatusBadge
+                        status={pac.status}
                         label={pac.status === 'over_budget' ? `$${(pac.projected_spend - limit).toFixed(0)} proj. over`
                           : pac.status === 'at_risk' ? 'at risk'
                           : pac.status === 'well_under' ? 'under budget'
                           : 'on track'}
-                        color={statusColor}
                       />
                     ) : over ? (
                       <span className="text-xs font-semibold" style={{ color: C.overBudget }}>
