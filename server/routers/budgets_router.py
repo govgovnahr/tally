@@ -24,10 +24,10 @@ def _month_range(months: int) -> list[str]:
 
 def _effective_budgets(conn, month: str, user_id: str) -> list[dict]:
     defaults = {r["type"]: r["monthly_limit"]
-                for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = ?", (user_id,)).fetchall()}
+                for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s", (user_id,)).fetchall()}
     overrides = {r["type"]: r["monthly_limit"]
                  for r in conn.execute(
-                     "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = ? AND month = ?", (user_id, month)
+                     "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = %s AND month = %s", (user_id, month)
                  ).fetchall()}
     if overrides:
         return [{"type": t, "monthly_limit": limit, "is_override": True} for t, limit in overrides.items()]
@@ -38,7 +38,7 @@ def _effective_budgets(conn, month: str, user_id: str) -> list[dict]:
 def get_budgets(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = ? ORDER BY type", (user_id,))
+    cursor.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s ORDER BY type", (user_id,))
     rows = cursor.fetchall()
     conn.close()
     return [{"type": row["type"], "monthly_limit": row["monthly_limit"]} for row in rows]
@@ -47,7 +47,7 @@ def get_budgets(user_id: str = Depends(get_current_user)):
 @router.post("/budgets")
 def set_budgets(budgets: List[NewBudget], user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    valid_types = {r["name"] for r in conn.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,)).fetchall()}
+    valid_types = {r["name"] for r in conn.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
     invalid = [b.type for b in budgets if b.type not in valid_types]
     if invalid:
         conn.close()
@@ -55,7 +55,7 @@ def set_budgets(budgets: List[NewBudget], user_id: str = Depends(get_current_use
     cursor = conn.cursor()
     for b in budgets:
         cursor.execute(
-            "INSERT OR REPLACE INTO budgets (user_id, type, monthly_limit) VALUES (?, ?, ?)",
+            "INSERT INTO budgets (user_id, type, monthly_limit) VALUES (%s, %s, %s) ON CONFLICT (user_id, type) DO UPDATE SET monthly_limit = EXCLUDED.monthly_limit",
             (user_id, b.type, b.monthly_limit),
         )
     conn.commit()
@@ -85,16 +85,16 @@ def get_effective_range(months: int = Query(6), user_id: str = Depends(get_curre
 
     conn = get_connection()
     defaults = {r["type"]: r["monthly_limit"]
-                for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = ?", (user_id,)).fetchall()}
+                for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s", (user_id,)).fetchall()}
     has_next_overrides = conn.execute(
-        "SELECT 1 FROM monthly_budgets WHERE user_id = ? AND month = ? LIMIT 1", (user_id, next_month)
+        "SELECT 1 FROM monthly_budgets WHERE user_id = %s AND month = %s LIMIT 1", (user_id, next_month)
     ).fetchone() is not None
     if has_next_overrides:
         month_list.append(next_month)
 
-    placeholders = ",".join("?" * len(month_list))
+    placeholders = ",".join(["%s"] * len(month_list))
     all_overrides = conn.execute(
-        f"SELECT type, month, monthly_limit FROM monthly_budgets WHERE user_id = ? AND month IN ({placeholders})",
+        f"SELECT type, month, monthly_limit FROM monthly_budgets WHERE user_id = %s AND month IN ({placeholders})",
         [user_id] + month_list,
     ).fetchall()
     conn.close()
@@ -115,14 +115,14 @@ def get_monthly_overrides(month: Optional[str] = Query(None), user_id: str = Dep
     conn = get_connection()
     if month:
         rows = conn.execute(
-            "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = ? AND month = ? ORDER BY type",
+            "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = %s AND month = %s ORDER BY type",
             (user_id, month),
         ).fetchall()
         conn.close()
         return [{"type": r["type"], "monthly_limit": r["monthly_limit"]} for r in rows]
     else:
         rows = conn.execute(
-            "SELECT DISTINCT month FROM monthly_budgets WHERE user_id = ? ORDER BY month", (user_id,)
+            "SELECT DISTINCT month FROM monthly_budgets WHERE user_id = %s ORDER BY month", (user_id,)
         ).fetchall()
         conn.close()
         return [r["month"] for r in rows]
@@ -136,7 +136,7 @@ class MonthlyOverridesPayload(BaseModel):
 @router.post("/budgets/monthly-overrides")
 def set_monthly_overrides(payload: MonthlyOverridesPayload, user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    valid_types = {r["name"] for r in conn.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,)).fetchall()}
+    valid_types = {r["name"] for r in conn.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
     invalid = [b.type for b in payload.budgets if b.type not in valid_types]
     if invalid:
         conn.close()
@@ -144,7 +144,7 @@ def set_monthly_overrides(payload: MonthlyOverridesPayload, user_id: str = Depen
     cursor = conn.cursor()
     for b in payload.budgets:
         cursor.execute(
-            "INSERT OR REPLACE INTO monthly_budgets (user_id, type, month, monthly_limit) VALUES (?, ?, ?, ?)",
+            "INSERT INTO monthly_budgets (user_id, type, month, monthly_limit) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id, type, month) DO UPDATE SET monthly_limit = EXCLUDED.monthly_limit",
             (user_id, b.type, payload.month, b.monthly_limit),
         )
     conn.commit()
@@ -155,7 +155,7 @@ def set_monthly_overrides(payload: MonthlyOverridesPayload, user_id: str = Depen
 @router.delete("/budgets/monthly-overrides/{month}")
 def delete_monthly_overrides(month: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    conn.execute("DELETE FROM monthly_budgets WHERE user_id = ? AND month = ?", (user_id, month))
+    conn.execute("DELETE FROM monthly_budgets WHERE user_id = %s AND month = %s", (user_id, month))
     conn.commit()
     conn.close()
     return {"deleted": month}
@@ -164,7 +164,7 @@ def delete_monthly_overrides(month: str, user_id: str = Depends(get_current_user
 @router.delete("/budgets/monthly-overrides/{month}/{type_name}")
 def delete_monthly_override_type(month: str, type_name: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    conn.execute("DELETE FROM monthly_budgets WHERE user_id = ? AND month = ? AND type = ?", (user_id, month, type_name))
+    conn.execute("DELETE FROM monthly_budgets WHERE user_id = %s AND month = %s AND type = %s", (user_id, month, type_name))
     conn.commit()
     conn.close()
     return {"deleted": type_name, "month": month}

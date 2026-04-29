@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { startTransition } from 'react'
-import { Plus, Trash2, Pencil, Repeat, Upload, Search, X, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Trash2, Pencil, Repeat, Upload, Search, X, ArrowUp, ArrowDown, TriangleAlert } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -103,6 +103,27 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [detailItem, setDetailItem] = useState(null)
   const [detailIsIncome, setDetailIsIncome] = useState(false)
+
+  const [outlierIds, setOutlierIds] = useState(new Set())
+  useEffect(() => {
+    const dismissed = (() => {
+      try { return new Set(JSON.parse(localStorage.getItem('budget_dismissed_outliers') ?? '[]')) }
+      catch { return new Set() }
+    })()
+    const months = parseInt(localStorage.getItem('budget_history_months'), 10) || 6
+    api.get('/analysis/outliers', { params: { months } })
+      .then(r => setOutlierIds(new Set((r.data ?? []).map(o => o.id).filter(id => !dismissed.has(id)))))
+      .catch(() => {})
+  }, [refreshKey])
+
+  function handleDismissOutlier(id) {
+    setOutlierIds(prev => { const next = new Set(prev); next.delete(id); return next })
+    try {
+      const prev = new Set(JSON.parse(localStorage.getItem('budget_dismissed_outliers') ?? '[]'))
+      prev.add(id)
+      localStorage.setItem('budget_dismissed_outliers', JSON.stringify([...prev]))
+    } catch {}
+  }
 
   const PAGE_SIZE = 50
 
@@ -332,6 +353,14 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                 <div className="flex items-center gap-1.5 min-w-0 flex-shrink">
                   <span className="text-sm font-semibold truncate" style={{ color: C.warmText }}>{row.name}</span>
                   {row.is_recurring === 1 && <Repeat size={12} style={{ color: C.muted, flexShrink: 0 }} />}
+                  {!isIncome && outlierIds.has(row.id) && (
+                    <button type="button" title="Unusual expense — click to dismiss flag"
+                      onClick={ev => { ev.stopPropagation(); handleDismissOutlier(row.id) }}
+                      className="bg-transparent border-none cursor-pointer p-0 flex-shrink-0"
+                      style={{ color: C.atRisk, lineHeight: 0 }}>
+                      <TriangleAlert size={12} />
+                    </button>
+                  )}
                 </div>
                 <span className="text-sm font-semibold flex-shrink-0"
                   style={{ color: isIncome ? C.income : typeMap[row.type]?.color || C.dimText }}>
@@ -444,6 +473,14 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{e.name}</span>
                         {e.is_recurring === 1 && <Repeat size={13} className="flex-shrink-0" style={{ color: C.muted, opacity: 0.7 }} title="Recurring monthly expense" />}
+                        {outlierIds.has(e.id) && (
+                          <button type="button" title="Unusual expense — click to dismiss flag"
+                            onClick={ev => { ev.stopPropagation(); handleDismissOutlier(e.id) }}
+                            className="bg-transparent border-none cursor-pointer p-0 flex-shrink-0"
+                            style={{ color: C.atRisk, lineHeight: 0 }}>
+                            <TriangleAlert size={13} />
+                          </button>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">

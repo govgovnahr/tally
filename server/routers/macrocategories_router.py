@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/macrocategories")
 def get_macrocategories(user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM macrocategories WHERE user_id = ? ORDER BY name", (user_id,)).fetchall()
+    rows = conn.execute("SELECT * FROM macrocategories WHERE user_id = %s ORDER BY name", (user_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -22,16 +22,16 @@ def create_macrocategory(body: NewMacrocategory, user_id: str = Depends(get_curr
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
     conn = get_connection()
-    if conn.execute("SELECT id FROM macrocategories WHERE name = ? AND user_id = ?", (name, user_id)).fetchone():
+    if conn.execute("SELECT id FROM macrocategories WHERE name = %s AND user_id = %s", (name, user_id)).fetchone():
         conn.close()
         raise HTTPException(status_code=409, detail="A macrocategory with that name already exists.")
     new_id = str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO macrocategories (id, name, color, budget_limit, user_id) VALUES (?,?,?,?,?)",
+        "INSERT INTO macrocategories (id, name, color, budget_limit, user_id) VALUES (%s,%s,%s,%s,%s)",
         (new_id, name, body.color, body.budget_limit, user_id),
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM macrocategories WHERE id = ?", (new_id,)).fetchone()
+    row = conn.execute("SELECT * FROM macrocategories WHERE id = %s", (new_id,)).fetchone()
     conn.close()
     return dict(row)
 
@@ -39,7 +39,7 @@ def create_macrocategory(body: NewMacrocategory, user_id: str = Depends(get_curr
 @router.get("/macrocategories/summary")
 def get_macrocategory_summary(month: Optional[str] = Query(None), user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    macros = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM macrocategories WHERE user_id = ?", (user_id,)).fetchall()}
+    macros = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM macrocategories WHERE user_id = %s", (user_id,)).fetchall()}
     if not macros:
         conn.close()
         return []
@@ -49,8 +49,8 @@ def get_macrocategory_summary(month: Optional[str] = Query(None), user_id: str =
             SELECT et.macrocategory_id, SUM(e.amount) as total, COUNT(*) as count
             FROM expenses e
             JOIN expense_types et ON e.type = et.name
-            WHERE e.user_id = ? AND et.user_id = ? AND et.macrocategory_id IS NOT NULL
-              AND strftime('%Y-%m', e.date) = ?
+            WHERE e.user_id = %s AND et.user_id = %s AND et.macrocategory_id IS NOT NULL
+              AND to_char(e.date::date, 'YYYY-MM') = %s
             GROUP BY et.macrocategory_id
         """, (user_id, user_id, month)).fetchall()
     else:
@@ -58,7 +58,7 @@ def get_macrocategory_summary(month: Optional[str] = Query(None), user_id: str =
             SELECT et.macrocategory_id, SUM(e.amount) as total, COUNT(*) as count
             FROM expenses e
             JOIN expense_types et ON e.type = et.name
-            WHERE e.user_id = ? AND et.user_id = ? AND et.macrocategory_id IS NOT NULL
+            WHERE e.user_id = %s AND et.user_id = %s AND et.macrocategory_id IS NOT NULL
             GROUP BY et.macrocategory_id
         """, (user_id, user_id)).fetchall()
     conn.close()
@@ -80,21 +80,21 @@ def update_macrocategory(macro_id: str, body: NewMacrocategory, user_id: str = D
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
     conn = get_connection()
-    if not conn.execute("SELECT id FROM macrocategories WHERE id = ? AND user_id = ?", (macro_id, user_id)).fetchone():
+    if not conn.execute("SELECT id FROM macrocategories WHERE id = %s AND user_id = %s", (macro_id, user_id)).fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Macrocategory not found.")
     dup = conn.execute(
-        "SELECT id FROM macrocategories WHERE name = ? AND user_id = ? AND id != ?", (name, user_id, macro_id)
+        "SELECT id FROM macrocategories WHERE name = %s AND user_id = %s AND id != %s", (name, user_id, macro_id)
     ).fetchone()
     if dup:
         conn.close()
         raise HTTPException(status_code=409, detail="A macrocategory with that name already exists.")
     conn.execute(
-        "UPDATE macrocategories SET name = ?, color = ?, budget_limit = ? WHERE id = ? AND user_id = ?",
+        "UPDATE macrocategories SET name = %s, color = %s, budget_limit = %s WHERE id = %s AND user_id = %s",
         (name, body.color, body.budget_limit, macro_id, user_id),
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM macrocategories WHERE id = ?", (macro_id,)).fetchone()
+    row = conn.execute("SELECT * FROM macrocategories WHERE id = %s", (macro_id,)).fetchone()
     conn.close()
     return dict(row)
 
@@ -102,11 +102,11 @@ def update_macrocategory(macro_id: str, body: NewMacrocategory, user_id: str = D
 @router.delete("/macrocategories/{macro_id}")
 def delete_macrocategory(macro_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
-    if not conn.execute("SELECT id FROM macrocategories WHERE id = ? AND user_id = ?", (macro_id, user_id)).fetchone():
+    if not conn.execute("SELECT id FROM macrocategories WHERE id = %s AND user_id = %s", (macro_id, user_id)).fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Macrocategory not found.")
-    conn.execute("UPDATE expense_types SET macrocategory_id = NULL WHERE macrocategory_id = ? AND user_id = ?", (macro_id, user_id))
-    conn.execute("DELETE FROM macrocategories WHERE id = ? AND user_id = ?", (macro_id, user_id))
+    conn.execute("UPDATE expense_types SET macrocategory_id = NULL WHERE macrocategory_id = %s AND user_id = %s", (macro_id, user_id))
+    conn.execute("DELETE FROM macrocategories WHERE id = %s AND user_id = %s", (macro_id, user_id))
     conn.commit()
     conn.close()
     return {"id": macro_id}

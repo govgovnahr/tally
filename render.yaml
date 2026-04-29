@@ -2,22 +2,37 @@ services:
   - type: web
     name: budget-app
     runtime: python
+    healthCheckPath: /health
     buildCommand: >-
       pip install -r server/requirements.txt &&
       cd client && npm install && npm run build && cd .. &&
       mkdir -p server/static && cp -r client/dist/. server/static/
     startCommand: cd server && uvicorn server:app --host 0.0.0.0 --port $PORT
-    disk:
-      name: budget-db
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: SECRET_KEY
         generateValue: true
-      - key: BUDGET_DATA_DIR
-        value: /data
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SECURE_COOKIES
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        value: "https://budget-app.onrender.com"
       - key: REGISTRATION_OPEN
         value: "true"
+      - key: APP_URL
+        value: "https://budget-app.onrender.com"
+      - key: SMTP_HOST
+        value: ""
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: ""
+      - key: SMTP_PASSWORD
+        value: ""
+      - key: FROM_EMAIL
+        value: ""
       - key: PLAID_CLIENT_ID
         value: ""
       - key: PLAID_SECRET

@@ -41,17 +41,17 @@ def _portfolio_avg_net(conn, user_id: str, months: int = 3) -> float:
     past_months = _months_range(months + 1)[:-1]
     if not past_months:
         return 0.0
-    placeholders = ",".join("?" * len(past_months))
+    placeholders = ",".join(["%s"] * len(past_months))
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount),0) as total "
-        f"FROM incomes WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
+        f"FROM incomes WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + past_months,
     )
     income_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
     cursor.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount),0) as total "
-        f"FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
+        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + past_months,
     )
     expense_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
@@ -61,7 +61,7 @@ def _portfolio_avg_net(conn, user_id: str, months: int = 3) -> float:
 
 def _get_contributions(goal_id: str, cursor):
     cursor.execute(
-        "SELECT * FROM savings_contributions WHERE goal_id = ? ORDER BY date DESC",
+        "SELECT * FROM savings_contributions WHERE goal_id = %s ORDER BY date DESC",
         (goal_id,),
     )
     rows = [dict(r) for r in cursor.fetchall()]
@@ -89,11 +89,11 @@ def _add_computed(goal: dict, conn, portfolio_avg: float = 0.0) -> dict:
 
     if goal["goal_type"] == "monthly":
         cursor.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM savings_contributions "
-            "WHERE goal_id = ? AND strftime('%Y-%m', date) = ?",
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM savings_contributions "
+            "WHERE goal_id = %s AND to_char(date::date, 'YYYY-MM') = %s",
             (goal["id"], cur_month),
         )
-        monthly_contributions = round(cursor.fetchone()[0], 2)
+        monthly_contributions = round(cursor.fetchone()["total"], 2)
         progress_pct = (
             round(min(100.0, max(0.0, monthly_contributions / goal["target"] * 100)), 2)
             if goal["target"] > 0 else 0.0
@@ -211,7 +211,7 @@ def _apply_priority_cascade(goals: list, portfolio_avg: float) -> list:
 def get_monthly_goal(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT target FROM savings_goals WHERE user_id = ? AND goal_type = 'monthly' LIMIT 1", (user_id,))
+    cursor.execute("SELECT target FROM savings_goals WHERE user_id = %s AND goal_type = 'monthly' LIMIT 1", (user_id,))
     row = cursor.fetchone()
     conn.close()
     return {"target": round(row["target"], 2) if row else None}
@@ -230,16 +230,16 @@ def get_net_chart(months: int = 6, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     month_list = _months_range(months)
-    placeholders = ",".join("?" * len(month_list))
+    placeholders = ",".join(["%s"] * len(month_list))
     cursor.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount),0) as total "
-        f"FROM incomes WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
+        f"FROM incomes WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     )
     income_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
     cursor.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount),0) as total "
-        f"FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
+        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     )
     expense_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
@@ -256,7 +256,7 @@ def get_net_chart(months: int = 6, user_id: str = Depends(get_current_user)):
 def get_savings_goals(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM savings_goals WHERE user_id = ? ORDER BY created_at ASC", (user_id,))
+    cursor.execute("SELECT * FROM savings_goals WHERE user_id = %s ORDER BY created_at ASC", (user_id,))
     rows = [dict(r) for r in cursor.fetchall()]
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = [_add_computed(r, conn, portfolio_avg) for r in rows]
@@ -291,7 +291,7 @@ def create_savings_goal(body: NewSavingsGoal, user_id: str = Depends(get_current
         raise HTTPException(status_code=400, detail="Target must be greater than 0")
 
     if body.goal_type == "monthly":
-        cursor.execute("SELECT id FROM savings_goals WHERE user_id = ? AND goal_type = 'monthly'", (user_id,))
+        cursor.execute("SELECT id FROM savings_goals WHERE user_id = %s AND goal_type = 'monthly'", (user_id,))
         if cursor.fetchone():
             conn.close()
             raise HTTPException(status_code=409, detail="A monthly savings goal already exists")
@@ -299,7 +299,7 @@ def create_savings_goal(body: NewSavingsGoal, user_id: str = Depends(get_current
     if body.priority is not None:
         today_str = date.today().isoformat()
         cursor.execute(
-            "SELECT id FROM savings_goals WHERE user_id = ? AND priority = ? AND (deadline IS NULL OR deadline >= ?)",
+            "SELECT id FROM savings_goals WHERE user_id = %s AND priority = %s AND (deadline IS NULL OR deadline >= %s)",
             (user_id, body.priority, today_str),
         )
         if cursor.fetchone():
@@ -309,12 +309,12 @@ def create_savings_goal(body: NewSavingsGoal, user_id: str = Depends(get_current
     goal_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
     cursor.execute(
-        "INSERT INTO savings_goals (id, goal_type, name, target, deadline, created_at, color, allocation_pct, priority, months_target, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO savings_goals (id, goal_type, name, target, deadline, created_at, color, allocation_pct, priority, months_target, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (goal_id, body.goal_type, body.name.strip(), target, body.deadline, created_at, body.color, body.allocation_pct, body.priority, body.months_target, user_id),
     )
     conn.commit()
 
-    cursor.execute("SELECT * FROM savings_goals WHERE id = ?", (goal_id,))
+    cursor.execute("SELECT * FROM savings_goals WHERE id = %s", (goal_id,))
     row = dict(cursor.fetchone())
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = _add_computed(row, conn, portfolio_avg)
@@ -335,7 +335,7 @@ def update_savings_goal(goal_id: str, body: UpdateSavingsGoal, user_id: str = De
 
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("SELECT * FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -352,8 +352,8 @@ def update_savings_goal(goal_id: str, body: UpdateSavingsGoal, user_id: str = De
     if body.priority is not None:
         today_str = date.today().isoformat()
         cursor.execute(
-            "SELECT id FROM savings_goals WHERE user_id = ? AND priority = ? AND id != ? "
-            "AND (deadline IS NULL OR deadline >= ?)",
+            "SELECT id FROM savings_goals WHERE user_id = %s AND priority = %s AND id != %s "
+            "AND (deadline IS NULL OR deadline >= %s)",
             (user_id, body.priority, goal_id, today_str),
         )
         if cursor.fetchone():
@@ -361,12 +361,12 @@ def update_savings_goal(goal_id: str, body: UpdateSavingsGoal, user_id: str = De
             raise HTTPException(status_code=409, detail=f"Priority {body.priority} is already assigned to another active goal")
 
     cursor.execute(
-        "UPDATE savings_goals SET name=?, target=?, deadline=?, color=?, allocation_pct=?, priority=?, paused=?, months_target=? WHERE id=? AND user_id=?",
+        "UPDATE savings_goals SET name=%s, target=%s, deadline=%s, color=%s, allocation_pct=%s, priority=%s, paused=%s, months_target=%s WHERE id=%s AND user_id=%s",
         (body.name.strip(), target, body.deadline, body.color, body.allocation_pct, body.priority, 1 if body.paused else 0, body.months_target, goal_id, user_id),
     )
     conn.commit()
 
-    cursor.execute("SELECT * FROM savings_goals WHERE id = ?", (goal_id,))
+    cursor.execute("SELECT * FROM savings_goals WHERE id = %s", (goal_id,))
     updated = dict(cursor.fetchone())
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = _add_computed(updated, conn, portfolio_avg)
@@ -378,15 +378,15 @@ def update_savings_goal(goal_id: str, body: UpdateSavingsGoal, user_id: str = De
 def toggle_pause(goal_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("SELECT * FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     row = cursor.fetchone()
     if not row:
         conn.close()
         raise HTTPException(status_code=404, detail="Savings goal not found")
     new_paused = 0 if row["paused"] else 1
-    cursor.execute("UPDATE savings_goals SET paused=? WHERE id=? AND user_id=?", (new_paused, goal_id, user_id))
+    cursor.execute("UPDATE savings_goals SET paused=%s WHERE id=%s AND user_id=%s", (new_paused, goal_id, user_id))
     conn.commit()
-    cursor.execute("SELECT * FROM savings_goals WHERE id = ?", (goal_id,))
+    cursor.execute("SELECT * FROM savings_goals WHERE id = %s", (goal_id,))
     updated = dict(cursor.fetchone())
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = _add_computed(updated, conn, portfolio_avg)
@@ -395,11 +395,11 @@ def toggle_pause(goal_id: str, user_id: str = Depends(get_current_user)):
 
 
 def _get_or_create_savings_type(cursor, user_id: str) -> str:
-    cursor.execute("SELECT name FROM expense_types WHERE name = 'Savings' AND user_id = ?", (user_id,))
+    cursor.execute("SELECT name FROM expense_types WHERE name = 'Savings' AND user_id = %s", (user_id,))
     if cursor.fetchone():
         return "Savings"
     cursor.execute(
-        "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
         (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1, user_id),
     )
     return "Savings"
@@ -414,7 +414,7 @@ def add_contribution(goal_id: str, body: NewContribution, user_id: str = Depends
 
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("SELECT id, name FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     goal_row = cursor.fetchone()
     if not goal_row:
         conn.close()
@@ -424,7 +424,7 @@ def add_contribution(goal_id: str, body: NewContribution, user_id: str = Depends
     created_at = datetime.now().isoformat()
 
     if body.expense_id:
-        cursor.execute("SELECT id FROM expenses WHERE id = ? AND user_id = ?", (body.expense_id, user_id))
+        cursor.execute("SELECT id FROM expenses WHERE id = %s AND user_id = %s", (body.expense_id, user_id))
         if not cursor.fetchone():
             conn.close()
             raise HTTPException(status_code=404, detail="Expense not found")
@@ -433,17 +433,17 @@ def add_contribution(goal_id: str, body: NewContribution, user_id: str = Depends
         savings_type = _get_or_create_savings_type(cursor, user_id)
         expense_id = str(uuid.uuid4())
         cursor.execute(
-            "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
             (expense_id, goal_name, round(body.amount, 2), savings_type, body.date, created_at, 0, user_id),
         )
 
     contrib_id = str(uuid.uuid4())
     cursor.execute(
-        "INSERT INTO savings_contributions (id, goal_id, amount, date, note, created_at, expense_id, user_id) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO savings_contributions (id, goal_id, amount, date, note, created_at, expense_id, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
         (contrib_id, goal_id, round(body.amount, 2), body.date, body.note, created_at, expense_id, user_id),
     )
     conn.commit()
-    cursor.execute("SELECT * FROM savings_contributions WHERE id = ?", (contrib_id,))
+    cursor.execute("SELECT * FROM savings_contributions WHERE id = %s", (contrib_id,))
     result = dict(cursor.fetchone())
     conn.close()
     return result
@@ -453,12 +453,12 @@ def add_contribution(goal_id: str, body: NewContribution, user_id: str = Depends
 def get_contributions(goal_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("SELECT id FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     if not cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Savings goal not found")
     cursor.execute(
-        "SELECT * FROM savings_contributions WHERE goal_id = ? ORDER BY date DESC",
+        "SELECT * FROM savings_contributions WHERE goal_id = %s ORDER BY date DESC",
         (goal_id,),
     )
     result = [dict(r) for r in cursor.fetchall()]
@@ -470,12 +470,12 @@ def get_contributions(goal_id: str, user_id: str = Depends(get_current_user)):
 def delete_contribution(goal_id: str, contrib_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("SELECT id FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     if not cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Savings goal not found")
     cursor.execute(
-        "SELECT id, expense_id FROM savings_contributions WHERE id = ? AND goal_id = ?",
+        "SELECT id, expense_id FROM savings_contributions WHERE id = %s AND goal_id = %s",
         (contrib_id, goal_id),
     )
     row = cursor.fetchone()
@@ -483,8 +483,8 @@ def delete_contribution(goal_id: str, contrib_id: str, user_id: str = Depends(ge
         conn.close()
         raise HTTPException(status_code=404, detail="Contribution not found")
     if row["expense_id"]:
-        cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (row["expense_id"], user_id))
-    cursor.execute("DELETE FROM savings_contributions WHERE id = ?", (contrib_id,))
+        cursor.execute("DELETE FROM expenses WHERE id = %s AND user_id = %s", (row["expense_id"], user_id))
+    cursor.execute("DELETE FROM savings_contributions WHERE id = %s", (contrib_id,))
     conn.commit()
     conn.close()
     return {"id": contrib_id}
@@ -494,12 +494,12 @@ def delete_contribution(goal_id: str, contrib_id: str, user_id: str = Depends(ge
 def delete_savings_goal(goal_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("SELECT id FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     if not cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Savings goal not found")
-    cursor.execute("DELETE FROM savings_contributions WHERE goal_id = ?", (goal_id,))
-    cursor.execute("DELETE FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+    cursor.execute("DELETE FROM savings_contributions WHERE goal_id = %s", (goal_id,))
+    cursor.execute("DELETE FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
     conn.commit()
     conn.close()
     return {"id": goal_id}

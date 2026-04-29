@@ -17,7 +17,7 @@ class NewImportRule(BaseModel):
 def get_import_rules(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM import_rules WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+    cursor.execute("SELECT * FROM import_rules WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return rows
@@ -30,22 +30,22 @@ def upsert_import_rule(rule: NewImportRule, user_id: str = Depends(get_current_u
         raise HTTPException(status_code=400, detail="Pattern cannot be empty")
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM import_rules WHERE LOWER(pattern) = LOWER(?) AND user_id = ?", (pattern, user_id))
+    cursor.execute("SELECT id FROM import_rules WHERE LOWER(pattern) = LOWER(%s) AND user_id = %s", (pattern, user_id))
     existing = cursor.fetchone()
     if existing:
         cursor.execute(
-            "UPDATE import_rules SET expense_type=?, created_at=? WHERE id=? AND user_id=?",
+            "UPDATE import_rules SET expense_type=%s, created_at=%s WHERE id=%s AND user_id=%s",
             (rule.expense_type, datetime.now().isoformat(), existing["id"], user_id),
         )
         rule_id = existing["id"]
     else:
         rule_id = str(uuid.uuid4())
         cursor.execute(
-            "INSERT INTO import_rules (id, pattern, expense_type, created_at, user_id) VALUES (?,?,?,?,?)",
+            "INSERT INTO import_rules (id, pattern, expense_type, created_at, user_id) VALUES (%s,%s,%s,%s,%s)",
             (rule_id, pattern, rule.expense_type, datetime.now().isoformat(), user_id),
         )
     cursor.execute(
-        "UPDATE expenses SET type = ? WHERE user_id = ? AND LOWER(name) LIKE ?",
+        "UPDATE expenses SET type = %s WHERE user_id = %s AND LOWER(name) LIKE %s",
         (rule.expense_type, user_id, f"%{pattern.lower()}%"),
     )
     updated_count = cursor.rowcount
@@ -58,11 +58,11 @@ def upsert_import_rule(rule: NewImportRule, user_id: str = Depends(get_current_u
 def delete_import_rule(rule_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM import_rules WHERE id=? AND user_id=?", (rule_id, user_id))
+    cursor.execute("SELECT id FROM import_rules WHERE id=%s AND user_id=%s", (rule_id, user_id))
     if not cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=404, detail="Rule not found")
-    cursor.execute("DELETE FROM import_rules WHERE id=? AND user_id=?", (rule_id, user_id))
+    cursor.execute("DELETE FROM import_rules WHERE id=%s AND user_id=%s", (rule_id, user_id))
     conn.commit()
     conn.close()
     return {"id": rule_id}

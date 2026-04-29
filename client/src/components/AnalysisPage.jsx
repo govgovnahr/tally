@@ -353,19 +353,15 @@ function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, 
   const avgWidth = max > 0 ? Math.min(100, (expense.category_avg / max) * 100) : 0
 
   useEffect(() => {
-    const month = expense.date.slice(0, 7)
-    api.get('/expenses', { params: { type: expense.type, month, sort_by: 'date', sort_dir: 'desc', page_size: 5 } })
-      .then(async r => {
-        const fromMonth = r.data.expenses ?? []
-        if (fromMonth.length < 5) {
-          const more = await api.get('/expenses', { params: { type: expense.type, sort_by: 'date', sort_dir: 'desc', page_size: 10 } })
-          const seen = new Set(fromMonth.map(e => e.id))
-          const extra = (more.data.expenses ?? []).filter(e => !seen.has(e.id)).slice(0, 5 - fromMonth.length)
-          setRecent([...fromMonth, ...extra])
-        } else {
-          setRecent(fromMonth)
-        }
+    api.get('/expenses', { params: { type: expense.type, sort_by: 'date', sort_dir: 'desc', page_size: 100 } })
+      .then(r => {
+        const all = r.data.expenses ?? []
+        const idx = all.findIndex(e => e.id === expense.id)
+        if (idx === -1) { setRecent(all.slice(0, 5)); return }
+        // all is desc; idx-2..idx+3 gives 2 newer + outlier + 2 older in desc order
+        setRecent(all.slice(Math.max(0, idx - 2), idx + 3))
       })
+      .catch(() => setRecent([]))
   }, [expense.id])
 
   return (
@@ -468,9 +464,9 @@ function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, 
           <button
             onClick={() => { onDismiss(expense.id); onClose() }}
             className="flex-1 h-9 rounded-xl text-sm font-medium bg-transparent border cursor-pointer transition-colors duration-150"
-            style={{ borderColor: C.borderMed, color: C.dimText, minWidth: 80 }}
+            style={{ borderColor: C.border, color: C.warmText, minWidth: 80 }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = C.overBudget; e.currentTarget.style.color = C.overBudget }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.borderMed; e.currentTarget.style.color = C.dimText }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.warmText }}
           >
             Dismiss
           </button>
@@ -543,6 +539,8 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
     else cmp = a.date.localeCompare(b.date)
     return sortDir === 'desc' ? -cmp : cmp
   })
+
+  if (!loading && data.length === 0) return null
 
   return (
     <>
@@ -772,7 +770,14 @@ function MonthOverMonthSection({ months }) {
 export default function AnalysisPage({ outlierMonth, onClearOutlierMonth, onShowInExpenses }) {
   const C = useC()
   const [pacingMonth, setPacingMonth] = useState(currentMonth())
-  const [historyMonths, setHistoryMonths] = useState(6)
+  const [historyMonths, setHistoryMonths] = useState(() => {
+    const saved = parseInt(localStorage.getItem('budget_history_months'), 10)
+    return isNaN(saved) ? 6 : saved
+  })
+
+  useEffect(() => {
+    localStorage.setItem('budget_history_months', String(historyMonths))
+  }, [historyMonths])
   const [maxMonths, setMaxMonths] = useState(12)
 
   useEffect(() => {

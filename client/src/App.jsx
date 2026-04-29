@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, LogOut } from 'lucide-react'
+import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle } from 'lucide-react'
 import api from './api.js'
+import { supabase } from './supabase.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import { ColorsProvider, useC } from './colors'
 import ExpenseList from './components/ExpenseList.jsx'
@@ -10,6 +11,7 @@ import SavingsPage from './components/SavingsPage.jsx'
 import AnalysisPage from './components/AnalysisPage.jsx'
 import DashboardPage from './components/DashboardPage.jsx'
 import AuthPage from './components/AuthPage.jsx'
+import AccountPage from './components/AccountPage.jsx'
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -23,7 +25,7 @@ const NAV_ITEMS = [
   { value: 'all-expenses', label: 'Expenses',  Icon: Receipt },
 ]
 
-function AppContent({ mode, onToggleMode, onLogout }) {
+function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
   const [refreshKey, setRefreshKey] = useState(0)
@@ -123,7 +125,7 @@ function AppContent({ mode, onToggleMode, onLogout }) {
           })}
         </div>
 
-        {/* Theme toggle + logout */}
+        {/* Theme toggle + account */}
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -135,12 +137,12 @@ function AppContent({ mode, onToggleMode, onLogout }) {
           </button>
           <button
             type="button"
-            onClick={onLogout}
+            onClick={() => setPage('account')}
             className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
-            style={{ color: C.muted, backgroundColor: 'transparent' }}
-            title="Sign out"
+            style={{ color: page === 'account' ? C.primary : C.muted, backgroundColor: 'transparent' }}
+            title="Account settings"
           >
-            <LogOut size={18} />
+            <UserCircle size={18} />
           </button>
         </div>
       </header>
@@ -165,14 +167,24 @@ function AppContent({ mode, onToggleMode, onLogout }) {
             Budget
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onToggleMode}
-          className="p-1.5 rounded-lg border-none cursor-pointer"
-          style={{ color: C.muted, backgroundColor: 'transparent' }}
-        >
-          {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleMode}
+            className="p-1.5 rounded-lg border-none cursor-pointer"
+            style={{ color: C.muted, backgroundColor: 'transparent' }}
+          >
+            {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage('account')}
+            className="p-1.5 rounded-lg border-none cursor-pointer"
+            style={{ color: page === 'account' ? C.primary : C.muted, backgroundColor: 'transparent' }}
+          >
+            <UserCircle size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Mobile bottom nav */}
@@ -227,6 +239,7 @@ function AppContent({ mode, onToggleMode, onLogout }) {
             onInitialTypeConsumed={() => { setInitialExpenseType(null); setInitialExpenseId(null); setInitialExpenseMonth(null) }}
           />
         )}
+        {page === 'account' && <AccountPage user={user} onLogout={onLogout} />}
       </main>
     </div>
   )
@@ -238,13 +251,30 @@ function ThemedApp() {
   const toggleMode = () => setMode(m => m === 'dark' ? 'light' : 'dark')
 
   useEffect(() => {
-    api.get('/auth/me')
-      .then(res => setUser(res.data))
-      .catch(() => setUser(null))
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        api.get('/auth/me').catch(() => {})
+        setUser({ id: session.user.id, email: session.user.email })
+      } else {
+        setUser(null)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') return
+      if (session) {
+        api.get('/auth/me').catch(() => {})
+        setUser({ id: session.user.id, email: session.user.email })
+      } else {
+        setUser(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const handleLogout = () => {
-    api.post('/auth/logout').finally(() => setUser(null))
+    supabase.auth.signOut()
   }
 
   if (user === undefined) return (
@@ -255,14 +285,14 @@ function ThemedApp() {
 
   if (user === null) return (
     <ColorsProvider mode={mode}>
-      <AuthPage onAuth={() => api.get('/auth/me').then(r => setUser(r.data))} mode={mode} onToggleMode={toggleMode} />
+      <AuthPage mode={mode} onToggleMode={toggleMode} />
     </ColorsProvider>
   )
 
   return (
     <ColorsProvider mode={mode}>
       <ExpenseTypesProvider>
-        <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} />
+        <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} user={user} />
       </ExpenseTypesProvider>
     </ColorsProvider>
   )

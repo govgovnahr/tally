@@ -168,11 +168,11 @@ def infer_type_endpoint(
     user_id: str = Depends(get_current_user),
 ):
     with get_connection() as conn:
-        valid_types = [r[0] for r in conn.execute(
-            "SELECT name FROM expense_types WHERE user_id = ? ORDER BY sort_order", (user_id,)
+        valid_types = [r["name"] for r in conn.execute(
+            "SELECT name FROM expense_types WHERE user_id = %s ORDER BY sort_order", (user_id,)
         ).fetchall()]
         rules = conn.execute(
-            "SELECT pattern, expense_type FROM import_rules WHERE user_id = ?", (user_id,)
+            "SELECT pattern, expense_type FROM import_rules WHERE user_id = %s", (user_id,)
         ).fetchall()
     if not valid_types:
         return {"type": "Other"}
@@ -248,17 +248,17 @@ async def import_budgets(
     cursor = conn.cursor()
 
     existing = {r["name"].lower(): r["name"]
-                for r in cursor.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,)).fetchall()}
-    used_colors = {r["color"] for r in cursor.execute("SELECT color FROM expense_types WHERE user_id = ?", (user_id,)).fetchall()}
+                for r in cursor.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
+    used_colors = {r["color"] for r in cursor.execute("SELECT color FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
 
     new_categories = {norm for norm, _ in aggregated} - existing.keys()
     available_colors = [c for c in _DEFAULT_COLORS if c not in used_colors] or _DEFAULT_COLORS
     for idx, norm in enumerate(sorted(new_categories)):
         name = display_name[norm]
         color = available_colors[idx % len(available_colors)]
-        sort_order = cursor.execute("SELECT COALESCE(MAX(sort_order)+1, 0) FROM expense_types WHERE user_id = ?", (user_id,)).fetchone()[0]
+        sort_order = cursor.execute("SELECT COALESCE(MAX(sort_order)+1, 0) AS sort_order FROM expense_types WHERE user_id = %s", (user_id,)).fetchone()["sort_order"]
         cursor.execute(
-            "INSERT INTO expense_types (id, name, color, icon, sort_order, user_id) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO expense_types (id, name, color, icon, sort_order, user_id) VALUES (%s,%s,%s,%s,%s,%s)",
             (str(uuid.uuid4()), name, color, _DEFAULT_ICON, sort_order, user_id),
         )
         existing[norm] = name
@@ -268,12 +268,12 @@ async def import_budgets(
         type_name = existing[norm]
         if month_key:
             cursor.execute(
-                "INSERT OR REPLACE INTO monthly_budgets (user_id, type, month, monthly_limit) VALUES (?,?,?,?)",
+                "INSERT INTO monthly_budgets (user_id, type, month, monthly_limit) VALUES (%s,%s,%s,%s) ON CONFLICT (user_id, type, month) DO UPDATE SET monthly_limit = EXCLUDED.monthly_limit",
                 (user_id, type_name, month_key, total),
             )
         else:
             cursor.execute(
-                "INSERT OR REPLACE INTO budgets (user_id, type, monthly_limit) VALUES (?,?,?)",
+                "INSERT INTO budgets (user_id, type, monthly_limit) VALUES (%s,%s,%s) ON CONFLICT (user_id, type) DO UPDATE SET monthly_limit = EXCLUDED.monthly_limit",
                 (user_id, type_name, total),
             )
         imported += 1
@@ -327,9 +327,9 @@ async def import_records(
 
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM expense_types WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,))
     valid_types = [r["name"] for r in cursor.fetchall()]
-    cursor.execute("SELECT pattern, expense_type FROM import_rules WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT pattern, expense_type FROM import_rules WHERE user_id = %s", (user_id,))
     rules = [(r["pattern"], r["expense_type"]) for r in cursor.fetchall()]
 
     imported = 0
@@ -368,7 +368,7 @@ async def import_records(
                 if raw_type and raw_type.lower() == "savings":
                     if "Savings" not in valid_types:
                         cursor.execute(
-                            "INSERT OR IGNORE INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (?,?,?,?,?,?,?)",
+                            "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
                             (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1, user_id),
                         )
                         valid_types.append("Savings")
@@ -379,7 +379,7 @@ async def import_records(
                     expense_type = _infer_type(name, valid_types, rules)
 
                 cursor.execute(
-                    "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (?,?,?,?,?,?,?,?)",
+                    "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
                     (new_id, name, amount, expense_type, date_str, now, is_recurring, user_id),
                 )
 
@@ -387,7 +387,7 @@ async def import_records(
                     savings_expenses.append({"id": new_id, "name": name, "amount": amount, "date": date_str})
             else:
                 cursor.execute(
-                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id) VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                     (new_id, name, amount, date_str, now, is_recurring, user_id),
                 )
 

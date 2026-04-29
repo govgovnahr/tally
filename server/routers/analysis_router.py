@@ -28,10 +28,10 @@ def _months_range(n: int):
 
 def _effective_budgets_map(conn, month: str, user_id: str) -> dict:
     defaults = {r["type"]: r["monthly_limit"]
-                for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = ?", (user_id,)).fetchall()}
+                for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s", (user_id,)).fetchall()}
     overrides = {r["type"]: r["monthly_limit"]
                  for r in conn.execute(
-                     "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = ? AND month = ?", (user_id, month)
+                     "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = %s AND month = %s", (user_id, month)
                  ).fetchall()}
     return overrides if overrides else defaults
 
@@ -110,22 +110,22 @@ def get_category_stats(
 ):
     month_list = _months_range(months)
     conn = get_connection()
-    placeholders = ",".join("?" * len(month_list))
+    placeholders = ",".join(["%s"] * len(month_list))
 
     rows = conn.execute(
-        f"SELECT strftime('%Y-%m', date) as month, type, COALESCE(SUM(amount), 0) as total "
-        f"FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) "
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, type, COALESCE(SUM(amount), 0) as total "
+        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) "
         f"GROUP BY month, type",
         [user_id] + month_list,
     ).fetchall()
     credit_rows = conn.execute(
-        f"SELECT strftime('%Y-%m', date) as month, credit_type as type, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE user_id = ? AND credit_type IS NOT NULL AND strftime('%Y-%m', date) IN ({placeholders}) "
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, credit_type as type, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE user_id = %s AND credit_type IS NOT NULL AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) "
         f"GROUP BY month, credit_type",
         [user_id] + month_list,
     ).fetchall()
     budget_map = {r["type"]: r["monthly_limit"]
-                  for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = ?", (user_id,)).fetchall()}
+                  for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s", (user_id,)).fetchall()}
     conn.close()
 
     by_type: dict[str, dict] = {}
@@ -195,11 +195,11 @@ def get_category_stats(
 def get_outliers(months: int = Query(3), user_id: str = Depends(get_current_user)):
     month_list = _months_range(months)
     conn = get_connection()
-    placeholders = ",".join("?" * len(month_list))
+    placeholders = ",".join(["%s"] * len(month_list))
 
     expenses = conn.execute(
         f"SELECT id, name, type, amount, date FROM expenses "
-        f"WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) ORDER BY date DESC",
+        f"WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) ORDER BY date DESC",
         [user_id] + month_list,
     ).fetchall()
     conn.close()
@@ -251,7 +251,7 @@ def get_avg_expenses(months: int = Query(3), user_id: str = Depends(get_current_
 def get_months_available(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     row = conn.execute(
-        "SELECT MIN(substr(date,1,7)) as earliest FROM expenses WHERE user_id = ?",
+        "SELECT MIN(substr(date,1,7)) as earliest FROM expenses WHERE user_id = %s",
         (user_id,)
     ).fetchone()
     if not row or not row["earliest"]:
@@ -266,25 +266,25 @@ def get_months_available(user_id: str = Depends(get_current_user)):
 def get_month_over_month(months: int = Query(6), user_id: str = Depends(get_current_user)):
     month_list = _months_range(months)
     conn = get_connection()
-    placeholders = ",".join("?" * len(month_list))
+    placeholders = ",".join(["%s"] * len(month_list))
 
     expense_rows = conn.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     ).fetchall()
     expense_by_month = {r["month"]: round(r["total"], 2) for r in expense_rows}
 
     income_rows = conn.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE user_id = ? AND credit_type IS NULL AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE user_id = %s AND credit_type IS NULL AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     ).fetchall()
     income_by_month = {r["month"]: round(r["total"], 2) for r in income_rows}
 
     credit_rows = conn.execute(
-        f"SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE user_id = ? AND credit_type IS NOT NULL AND strftime('%Y-%m', date) IN ({placeholders}) GROUP BY month",
+        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE user_id = %s AND credit_type IS NOT NULL AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     ).fetchall()
     for cr in credit_rows:
