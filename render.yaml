@@ -5,6 +5,9 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
+    dockerBuildArgs:
+      - VITE_SUPABASE_URL
+      - VITE_SUPABASE_ANON_KEY
     envVars:
       - key: SECRET_KEY
         generateValue: true

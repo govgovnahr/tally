@@ -37,7 +37,7 @@ export default function AccountPage({ user, onLogout }) {
       setConfirmPassword('')
       setShowForm(false)
     }
-      .finally(() => setPwLoading(false))
+    setPwLoading(false)
   }
 
   const section = {
