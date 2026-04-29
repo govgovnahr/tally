@@ -1,13 +1,10 @@
 services:
   - type: web
     name: budget-app
-    runtime: python
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /health
-    buildCommand: >-
-      pip install -r server/requirements.txt &&
-      cd client && npm install && npm run build && cd .. &&
-      mkdir -p server/static && cp -r client/dist/. server/static/
-    startCommand: cd server && uvicorn server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: SECRET_KEY
         generateValue: true
