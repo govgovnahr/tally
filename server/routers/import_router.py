@@ -248,15 +248,15 @@ async def import_budgets(
     cursor = conn.cursor()
 
     existing = {r["name"].lower(): r["name"]
-                for r in cursor.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
-    used_colors = {r["color"] for r in cursor.execute("SELECT color FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
+                for r in conn.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
+    used_colors = {r["color"] for r in conn.execute("SELECT color FROM expense_types WHERE user_id = %s", (user_id,)).fetchall()}
 
     new_categories = {norm for norm, _ in aggregated} - existing.keys()
     available_colors = [c for c in _DEFAULT_COLORS if c not in used_colors] or _DEFAULT_COLORS
     for idx, norm in enumerate(sorted(new_categories)):
         name = display_name[norm]
         color = available_colors[idx % len(available_colors)]
-        sort_order = cursor.execute("SELECT COALESCE(MAX(sort_order)+1, 0) AS sort_order FROM expense_types WHERE user_id = %s", (user_id,)).fetchone()["sort_order"]
+        sort_order = conn.execute("SELECT COALESCE(MAX(sort_order)+1, 0) AS sort_order FROM expense_types WHERE user_id = %s", (user_id,)).fetchone()["sort_order"]
         cursor.execute(
             "INSERT INTO expense_types (id, name, color, icon, sort_order, user_id) VALUES (%s,%s,%s,%s,%s,%s)",
             (str(uuid.uuid4()), name, color, _DEFAULT_ICON, sort_order, user_id),
