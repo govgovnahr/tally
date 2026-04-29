@@ -334,13 +334,14 @@ def _outlier_filtered_totals(conn, months_list: list[str], by_type: bool = False
         std = math.sqrt(sum((a - mean) ** 2 for a in amounts) / len(amounts))
         cat_stats[t] = (mean, std)
 
-    credit_rows = cursor.execute(
+    cursor.execute(
         f"SELECT credit_type, to_char(date::date, 'YYYY-MM') as mo, SUM(amount) as total "
         f"FROM incomes WHERE credit_type IS NOT NULL "
         f"AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) {uid_clause} "
-            f"GROUP BY credit_type, mo",
+        f"GROUP BY credit_type, mo",
         months_list + uid_params,
-    ).fetchall()
+    )
+    credit_rows = cursor.fetchall()
 
     if by_type:
         result: dict = {}
