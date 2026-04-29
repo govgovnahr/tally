@@ -18,17 +18,10 @@ export default function AccountPage({ user, onLogout }) {
   const [confirmLogout, setConfirmLogout] = useState(false)
 
   const fileRef = useRef(null)
+  const [importOpen, setImportOpen] = useState(false)
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const [importError, setImportError] = useState('')
-
-  const LABELS = {                                                                                                                                                                                                                               
-    expenses: 'Expenses', incomes: 'Income entries',
-    expense_types: 'Categories', budgets: 'Budgets',                                                                                                                                                                                             
-    monthly_budgets: 'Monthly budgets', import_rules: 'Import rules',
-    savings_goals: 'Savings goals', savings_contributions: 'Contributions',                                                                                                                                                                      
-    macrocategories: 'Groups',                                             
-  }
 
   const handleLegacyImport = async (e) => {
     const file = e.target.files?.[0]
@@ -37,6 +30,7 @@ export default function AccountPage({ user, onLogout }) {
     setImportResult(null)
     setImportError('')
     setImportLoading(true)
+    setImportOpen(true)
     try {
       const form = new FormData()
       form.append('file', file)
@@ -213,7 +207,7 @@ export default function AccountPage({ user, onLogout }) {
 
       {/* Legacy DB Import */}
       <div style={section}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (importResult || importError) ? 16 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Upload size={16} color={C.muted} />
             <div>
@@ -232,31 +226,74 @@ export default function AccountPage({ user, onLogout }) {
               fontFamily: 'inherit', flexShrink: 0,
             }}
           >
-            {importLoading ? 'Importing…' : 'Choose file'}
+            Choose file
           </button>
           <input ref={fileRef} type="file" accept=".db" onChange={handleLegacyImport} style={{ display: 'none' }} />
         </div>
-
-        {importResult && (() => {
-          const LABELS = {
-            expenses: 'Expenses', incomes: 'Income entries', expense_types: 'Categories',
-            budgets: 'Budgets', monthly_budgets: 'Monthly budgets', import_rules: 'Import rules',
-            savings_goals: 'Savings goals', savings_contributions: 'Contributions', macrocategories: 'Groups',
-          }
-          const parts = Object.entries(importResult)
-            .filter(([, n]) => n > 0)
-            .map(([k, n]) => `${n} ${LABELS[k] ?? k}`)
-          return (
-            <p style={{ margin: 0, fontSize: 13, color: '#4caf50' }}>
-              {parts.length ? `Imported: ${parts.join(' · ')}` : 'Nothing new to import — all data already exists.'}
-            </p>
-          )
-        })()}
-
-        {importError && (
-          <p style={{ margin: 0, fontSize: 13, color: '#e57373' }}>{importError}</p>
-        )}
       </div>
+
+      {/* Import progress / results dialog */}
+      <Dialog open={importOpen} onOpenChange={v => { if (!importLoading) setImportOpen(v) }}>
+        <DialogContent style={{ maxWidth: 400 }}>
+          <DialogHeader>
+            <DialogTitle>{importLoading ? 'Importing…' : importError ? 'Import failed' : 'Import complete'}</DialogTitle>
+          </DialogHeader>
+
+          {importLoading && (
+            <div>
+              <p style={{ margin: '0 0 14px', fontSize: 13, color: C.muted }}>Reading your budget.db — this may take a moment.</p>
+              <style>{`@keyframes imp-slide{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}`}</style>
+              <div style={{ width: '100%', height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  width: '25%', height: '100%', background: C.primary, borderRadius: 2,
+                  animation: 'imp-slide 1.2s ease-in-out infinite',
+                }} />
+              </div>
+            </div>
+          )}
+
+          {!importLoading && importResult && (() => {
+            const LABELS = {
+              expenses: 'Expenses', incomes: 'Income entries', expense_types: 'Categories',
+              budgets: 'Budgets', monthly_budgets: 'Monthly budgets', import_rules: 'Import rules',
+              savings_goals: 'Savings goals', savings_contributions: 'Contributions', macrocategories: 'Groups',
+            }
+            const rows = Object.entries(importResult).filter(([, n]) => n > 0)
+            return rows.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {rows.map(([k, n]) => (
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: C.muted }}>{LABELS[k] ?? k}</span>
+                    <span style={{ fontWeight: 700, color: C.text }}>{n}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: 13, color: C.muted }}>Nothing new — all records already exist.</p>
+            )
+          })()}
+
+          {!importLoading && importError && (
+            <p style={{ margin: 0, fontSize: 13, color: '#e57373' }}>{importError}</p>
+          )}
+
+          {!importLoading && (
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setImportOpen(false)}
+                style={{
+                  padding: '8px 20px', borderRadius: 8, border: 'none',
+                  background: C.primary, color: '#fff', fontSize: 13, fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Done
+              </button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Sign out */}
       <div style={section}>
