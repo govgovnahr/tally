@@ -17,7 +17,7 @@ def _seed_default_types(cursor, user_id: str):
         )
 
 
-@router.get("/auth/me")
+@router.get("/me")
 def me(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
