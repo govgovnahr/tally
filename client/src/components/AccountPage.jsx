@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { LogOut, KeyRound, User } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { LogOut, KeyRound, User, Upload } from 'lucide-react'
 import { supabase } from '../supabase.js'
 import { useC } from '../colors'
+import api from '../api.js'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from './ui/dialog.jsx'
@@ -15,6 +16,38 @@ export default function AccountPage({ user, onLogout }) {
   const [pwLoading, setPwLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
+
+  const fileRef = useRef(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const [importError, setImportError] = useState('')
+
+  const LABELS = {                                                                                                                                                                                                                               
+    expenses: 'Expenses', incomes: 'Income entries',
+    expense_types: 'Categories', budgets: 'Budgets',                                                                                                                                                                                             
+    monthly_budgets: 'Monthly budgets', import_rules: 'Import rules',
+    savings_goals: 'Savings goals', savings_contributions: 'Contributions',                                                                                                                                                                      
+    macrocategories: 'Groups',                                             
+  }
+
+  const handleLegacyImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setImportResult(null)
+    setImportError('')
+    setImportLoading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const { data } = await api.post('/import/legacy-db', form)
+      setImportResult(data.imported)
+    } catch (err) {
+      setImportError(err.response?.data?.detail || 'Import failed.')
+    } finally {
+      setImportLoading(false)
+    }
+  }
 
   const handleChangePassword = async (e) => {
     e.preventDefault()
@@ -175,6 +208,53 @@ export default function AccountPage({ user, onLogout }) {
               </button>
             </div>
           </form>
+        )}
+      </div>
+
+      {/* Legacy DB Import */}
+      <div style={section}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (importResult || importError) ? 16 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Upload size={16} color={C.muted} />
+            <div>
+              <p style={{ margin: 0, fontWeight: 600, fontSize: 14, color: C.text }}>Import from desktop app</p>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>Upload your budget.db file from the offline version</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current.click()}
+            disabled={importLoading}
+            style={{
+              padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
+              background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600,
+              cursor: importLoading ? 'not-allowed' : 'pointer', opacity: importLoading ? 0.6 : 1,
+              fontFamily: 'inherit', flexShrink: 0,
+            }}
+          >
+            {importLoading ? 'Importing…' : 'Choose file'}
+          </button>
+          <input ref={fileRef} type="file" accept=".db" onChange={handleLegacyImport} style={{ display: 'none' }} />
+        </div>
+
+        {importResult && (() => {
+          const LABELS = {
+            expenses: 'Expenses', incomes: 'Income entries', expense_types: 'Categories',
+            budgets: 'Budgets', monthly_budgets: 'Monthly budgets', import_rules: 'Import rules',
+            savings_goals: 'Savings goals', savings_contributions: 'Contributions', macrocategories: 'Groups',
+          }
+          const parts = Object.entries(importResult)
+            .filter(([, n]) => n > 0)
+            .map(([k, n]) => `${n} ${LABELS[k] ?? k}`)
+          return (
+            <p style={{ margin: 0, fontSize: 13, color: '#4caf50' }}>
+              {parts.length ? `Imported: ${parts.join(' · ')}` : 'Nothing new to import — all data already exists.'}
+            </p>
+          )
+        })()}
+
+        {importError && (
+          <p style={{ margin: 0, fontSize: 13, color: '#e57373' }}>{importError}</p>
         )}
       </div>
 

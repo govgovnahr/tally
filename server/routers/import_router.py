@@ -1,6 +1,9 @@
 import csv
 import io
 import json
+import os
+import sqlite3 as _sqlite3
+import tempfile
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -400,3 +403,214 @@ async def import_records(
     conn.close()
 
     return {"imported": imported, "skipped": len(errors), "errors": errors, "savings_expenses": savings_expenses}
+
+
+@router.post("/import/legacy-db")
+async def import_legacy_db(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+):
+    if not (file.filename or "").endswith(".db"):
+        raise HTTPException(status_code=400, detail="File must be a .db SQLite database")
+
+    content = await file.read()
+
+    def _col(row, key, default=None):
+        try:
+            return row[key]
+        except IndexError:
+            return default
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    stats = {}
+    try:
+        old_db = _sqlite3.connect(tmp_path)
+        old_db.row_factory = _sqlite3.Row
+        old_cur = old_db.cursor()
+        conn = get_connection()
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+
+        # macrocategories — dedup by name, track old→new ID for expense_types linking
+        macro_id_map = {}
+        try:
+            old_cur.execute("SELECT * FROM macrocategories")
+            count = 0
+            for row in old_cur.fetchall():
+                new_id = str(uuid.uuid4())
+                cursor.execute(
+                    "INSERT INTO macrocategories (id, name, color, budget_limit, user_id) "
+                    "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
+                    (new_id, row["name"], _col(row, "color", "#a0a0a0"), _col(row, "budget_limit"), user_id),
+                )
+                if cursor.rowcount > 0:
+                    macro_id_map[row["id"]] = new_id
+                    count += 1
+                else:
+                    existing = conn.execute(
+                        "SELECT id FROM macrocategories WHERE name = %s AND user_id = %s", (row["name"], user_id)
+                    ).fetchone()
+                    if existing:
+                        macro_id_map[row["id"]] = existing["id"]
+            stats["macrocategories"] = count
+        except Exception:
+            stats["macrocategories"] = 0
+
+        # expense_types — dedup by name, preserve macrocategory links
+        try:
+            old_cur.execute("SELECT * FROM expense_types")
+            count = 0
+            for row in old_cur.fetchall():
+                old_macro = _col(row, "macrocategory_id")
+                cursor.execute(
+                    "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id, macrocategory_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
+                    (str(uuid.uuid4()), row["name"], row["color"], row["icon"],
+                     _col(row, "sort_order", 0), _col(row, "is_default", 0), user_id,
+                     macro_id_map.get(old_macro) if old_macro else None),
+                )
+                if cursor.rowcount > 0:
+                    count += 1
+            stats["expense_types"] = count
+        except Exception:
+            stats["expense_types"] = 0
+
+        # budgets — DO NOTHING on conflict (don't overwrite cloud budgets)
+        try:
+            old_cur.execute("SELECT * FROM budgets")
+            count = 0
+            for row in old_cur.fetchall():
+                cursor.execute(
+                    "INSERT INTO budgets (user_id, type, monthly_limit) VALUES (%s,%s,%s) "
+                    "ON CONFLICT (user_id, type) DO NOTHING",
+                    (user_id, row["type"], row["monthly_limit"]),
+                )
+                if cursor.rowcount > 0:
+                    count += 1
+            stats["budgets"] = count
+        except Exception:
+            stats["budgets"] = 0
+
+        # monthly_budgets
+        try:
+            old_cur.execute("SELECT * FROM monthly_budgets")
+            count = 0
+            for row in old_cur.fetchall():
+                cursor.execute(
+                    "INSERT INTO monthly_budgets (user_id, type, month, monthly_limit) VALUES (%s,%s,%s,%s) "
+                    "ON CONFLICT (user_id, type, month) DO NOTHING",
+                    (user_id, row["type"], row["month"], row["monthly_limit"]),
+                )
+                if cursor.rowcount > 0:
+                    count += 1
+            stats["monthly_budgets"] = count
+        except Exception:
+            stats["monthly_budgets"] = 0
+
+        # expenses — all get new UUIDs; keep old→new map for contribution linking
+        exp_id_map = {}
+        try:
+            old_cur.execute("SELECT * FROM expenses")
+            count = 0
+            for row in old_cur.fetchall():
+                new_id = str(uuid.uuid4())
+                exp_id_map[row["id"]] = new_id
+                cursor.execute(
+                    "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (new_id, row["name"], row["amount"], row["type"], row["date"],
+                     _col(row, "created_at") or now, _col(row, "is_recurring", 0), user_id),
+                )
+                count += 1
+            stats["expenses"] = count
+        except Exception:
+            stats["expenses"] = 0
+
+        # incomes — all get new UUIDs
+        try:
+            old_cur.execute("SELECT * FROM incomes")
+            count = 0
+            for row in old_cur.fetchall():
+                cursor.execute(
+                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, credit_type, user_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (str(uuid.uuid4()), row["name"], row["amount"], row["date"],
+                     _col(row, "created_at") or now, _col(row, "is_recurring", 0),
+                     _col(row, "credit_type"), user_id),
+                )
+                count += 1
+            stats["incomes"] = count
+        except Exception:
+            stats["incomes"] = 0
+
+        # import_rules — dedup by pattern
+        try:
+            old_cur.execute("SELECT * FROM import_rules")
+            count = 0
+            for row in old_cur.fetchall():
+                cursor.execute(
+                    "INSERT INTO import_rules (id, pattern, expense_type, created_at, user_id) "
+                    "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (user_id, pattern) DO NOTHING",
+                    (str(uuid.uuid4()), row["pattern"], row["expense_type"],
+                     _col(row, "created_at") or now, user_id),
+                )
+                if cursor.rowcount > 0:
+                    count += 1
+            stats["import_rules"] = count
+        except Exception:
+            stats["import_rules"] = 0
+
+        # savings_goals — new UUIDs, track old→new for contributions
+        goal_id_map = {}
+        try:
+            old_cur.execute("SELECT * FROM savings_goals")
+            count = 0
+            for row in old_cur.fetchall():
+                new_id = str(uuid.uuid4())
+                goal_id_map[row["id"]] = new_id
+                cursor.execute(
+                    "INSERT INTO savings_goals "
+                    "(id, goal_type, name, target, deadline, created_at, color, allocation_pct, priority, paused, months_target, user_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (new_id, row["goal_type"], row["name"], row["target"],
+                     _col(row, "deadline"), _col(row, "created_at") or now,
+                     _col(row, "color"), _col(row, "allocation_pct"), _col(row, "priority"),
+                     _col(row, "paused", 0), _col(row, "months_target"), user_id),
+                )
+                count += 1
+            stats["savings_goals"] = count
+        except Exception:
+            stats["savings_goals"] = 0
+
+        # savings_contributions — remap goal_id and expense_id to new UUIDs
+        try:
+            old_cur.execute("SELECT * FROM savings_contributions")
+            count = 0
+            for row in old_cur.fetchall():
+                new_goal_id = goal_id_map.get(row["goal_id"])
+                if not new_goal_id:
+                    continue
+                old_exp_id = _col(row, "expense_id")
+                cursor.execute(
+                    "INSERT INTO savings_contributions (id, goal_id, amount, date, note, created_at, expense_id, user_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (str(uuid.uuid4()), new_goal_id, row["amount"], row["date"],
+                     _col(row, "note"), _col(row, "created_at") or now,
+                     exp_id_map.get(old_exp_id) if old_exp_id else None, user_id),
+                )
+                count += 1
+            stats["savings_contributions"] = count
+        except Exception:
+            stats["savings_contributions"] = 0
+
+        conn.commit()
+        conn.close()
+        old_db.close()
+
+    finally:
+        os.unlink(tmp_path)
+
+    return {"imported": stats}
