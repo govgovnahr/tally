@@ -59,7 +59,7 @@ def get_current_user(authorization: str = Header(default=None)) -> str:
             payload = jwt.decode(
                 token,
                 jwks,
-                algorithms=["RS256"],
+                algorithms=["RS256", "ES256"],
                 options={"verify_aud": False},
             )
     except JWTError as e:
