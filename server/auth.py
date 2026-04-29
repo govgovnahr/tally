@@ -20,7 +20,7 @@ def _get_jwks():
         logger.error("SUPABASE_URL is not set — cannot fetch JWKS for RS256 verification")
         return None
     try:
-        resp = http_requests.get(f"{SUPABASE_URL}/.well-known/jwks.json", timeout=5)
+        resp = http_requests.get(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json", timeout=5)
         resp.raise_for_status()
         _jwks_cache = resp.json()
         logger.info("JWKS fetched and cached from %s", SUPABASE_URL)
