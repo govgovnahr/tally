@@ -13,6 +13,8 @@ services:
         generateValue: true
       - key: SUPABASE_JWT_SECRET
         sync: false
+      - key: SUPABASE_URL
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: SECURE_COOKIES

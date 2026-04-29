@@ -5,6 +5,7 @@ openpyxl
 pyinstaller
 python-multipart
 python-jose[cryptography]
+requests
 slowapi
 psycopg2-binary
 python-dotenv
