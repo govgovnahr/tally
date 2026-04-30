@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle } from 'lucide-react'
 import { TallyLogo } from './components/TallyLogo.jsx'
 import api from './api.js'
@@ -7,12 +7,13 @@ import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx
 import { ColorsProvider, useC } from './colors'
 import ExpenseList from './components/ExpenseList.jsx'
 import BudgetSetup from './components/BudgetSetup.jsx'
-import BudgetGoals from './components/BudgetGoals.jsx'
-import SavingsPage from './components/SavingsPage.jsx'
-import AnalysisPage from './components/AnalysisPage.jsx'
 import DashboardPage from './components/DashboardPage.jsx'
 import AuthPage from './components/AuthPage.jsx'
-import AccountPage from './components/AccountPage.jsx'
+
+const BudgetGoals  = lazy(() => import('./components/BudgetGoals.jsx'))
+const SavingsPage  = lazy(() => import('./components/SavingsPage.jsx'))
+const AnalysisPage = lazy(() => import('./components/AnalysisPage.jsx'))
+const AccountPage  = lazy(() => import('./components/AccountPage.jsx'))
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -212,11 +213,14 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             onNavigate={handleNavigate}
           />
         )}
-        {page === 'analysis' && (
-          <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} onShowInExpenses={handleShowInExpenses} />
-        )}
-        {page === 'savings' && <SavingsPage />}
-        {page === 'budgets' && <BudgetGoals onSaved={refresh} />}
+        <Suspense fallback={null}>
+          {page === 'analysis' && (
+            <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} onShowInExpenses={handleShowInExpenses} />
+          )}
+          {page === 'savings' && <SavingsPage />}
+          {page === 'budgets' && <BudgetGoals onSaved={refresh} />}
+          {page === 'account' && <AccountPage user={user} onLogout={onLogout} />}
+        </Suspense>
         {page === 'all-expenses' && (
           <ExpenseList
             refreshKey={refreshKey}
@@ -227,7 +231,6 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             onInitialTypeConsumed={() => { setInitialExpenseType(null); setInitialExpenseId(null); setInitialExpenseMonth(null) }}
           />
         )}
-        {page === 'account' && <AccountPage user={user} onLogout={onLogout} />}
       </main>
     </div>
   )
