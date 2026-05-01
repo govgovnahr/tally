@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import api from '../api.js'
+import { qk } from '../queryKeys.js'
 import { useC } from '../colors'
 
 const PAST_MONTHS = 6
@@ -74,16 +76,24 @@ function CustomTooltip({ active, payload, monthlyTarget }) {
   )
 }
 
-export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] }) {
+export default function NetSavingsChart({ monthlyTarget, goals = [] }) {
   const C = useC()
   const NET_POS_COLOR = C.onTrack
   const NET_NEG_COLOR = C.overBudget
   const GOAL_COLOR = C.income
   const TICK = { fill: C.muted, fontSize: 12 }
   const AXIS_LINE = { stroke: C.border }
-  const [historicalData, setHistoricalData] = useState([])
   const [hiddenGoalIds, setHiddenGoalIds] = useState(new Set())
   const cur = currentMonth()
+
+  const { data: rawHistorical = [] } = useQuery({
+    queryKey: qk.savingsGoalsNetChart(PAST_MONTHS),
+    queryFn: () => api.get('/savings-goals/net-chart', { params: { months: PAST_MONTHS } }).then(r => r.data),
+    staleTime: 2 * 60_000,
+  })
+  const historicalData = rawHistorical.map(d => ({
+    ...d, label: shortLabel(d.month), fullLabel: fullLabel(d.month), isFuture: false,
+  }))
 
   function toggleGoal(id) {
     setHiddenGoalIds(prev => {
@@ -103,16 +113,6 @@ export default function NetSavingsChart({ refreshKey, monthlyTarget, goals = [] 
     return (gy - cy) * 12 + (gm - cm)
   }), 0))
 
-  useEffect(() => {
-    api.get('/savings-goals/net-chart', { params: { months: PAST_MONTHS } }).then(res => {
-      setHistoricalData(res.data.map(d => ({
-        ...d,
-        label: shortLabel(d.month),
-        fullLabel: fullLabel(d.month),
-        isFuture: false,
-      })))
-    })
-  }, [refreshKey])
 
   const futureData = Array.from({ length: FUTURE_MONTHS }, (_, i) => {
     const m = addMonthsStr(cur, i + 1)

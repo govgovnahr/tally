@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Plus, Pencil, Trash2, Upload, BarChart2 } from 'lucide-react'
 import CategoryAnalysisDialog from './CategoryAnalysisDialog.jsx'
 import {
@@ -686,12 +687,12 @@ function MacrocategoryManager() {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export default function BudgetGoals({ onSaved }) {
+export default function BudgetGoals() {
   const C = useC()
+  const queryClient = useQueryClient()
   const { expenseTypes, reloadTypes, macrocategories } = useExpenseTypes()
   const [limits, setLimits] = useState({})
   const [currentOverrides, setCurrentOverrides] = useState({})
-  const [overrideRefresh, setOverrideRefresh] = useState(0)
   const [loadingBudgets, setLoadingBudgets] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -719,7 +720,7 @@ export default function BudgetGoals({ onSaved }) {
     api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
       .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))
       .catch(() => {})
-  }, [overrideRefresh, expenseTypes])
+  }, [expenseTypes])
 
   function handleLimitChange(typeName, value) {
     setLimits(prev => ({ ...prev, [typeName]: value })); setSaved(false); setSaveError('')
@@ -732,13 +733,28 @@ export default function BudgetGoals({ onSaved }) {
       .map(t => ({ type: t.name, monthly_limit: parseFloat(limits[t.name]) }))
     if (budgets.length === 0) return setSaveError('Enter at least one budget limit.')
     setSaving(true)
-    try { await api.post('/budgets', budgets); setSaved(true); onSaved() }
+    try {
+      await api.post('/budgets', budgets)
+      setSaved(true)
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
+      queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    }
     catch { setSaveError('Failed to save. Please try again.') }
     finally { setSaving(false) }
   }
 
-  async function handleTypeSaved() { await reloadTypes(); onSaved() }
-  async function handleTypeDeleted() { await reloadTypes(); onSaved() }
+  async function handleTypeSaved() {
+    await reloadTypes()
+    queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    queryClient.invalidateQueries({ queryKey: ['expenses'] })
+    queryClient.invalidateQueries({ queryKey: ['analysis'] })
+  }
+  async function handleTypeDeleted() {
+    await reloadTypes()
+    queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    queryClient.invalidateQueries({ queryKey: ['expenses'] })
+    queryClient.invalidateQueries({ queryKey: ['analysis'] })
+  }
 
   function renderRow(t) {
     const IconComp = ICON_REGISTRY[t.icon]
@@ -928,13 +944,26 @@ export default function BudgetGoals({ onSaved }) {
         )}
       </div>
 
-      <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} onChanged={() => setOverrideRefresh(s => s + 1)} />
+      <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} onChanged={() => {
+        setCurrentOverrides({})
+        api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
+          .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))
+          .catch(() => {})
+        queryClient.invalidateQueries({ queryKey: ['budgets'] })
+        queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      }} />
       <MacrocategoryManager />
 
       {importOpen && (
         <ImportBudgetsDialog
           onClose={() => setImportOpen(false)}
-          onImported={async () => { setImportOpen(false); await reloadTypes(); onSaved() }}
+          onImported={async () => {
+            setImportOpen(false)
+            await reloadTypes()
+            queryClient.invalidateQueries({ queryKey: ['budgets'] })
+            queryClient.invalidateQueries({ queryKey: ['expenses'] })
+            queryClient.invalidateQueries({ queryKey: ['analysis'] })
+          }}
         />
       )}
       {formOpen && (

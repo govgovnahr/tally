@@ -50,7 +50,7 @@ def get_macrocategory_summary(month: Optional[str] = Query(None), user_id: str =
             FROM expenses e
             JOIN expense_types et ON e.type = et.name
             WHERE e.user_id = %s AND et.user_id = %s AND et.macrocategory_id IS NOT NULL
-              AND to_char(e.date::date, 'YYYY-MM') = %s
+              AND LEFT(e.date, 7) = %s
             GROUP BY et.macrocategory_id
         """, (user_id, user_id, month)).fetchall()
     else:

@@ -38,7 +38,7 @@ def get_expenses(
         conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = %s AND user_id = %s)")
         params.extend([macrocategory_id, user_id])
     if month:
-        conditions.append("to_char(date::date, 'YYYY-MM') = %s")
+        conditions.append("LEFT(date, 7) = %s")
         params.append(month)
     if search:
         conditions.append("name LIKE %s")
@@ -97,7 +97,7 @@ def get_months(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT DISTINCT to_char(date::date, 'YYYY-MM') as month FROM expenses WHERE user_id = %s ORDER BY month",
+        "SELECT DISTINCT LEFT(date, 7) as month FROM expenses WHERE user_id = %s ORDER BY month",
         (user_id,),
     )
     months = [row["month"] for row in cursor.fetchall()]
@@ -111,7 +111,7 @@ def get_summary(month: Optional[str] = None, user_id: str = Depends(get_current_
     cursor = conn.cursor()
     if month:
         cursor.execute(
-            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') = %s GROUP BY type ORDER BY total DESC",
+            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = %s AND LEFT(date, 7) = %s GROUP BY type ORDER BY total DESC",
             (user_id, month),
         )
     else:
@@ -129,7 +129,7 @@ def get_monthly_totals(months: int = 6, user_id: str = Depends(get_current_user)
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, SUM(amount) as total "
+        f"SELECT LEFT(date, 7) as month, SUM(amount) as total "
         f"FROM expenses WHERE user_id = %s "
         f"AND date >= to_char(date_trunc('month', CURRENT_DATE - INTERVAL '{months - 1} months'), 'YYYY-MM-DD') "
         f"GROUP BY month ORDER BY month ASC",
@@ -145,7 +145,7 @@ def get_monthly_by_type(months: int = 6, user_id: str = Depends(get_current_user
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, type, SUM(amount) as total "
+        f"SELECT LEFT(date, 7) as month, type, SUM(amount) as total "
         f"FROM expenses WHERE user_id = %s "
         f"AND date >= to_char(date_trunc('month', CURRENT_DATE - INTERVAL '{months - 1} months'), 'YYYY-MM-DD') "
         f"GROUP BY month, type ORDER BY month ASC",
@@ -192,8 +192,8 @@ def clear_transactions(month: Optional[str] = Query(None), user_id: str = Depend
     conn = get_connection()
     cursor = conn.cursor()
     if month:
-        cursor.execute("DELETE FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') = %s", (user_id, month))
-        cursor.execute("DELETE FROM incomes WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') = %s", (user_id, month))
+        cursor.execute("DELETE FROM expenses WHERE user_id = %s AND LEFT(date, 7) = %s", (user_id, month))
+        cursor.execute("DELETE FROM incomes WHERE user_id = %s AND LEFT(date, 7) = %s", (user_id, month))
     else:
         cursor.execute("DELETE FROM expenses WHERE user_id = %s", (user_id,))
         cursor.execute("DELETE FROM incomes WHERE user_id = %s", (user_id,))

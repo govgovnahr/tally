@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, PiggyBank, Pause, Play, Receipt, CheckCircle, ChevronDown } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -6,12 +7,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import api from '../api.js'
+import { qk } from '../queryKeys.js'
 import NetSavingsChart from './NetSavingsChart.jsx'
 import { useC, palette, TYPE_PALETTE } from '../colors'
 import { Card } from 'glasscn-ui'
 
 const ONE_TIME_COLORS = TYPE_PALETTE.slice(0, 6)
-const GOAL_COLORS = [...TYPE_PALETTE.slice(0, 5), palette.teal, palette.green, palette.grey, '#f4a261', '#9b72cf']
+const GOAL_COLORS = [...TYPE_PALETTE.slice(0, 5), '#A0722A', '#8B3A2A', palette.grey, '#f4a261', '#9b72cf']
 
 function fmtMonth(ym) {
   if (!ym) return ''
@@ -283,13 +285,20 @@ function CompletedGoalCard({ goal, color, onDelete }) {
 
 // ─── Contribution Dialog ──────────────────────────────────────────────────────
 
-function ContributionDialog({ open, onClose, goal, onRefresh }) {
+function ContributionDialog({ open, onClose, goal }) {
   const C = useC()
+  const queryClient = useQueryClient()
   const [amount, setAmount] = useState('')
   const [contribDate, setContribDate] = useState(new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  function invalidateSavings() {
+    queryClient.invalidateQueries({ queryKey: ['savings-goals'] })
+    queryClient.invalidateQueries({ queryKey: ['expenses'] })
+    queryClient.invalidateQueries({ queryKey: ['analysis'] })
+  }
 
   async function handleAdd() {
     const a = parseFloat(amount)
@@ -297,13 +306,13 @@ function ContributionDialog({ open, onClose, goal, onRefresh }) {
     setSaving(true); setError('')
     try {
       await api.post(`/savings-goals/${goal.id}/contributions`, { amount: a, date: contribDate, note: note.trim() || null })
-      setAmount(''); setNote(''); onRefresh()
+      setAmount(''); setNote(''); invalidateSavings()
     } catch (err) { setError(err.response?.data?.detail ?? 'Something went wrong') }
     finally { setSaving(false) }
   }
 
   async function handleDelete(contribId) {
-    try { await api.delete(`/savings-goals/${goal.id}/contributions/${contribId}`); onRefresh() } catch { /* ignore */ }
+    try { await api.delete(`/savings-goals/${goal.id}/contributions/${contribId}`); invalidateSavings() } catch { /* ignore */ }
   }
 
   const contributions = goal?.contributions ?? []
@@ -552,21 +561,31 @@ function DeleteConfirmDialog({ open, onClose, onConfirm, goalName }) {
 
 export default function SavingsPage() {
   const C = useC()
-  const [goals, setGoals] = useState([])
-  const [monthlyTarget, setMonthlyTarget] = useState(null)
-  const [refreshKey, setRefreshKey] = useState(0)
+  const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
   const [deletingGoal, setDeletingGoal] = useState(null)
   const [contributingToGoalId, setContributingToGoalId] = useState(null)
   const [completedOpen, setCompletedOpen] = useState(false)
 
-  useEffect(() => {
-    api.get('/savings-goals').then(res => setGoals(res.data))
-    api.get('/savings-goals/monthly-goal').then(res => setMonthlyTarget(res.data.target))
-  }, [refreshKey])
+  const { data: goals = [] } = useQuery({
+    queryKey: qk.savingsGoals(),
+    queryFn: () => api.get('/savings-goals').then(r => r.data),
+    staleTime: 2 * 60_000,
+  })
 
-  function refresh() { setRefreshKey(k => k + 1) }
+  const { data: monthlyGoalData } = useQuery({
+    queryKey: qk.savingsGoalsMonthlyGoal(),
+    queryFn: () => api.get('/savings-goals/monthly-goal').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const monthlyTarget = monthlyGoalData?.target ?? null
+
+  function invalidateSavings() {
+    queryClient.invalidateQueries({ queryKey: ['savings-goals'] })
+    queryClient.invalidateQueries({ queryKey: ['expenses'] })
+    queryClient.invalidateQueries({ queryKey: ['analysis'] })
+  }
 
   const monthlyGoal = goals.find(g => g.goal_type === 'monthly') ?? null
   const oneTimeGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && !g.completed)
@@ -577,11 +596,11 @@ export default function SavingsPage() {
   async function handleDelete() {
     if (!deletingGoal) return
     await api.delete(`/savings-goals/${deletingGoal.id}`)
-    setDeletingGoal(null); refresh()
+    setDeletingGoal(null); invalidateSavings()
   }
 
   async function handlePause(goalId) {
-    await api.patch(`/savings-goals/${goalId}/pause`); refresh()
+    await api.patch(`/savings-goals/${goalId}/pause`); invalidateSavings()
   }
 
   return (
@@ -596,7 +615,7 @@ export default function SavingsPage() {
         </Button>
       </div>
 
-      <NetSavingsChart refreshKey={refreshKey} monthlyTarget={monthlyTarget} goals={goals} />
+      <NetSavingsChart monthlyTarget={monthlyTarget} goals={goals} />
 
       {monthlyGoal && (
         <MonthlyGoalCard
@@ -613,15 +632,15 @@ export default function SavingsPage() {
           {oneTimeGoals.map((goal, i) => {
             const color = goal.color ?? ONE_TIME_COLORS[i % ONE_TIME_COLORS.length]
             const commonProps = {
-              key: goal.id, goal, color,
+              goal, color,
               onEdit: () => { setEditingGoal(goal); setDialogOpen(true) },
               onDelete: () => setDeletingGoal(goal),
               onPause: () => handlePause(goal.id),
               onContribute: () => setContributingToGoalId(goal.id),
             }
             return goal.goal_type === 'emergency_fund'
-              ? <EmergencyFundGoalCard {...commonProps} />
-              : <OneTimeGoalCard {...commonProps} />
+              ? <EmergencyFundGoalCard key={goal.id} {...commonProps} />
+              : <OneTimeGoalCard key={goal.id} {...commonProps} />
           })}
         </div>
       )}
@@ -660,12 +679,12 @@ export default function SavingsPage() {
       <GoalDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        onSaved={() => { setDialogOpen(false); refresh() }}
+        onSaved={() => { setDialogOpen(false); invalidateSavings() }}
         existing={editingGoal}
         hasMonthlyGoal={hasMonthlyGoal && !editingGoal}
       />
       <DeleteConfirmDialog open={!!deletingGoal} onClose={() => setDeletingGoal(null)} onConfirm={handleDelete} goalName={deletingGoal?.name ?? ''} />
-      <ContributionDialog open={!!contributingToGoalId} onClose={() => setContributingToGoalId(null)} goal={activeContribGoal} onRefresh={refresh} />
+      <ContributionDialog open={!!contributingToGoalId} onClose={() => setContributingToGoalId(null)} goal={activeContribGoal} />
     </div>
   )
 }

@@ -1,6 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import api from '../api.js'
+import { qk } from '../queryKeys.js'
 import { useC } from '../colors'
 
 function currentMonth() {
@@ -18,19 +20,18 @@ function shortMonth(m) {
   return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'short' })
 }
 
-export default function MonthSelector({ selectedMonth, onMonthChange, refreshKey, big }) {
+export default function MonthSelector({ selectedMonth, onMonthChange, big }) {
   const C = useC()
-  const [availableMonths, setAvailableMonths] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
   const dropdownRef = useRef(null)
   const cur = currentMonth()
 
-  useEffect(() => {
-    api.get('/expenses/months').then(res => {
-      const months = res.data.includes(cur) ? res.data : [...res.data, cur].sort()
-      setAvailableMonths(months)
-    })
-  }, [refreshKey])
+  const { data: rawMonths = [] } = useQuery({
+    queryKey: qk.expensesMonths(),
+    queryFn: () => api.get('/expenses/months').then(r => r.data),
+    staleTime: 10 * 60_000,
+  })
+  const availableMonths = rawMonths.includes(cur) ? rawMonths : [...rawMonths, cur].sort()
 
   useEffect(() => {
     if (!menuOpen) return

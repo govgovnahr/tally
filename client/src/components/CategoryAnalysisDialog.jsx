@@ -1,23 +1,23 @@
-import { useEffect, useState } from 'react'
 import { TrendingUp, TrendingDown, Minus, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import api from '../api.js'
+import { qk } from '../queryKeys.js'
 import { useC } from '../colors'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 
 export default function CategoryAnalysisDialog({ typeName, typeColor, typeIcon, onClose }) {
   const C = useC()
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    api.get('/analysis/category-stats', { params: { months: 6 } })
-      .then(r => setData(r.data.find(d => d.type === typeName) ?? null))
-      .finally(() => setLoading(false))
-  }, [typeName])
+  const { data: allStats, isLoading: loading } = useQuery({
+    queryKey: qk.analysisCategoryStats(6, false),
+    queryFn: () => api.get('/analysis/category-stats', { params: { months: 6 } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
+  const data = allStats?.find(d => d.type === typeName) ?? null
 
   const IconComp = typeIcon ? ICON_REGISTRY[typeIcon] : null
   const catColor = C.adaptColor(typeColor ?? C.primary)

@@ -1,8 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import { startTransition } from 'react'
 import { Plus, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import api from '../api.js'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
@@ -63,15 +62,9 @@ function TwoToneBar({ pct, solidColor, ghostStart, ghostWidth, trackColor }) {
   )
 }
 
-export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTypeChange, activeMacro, onMacroChange, hideHeader = false, defaultCollapsed = false }) {
+export default function SummaryBar({ summary = [], budgets = {}, totalIncome = 0, macroSummary = [], pacingCats = [], isCurrentMonth = true, activeType, onTypeChange, activeMacro, onMacroChange, hideHeader = false, defaultCollapsed = false }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
-  const [summary, setSummary] = useState([])
-  const [budgets, setBudgets] = useState({})
-  const [totalIncome, setTotalIncome] = useState(0)
-  const [macroSummary, setMacroSummary] = useState([])
-  const [pacing, setPacing] = useState({})
-  const [isCurrentMonth, setIsCurrentMonth] = useState(true)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [editingIncome, setEditingIncome] = useState(null)
   const [showAllCards, setShowAllCards] = useState(false)
@@ -79,26 +72,7 @@ export default function SummaryBar({ refreshKey, selectedMonth, activeType, onTy
   const [cardHovered, setCardHovered] = useState(false)
   const [headerHovered, setHeaderHovered] = useState(false)
 
-  const fetchData = useCallback(() => {
-    Promise.all([
-      api.get('/expenses/summary', { params: { month: selectedMonth } }),
-      api.get('/budgets/effective', { params: { month: selectedMonth } }),
-      api.get('/incomes/summary', { params: { month: selectedMonth } }),
-      api.get('/macrocategories/summary', { params: { month: selectedMonth } }),
-      api.get('/analysis/pacing', { params: { month: selectedMonth, lookback_months: 3 } }),
-    ]).then(([summaryRes, budgetsRes, incomeRes, macroRes, pacingRes]) => {
-      setSummary(summaryRes.data)
-      const budgetMap = {}
-      budgetsRes.data.forEach(b => { budgetMap[b.type] = b.monthly_limit })
-      setBudgets(budgetMap)
-      setTotalIncome(incomeRes.data.total)
-      setMacroSummary(macroRes.data)
-      setPacing(Object.fromEntries((pacingRes.data.categories ?? []).map(c => [c.type, c])))
-      setIsCurrentMonth(pacingRes.data.is_current_month ?? true)
-    })
-  }, [selectedMonth])
-
-  useEffect(() => { fetchData() }, [fetchData, refreshKey])
+  const pacing = Object.fromEntries(pacingCats.map(c => [c.type, c]))
 
   const totalSpent = summary.reduce((sum, s) => sum + s.total, 0)
   const totalBudget = Object.values(budgets).reduce((sum, v) => sum + v, 0)

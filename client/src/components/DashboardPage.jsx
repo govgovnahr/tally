@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, startTransition } from 'react'
+import { useState, startTransition } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import api from '../api.js'
+import { qk } from '../queryKeys.js'
 import { useC } from '../colors'
 import { Card } from 'glasscn-ui'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
@@ -42,41 +44,58 @@ function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, prog
   )
 }
 
-export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey, onRefresh, onNavigate }) {
+export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
-  const [summary, setSummary] = useState([])
-  const [budgets, setBudgets] = useState({})
-  const [totalIncome, setTotalIncome] = useState(0)
-  const [outliers, setOutliers] = useState([])
-  const [goals, setGoals] = useState([])
-  const [pacingCats, setPacingCats] = useState([])
-  const [isCurrentMonth, setIsCurrentMonth] = useState(true)
   const [activeType, setActiveType] = useState('All')
   const [activeMacro, setActiveMacro] = useState(null)
 
-  const fetchData = useCallback(() => {
-    Promise.all([
-      api.get('/expenses/summary', { params: { month: selectedMonth } }),
-      api.get('/budgets/effective', { params: { month: selectedMonth } }),
-      api.get('/incomes/summary', { params: { month: selectedMonth } }),
-      api.get('/analysis/outliers', { params: { months: 12 } }),
-      api.get('/savings-goals'),
-      api.get('/analysis/pacing', { params: { month: selectedMonth, lookback_months: 3 } }),
-    ]).then(([summaryRes, budgetsRes, incomeRes, outliersRes, goalsRes, pacingRes]) => {
-      setSummary(summaryRes.data)
-      const budgetMap = {}
-      budgetsRes.data.forEach(b => { budgetMap[b.type] = b.monthly_limit })
-      setBudgets(budgetMap)
-      setTotalIncome(incomeRes.data.total)
-      setOutliers(outliersRes.data.filter(e => e.date.startsWith(selectedMonth)))
-      setGoals(goalsRes.data)
-      setPacingCats(pacingRes.data.categories ?? [])
-      setIsCurrentMonth(pacingRes.data.is_current_month ?? false)
-    })
-  }, [selectedMonth])
+  const { data: outliersData = [] } = useQuery({
+    queryKey: qk.analysisOutliers(12),
+    queryFn: () => api.get('/analysis/outliers', { params: { months: 12 } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
+  const outliers = outliersData.filter(e => e.date.startsWith(selectedMonth))
 
-  useEffect(() => { fetchData() }, [fetchData, refreshKey])
+  const { data: goals = [] } = useQuery({
+    queryKey: qk.savingsGoals(),
+    queryFn: () => api.get('/savings-goals').then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
+
+  const { data: summary = [] } = useQuery({
+    queryKey: qk.expensesSummary(selectedMonth),
+    queryFn: () => api.get('/expenses/summary', { params: { month: selectedMonth } }).then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const { data: budgetsEffective = [] } = useQuery({
+    queryKey: qk.budgetsEffective(selectedMonth),
+    queryFn: () => api.get('/budgets/effective', { params: { month: selectedMonth } }).then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const budgets = Object.fromEntries(budgetsEffective.map(b => [b.type, b.monthly_limit]))
+
+  const { data: incomeSummary } = useQuery({
+    queryKey: qk.incomesSummary(selectedMonth),
+    queryFn: () => api.get('/incomes/summary', { params: { month: selectedMonth } }).then(r => r.data),
+    staleTime: 60_000,
+  })
+  const totalIncome = incomeSummary?.total ?? 0
+
+  const { data: pacingData } = useQuery({
+    queryKey: qk.analysisPacing(selectedMonth, 3),
+    queryFn: () => api.get('/analysis/pacing', { params: { month: selectedMonth, lookback_months: 3 } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
+  const pacingCats = pacingData?.categories ?? []
+  const isCurrentMonth = pacingData?.is_current_month ?? true
+
+  const { data: macroSummary = [] } = useQuery({
+    queryKey: qk.macrocategoriesSummary(selectedMonth),
+    queryFn: () => api.get('/macrocategories/summary', { params: { month: selectedMonth } }).then(r => r.data),
+    staleTime: 60_000,
+  })
 
   const totalSpent = summary.reduce((s, x) => s + x.total, 0)
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0)
@@ -135,7 +154,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
 
   return (
     <div>
-      <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} refreshKey={refreshKey} big={true} />
+      <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} big={true} />
 
       {outliers.length > 0 && (
         <OutlierAlert
@@ -263,8 +282,12 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
 
       {/* Category detail — collapsed by default */}
       <SummaryBar
-        refreshKey={refreshKey}
-        selectedMonth={selectedMonth}
+        summary={summary}
+        budgets={budgets}
+        totalIncome={totalIncome}
+        macroSummary={macroSummary}
+        pacingCats={pacingCats}
+        isCurrentMonth={isCurrentMonth}
         activeType={activeType}
         onTypeChange={handleTypeChange}
         activeMacro={activeMacro}
@@ -275,7 +298,6 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
 
       {/* Monthly Trends */}
       <MonthlyTrendsChart
-        refreshKey={refreshKey}
         selectedMonth={selectedMonth}
         activeType={activeType}
         onTypeChange={handleTypeChange}
@@ -285,8 +307,6 @@ export default function DashboardPage({ selectedMonth, onMonthChange, refreshKey
 
       {/* Expense List for current month */}
       <ExpenseList
-        refreshKey={refreshKey}
-        onRefresh={onRefresh}
         month={selectedMonth}
         activeType={activeType}
         onTypeChange={handleTypeChange}

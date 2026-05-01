@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { startTransition } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { qk } from '../queryKeys.js'
 import { TrendingUp, TrendingDown, Minus, TriangleAlert, ArrowUp, ArrowDown, X } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -115,14 +117,13 @@ function PacingSection({ month, onMonthChange, maxMonths = 12 }) {
   const STATUS_COLORS = useStatusColors()
   const { typeMap } = useExpenseTypes()
   const [lookbackMonths, setLookbackMonths] = useState(3)
-  const [data, setData] = useState(null)
   const [showAllPacing, setShowAllPacing] = useState(false)
 
-  useEffect(() => {
-    setData(null)
-    api.get('/analysis/pacing', { params: { month, lookback_months: lookbackMonths } })
-      .then(r => setData(r.data))
-  }, [month, lookbackMonths])
+  const { data } = useQuery({
+    queryKey: qk.analysisPacing(month, lookbackMonths),
+    queryFn: () => api.get('/analysis/pacing', { params: { month, lookback_months: lookbackMonths } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
 
   const isFuture = data && data.days_elapsed === 0 && !data.is_current_month
   const isPast = data && !data.is_current_month && !isFuture
@@ -153,7 +154,7 @@ function PacingSection({ month, onMonthChange, maxMonths = 12 }) {
         </div>
       </div>
 
-      <MonthSelector selectedMonth={month} onMonthChange={onMonthChange} refreshKey={0} big={false} />
+      <MonthSelector selectedMonth={month} onMonthChange={onMonthChange} big={false} />
 
       {isFuture ? (
         <p className="text-sm py-4" style={{ color: C.muted }}>Select a past or current month to see pacing.</p>
@@ -238,8 +239,8 @@ function PacingSection({ month, onMonthChange, maxMonths = 12 }) {
 function BudgetPerformanceSection({ months }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
-  const [data, setData] = useState([])
   const [showAllOffenders, setShowAllOffenders] = useState(false)
+  const [analysisCategory, setAnalysisCategory] = useState(null)
 
   const TREND_ICON = {
     up:   <TrendingUp size={16} style={{ color: C.trendUp }} />,
@@ -247,12 +248,11 @@ function BudgetPerformanceSection({ months }) {
     flat: <Minus size={16} style={{ color: C.dimText }} />,
   }
 
-  const [analysisCategory, setAnalysisCategory] = useState(null)
-
-  useEffect(() => {
-    setShowAllOffenders(false)
-    api.get('/analysis/category-stats', { params: { months } }).then(r => setData(r.data))
-  }, [months])
+  const { data = [] } = useQuery({
+    queryKey: qk.analysisCategoryStats(months, false),
+    queryFn: () => api.get('/analysis/category-stats', { params: { months } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
 
   const chartData = [...data]
     .sort((a, b) => b.avg_monthly - a.avg_monthly)
@@ -348,7 +348,18 @@ function BudgetPerformanceSection({ months }) {
 function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, onClose }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
-  const [recent, setRecent] = useState(null)
+
+  const { data: recentData } = useQuery({
+    queryKey: ['expenses', 'outlier-context', expense.id, expense.type],
+    queryFn: () => api.get('/expenses', { params: { type: expense.type, sort_by: 'date', sort_dir: 'desc', page_size: 100 } })
+      .then(r => {
+        const all = r.data.expenses ?? []
+        const idx = all.findIndex(e => e.id === expense.id)
+        return idx === -1 ? all.slice(0, 5) : all.slice(Math.max(0, idx - 2), idx + 3)
+      }),
+    staleTime: 5 * 60_000,
+  })
+  const recent = recentData ?? null
 
   const typeEntry = typeMap[expense.type] || { color: C.dimText }
   const catColor = C.adaptColor(typeEntry.color)
@@ -357,18 +368,6 @@ function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, 
   const max = Math.max(expense.amount, expense.category_avg)
   const thisWidth = max > 0 ? Math.min(100, (expense.amount / max) * 100) : 0
   const avgWidth = max > 0 ? Math.min(100, (expense.category_avg / max) * 100) : 0
-
-  useEffect(() => {
-    api.get('/expenses', { params: { type: expense.type, sort_by: 'date', sort_dir: 'desc', page_size: 100 } })
-      .then(r => {
-        const all = r.data.expenses ?? []
-        const idx = all.findIndex(e => e.id === expense.id)
-        if (idx === -1) { setRecent(all.slice(0, 5)); return }
-        // all is desc; idx-2..idx+3 gives 2 newer + outlier + 2 older in desc order
-        setRecent(all.slice(Math.max(0, idx - 2), idx + 3))
-      })
-      .catch(() => setRecent([]))
-  }, [expense.id])
 
   return (
     <div>
@@ -487,8 +486,6 @@ function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, 
 function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInExpenses }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
-  const [data, setData] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showAllOutliers, setShowAllOutliers] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [filterMonth, setFilterMonth] = useState(defaultMonth ?? '')
@@ -523,20 +520,15 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
 
   const fetchMonths = defaultMonth ? Math.max(months, monthsFromNow(defaultMonth)) : months
 
-  const fetchOutliers = () => {
-    setLoading(true)
-    api.get('/analysis/outliers', { params: { months: fetchMonths } })
-      .then(r => setData(r.data))
-      .finally(() => setLoading(false))
-  }
+  const { data, isFetching: loading } = useQuery({
+    queryKey: qk.analysisOutliers(fetchMonths),
+    queryFn: () => api.get('/analysis/outliers', { params: { months: fetchMonths } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
 
-  useEffect(() => {
-    setShowAllOutliers(false)
-    fetchOutliers()
-  }, [fetchMonths])
-
-  const availableMonths = [...new Set(data.map(e => e.date.slice(0, 7)))].sort().reverse()
-  const filtered = (filterMonth ? data.filter(e => e.date.startsWith(filterMonth)) : data)
+  const allData = data ?? []
+  const availableMonths = [...new Set(allData.map(e => e.date.slice(0, 7)))].sort().reverse()
+  const filtered = (filterMonth ? allData.filter(e => e.date.startsWith(filterMonth)) : allData)
     .filter(e => !dismissedIds.has(e.id))
   const sorted = [...filtered].sort((a, b) => {
     let cmp = 0
@@ -546,7 +538,7 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
     return sortDir === 'desc' ? -cmp : cmp
   })
 
-  if (!loading && data.length === 0) return null
+  if (!loading && allData.length === 0) return null
 
   return (
     <>
@@ -576,7 +568,7 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
           Individual expenses significantly above their category average. Click to explore.
         </p>
 
-        {data.length > 0 && (
+        {allData.length > 0 && (
           <div className="flex gap-3 mb-4 flex-wrap">
             {availableMonths.length > 1 && (
               <select
@@ -627,7 +619,7 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
           <p className="text-sm" style={{ color: C.muted }}>Loading…</p>
         ) : sorted.length === 0 ? (
           <p className="text-sm" style={{ color: C.muted }}>
-            {data.length === 0
+            {allData.length === 0
               ? 'No unusual expenses detected in the selected period. Need at least 3 expenses per category to compute.'
               : `No unusual expenses in ${fmtMonth(filterMonth)}.`}
           </p>
@@ -698,7 +690,7 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
         <AddExpenseForm
           expense={editingExpense}
           onClose={() => setEditingExpense(null)}
-          onAdded={() => { setEditingExpense(null); fetchOutliers() }}
+          onAdded={() => setEditingExpense(null)}
         />
       )}
     </>
@@ -709,11 +701,12 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
 
 function MonthOverMonthSection({ months }) {
   const C = useC()
-  const [data, setData] = useState([])
 
-  useEffect(() => {
-    api.get('/analysis/month-over-month', { params: { months } }).then(r => setData(r.data))
-  }, [months])
+  const { data = [] } = useQuery({
+    queryKey: qk.analysisMonthOverMonth(months),
+    queryFn: () => api.get('/analysis/month-over-month', { params: { months } }).then(r => r.data),
+    staleTime: 3 * 60_000,
+  })
 
   const chartData = data.map(d => ({ ...d, label: shortMonth(d.month) }))
   const avgSpent = data.length > 0 ? data.reduce((s, d) => s + d.total_spent, 0) / data.length : 0
@@ -755,7 +748,7 @@ function MonthOverMonthSection({ months }) {
             <Legend wrapperStyle={{ fontSize: 12, color: C.dimText }} />
             <Bar dataKey="total_spent" name="Spent" fill={C.netPositive} radius={[3, 3, 0, 0]}>
               {chartData.map(entry => (
-                <Cell key={entry.id} fill={entry.net > 0 ? C.netPositive : C.netNegative} />
+                <Cell key={entry.month} fill={entry.net > 0 ? C.netPositive : C.netNegative} />
               ))}
             </Bar>
             <Line type="monotone" dataKey="total_income" name="Income" stroke={C.income} strokeWidth={2} dot={{ r: 3, fill: C.income }} />
@@ -784,11 +777,12 @@ export default function AnalysisPage({ outlierMonth, onClearOutlierMonth, onShow
   useEffect(() => {
     localStorage.setItem('budget_history_months', String(historyMonths))
   }, [historyMonths])
-  const [maxMonths, setMaxMonths] = useState(12)
-
-  useEffect(() => {
-    api.get('/analysis/months-available').then(r => setMaxMonths(Math.max(r.data.months, 2)))
-  }, [])
+  const { data: monthsAvail } = useQuery({
+    queryKey: qk.analysisMonthsAvailable(),
+    queryFn: () => api.get('/analysis/months-available').then(r => r.data),
+    staleTime: 10 * 60_000,
+  })
+  const maxMonths = Math.max(monthsAvail?.months ?? 12, 2)
 
   return (
     <div>

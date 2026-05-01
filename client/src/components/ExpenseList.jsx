@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { startTransition } from 'react'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { qk } from '../queryKeys.js'
 import { Plus, Trash2, Pencil, Repeat, Upload, Search, X, ArrowUp, ArrowDown, TriangleAlert } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -49,8 +51,9 @@ function SortBtn({ col, sortBy, sortDir, onSort, children, className = '' }) {
   )
 }
 
-export default function ExpenseList({ refreshKey, onRefresh, month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed }) {
+export default function ExpenseList({ month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed }) {
   const C = useC()
+  const queryClient = useQueryClient()
   const { typeNames, typeMap, macroMap } = useExpenseTypes()
 
   const [internalType, setInternalType] = useState(initialType ?? 'All')
@@ -81,8 +84,6 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
-  const [expenses, setExpenses] = useState([])
-  const [incomes, setIncomes] = useState([])
   const [total, setTotal] = useState(0)
 
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
     })
     const t = setTimeout(() => setHighlightId(null), 5000)
     return () => { cancelAnimationFrame(frame); clearTimeout(t) }
-  }, [highlightId, expenses])
+  }, [highlightId])
   const [page, setPage] = useState(1)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
@@ -104,17 +105,21 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
   const [detailItem, setDetailItem] = useState(null)
   const [detailIsIncome, setDetailIsIncome] = useState(false)
 
-  const [outlierIds, setOutlierIds] = useState(new Set())
+  const [outlierMonths] = useState(() => parseInt(localStorage.getItem('budget_history_months'), 10) || 6)
+  const { data: outliersRaw } = useQuery({
+    queryKey: qk.analysisOutliers(outlierMonths),
+    queryFn: () => api.get('/analysis/outliers', { params: { months: outlierMonths } }).then(r => r.data ?? []),
+    staleTime: 3 * 60_000,
+  })
+  const [outlierIds, setOutlierIds] = useState(() => new Set())
   useEffect(() => {
+    if (!outliersRaw) return
     const dismissed = (() => {
       try { return new Set(JSON.parse(localStorage.getItem('budget_dismissed_outliers') ?? '[]')) }
       catch { return new Set() }
     })()
-    const months = parseInt(localStorage.getItem('budget_history_months'), 10) || 6
-    api.get('/analysis/outliers', { params: { months } })
-      .then(r => setOutlierIds(new Set((r.data ?? []).map(o => o.id).filter(id => !dismissed.has(id)))))
-      .catch(() => {})
-  }, [refreshKey])
+    setOutlierIds(new Set(outliersRaw.map(o => o.id).filter(id => !dismissed.has(id))))
+  }, [outliersRaw])
 
   function handleDismissOutlier(id) {
     setOutlierIds(prev => { const next = new Set(prev); next.delete(id); return next })
@@ -144,60 +149,69 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
     }
   }
 
-  useEffect(() => { setPage(1) }, [activeType, activeMacro, effectiveMonth, refreshKey, search, sortBy, sortDir])
+  useEffect(() => { setPage(1) }, [activeType, activeMacro, effectiveMonth, search, sortBy, sortDir])
+
+  const incomeParams = activeType === 'Income' ? {
+    page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
+    ...(effectiveMonth ? { month: effectiveMonth } : {}),
+    ...(search ? { search } : {}),
+  } : null
+
+  const expenseParams = activeType !== 'Income' ? {
+    page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
+    ...(activeMacro ? { macrocategory_id: activeMacro } : activeType !== 'All' ? { type: activeType } : {}),
+    ...(effectiveMonth ? { month: effectiveMonth } : {}),
+    ...(search ? { search } : {}),
+  } : null
+
+  const { data: incomesResult, isPlaceholderData: incomesPlaceholder } = useQuery({
+    queryKey: qk.incomes(incomeParams),
+    queryFn: () => api.get('/incomes', { params: incomeParams }).then(r => r.data),
+    enabled: activeType === 'Income',
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  })
+  const incomes = incomesResult?.incomes ?? []
+
+  const { data: expensesResult, isPlaceholderData: expensesPlaceholder } = useQuery({
+    queryKey: qk.expenses(expenseParams),
+    queryFn: () => api.get('/expenses', { params: expenseParams }).then(r => r.data),
+    enabled: activeType !== 'Income',
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  })
+  const expenses = expensesResult?.expenses ?? []
 
   useEffect(() => {
-    if (activeType === 'Income') {
-      const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
-      if (effectiveMonth) params.month = effectiveMonth
-      if (search) params.search = search
-      api.get('/incomes', { params }).then(res => {
-        const update = () => { setIncomes(res.data.incomes); setTotal(res.data.total) }
-        update()
-      })
-    } else {
-      const params = { page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }
-      if (activeMacro) params.macrocategory_id = activeMacro
-      else if (activeType !== 'All') params.type = activeType
-      if (effectiveMonth) params.month = effectiveMonth
-      if (search) params.search = search
-      api.get('/expenses', { params }).then(res => {
-        const update = () => { setExpenses(res.data.expenses); setTotal(res.data.total) }
-        update()
-      })
-    }
-  }, [refreshKey, activeType, activeMacro, effectiveMonth, page, search, sortBy, sortDir])
+    if (activeType === 'Income' && incomesResult) setTotal(incomesResult.total)
+    else if (activeType !== 'Income' && expensesResult) setTotal(expensesResult.total)
+  }, [activeType, incomesResult, expensesResult])
+
+  function invalidateAll() {
+    queryClient.invalidateQueries({ queryKey: ['expenses'] })
+    queryClient.invalidateQueries({ queryKey: ['incomes'] })
+    queryClient.invalidateQueries({ queryKey: ['analysis'] })
+  }
 
   async function handleDeleteExpense(id) {
-    setExpenses(prev => prev.filter(e => e.id !== id))
     try {
       await api.delete(`/expenses/${id}`)
-      onRefresh()
-    } catch {
-      const params = { page, page_size: PAGE_SIZE }
-      if (activeType !== 'All') params.type = activeType
-      if (effectiveMonth) params.month = effectiveMonth
-      api.get('/expenses', { params }).then(res => setExpenses(res.data.expenses))
-    }
+      invalidateAll()
+    } catch { invalidateAll() }
   }
 
   async function handleDeleteIncome(id) {
-    setIncomes(prev => prev.filter(i => i.id !== id))
     try {
       await api.delete(`/incomes/${id}`)
-      onRefresh()
-    } catch {
-      const params = { page, page_size: PAGE_SIZE }
-      if (effectiveMonth) params.month = effectiveMonth
-      api.get('/incomes', { params }).then(res => setIncomes(res.data.incomes))
-    }
+      invalidateAll()
+    } catch { invalidateAll() }
   }
 
   async function handleClearAll() {
     const params = effectiveMonth ? { month: effectiveMonth } : {}
     await api.delete('/transactions', { params })
     setShowClearConfirm(false)
-    onRefresh()
+    invalidateAll()
   }
 
   const tabs = ['All', 'Income', ...typeNames.filter(n => n !== 'Income')]
@@ -541,15 +555,15 @@ export default function ExpenseList({ refreshKey, onRefresh, month, activeType: 
       )}
 
       {/* Forms & dialogs */}
-      {showExpenseForm && <AddExpenseForm onClose={() => setShowExpenseForm(false)} onAdded={onRefresh} />}
-      {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} onAdded={onRefresh} />}
-      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={() => { setShowIncomeForm(false); onRefresh() }} />}
-      {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={() => { setEditingIncome(null); onRefresh() }} />}
+      {showExpenseForm && <AddExpenseForm onClose={() => setShowExpenseForm(false)} />}
+      {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} />}
+      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} />}
+      {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} />}
       {showImport && (
         <ImportDialog
           defaultRecordType={isIncome ? 'income' : 'expense'}
           onClose={() => setShowImport(false)}
-          onImported={() => { setShowImport(false); onRefresh() }}
+          onImported={() => { setShowImport(false); invalidateAll() }}
         />
       )}
 

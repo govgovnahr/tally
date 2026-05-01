@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useC } from '../colors'
 import { Card } from 'glasscn-ui'
 import { Receipt, Landmark, PiggyBank, BarChart2 } from 'lucide-react'
@@ -162,6 +163,7 @@ function IncomeStep({ onNext, onSkip }) {
 
 function BudgetLimitsStep({ onComplete, onSkip }) {
   const C = useC()
+  const queryClient = useQueryClient()
   const { expenseTypes } = useExpenseTypes()
   const [limits, setLimits] = useState({})
   const [loading, setLoading] = useState(false)
@@ -189,6 +191,7 @@ function BudgetLimitsStep({ onComplete, onSkip }) {
     setLoading(true)
     try {
       await api.post('/budgets', budgets)
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
       onComplete()
     } catch {
       setError('Failed to save budgets. Please try again.')
@@ -255,6 +258,7 @@ const STEPS = ['income', 'budgets']
 
 export default function BudgetSetup({ onComplete }) {
   const C = useC()
+  const queryClient = useQueryClient()
   const [phase, setPhase] = useState('welcome')
 
   async function skipAll() {
@@ -263,6 +267,7 @@ export default function BudgetSetup({ onComplete }) {
     } catch {
       // ignore — best effort
     }
+    queryClient.invalidateQueries({ queryKey: ['budgets'] })
     onComplete()
   }
 

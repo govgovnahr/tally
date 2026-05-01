@@ -1,32 +1,15 @@
 import { useState } from 'react'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
 
 function fmt(n) { return `$${n.toFixed(2)}` }
 
-function CustomTooltip({ active, payload }) {
-  const C = useC()
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
-  const shadow = C.mode === 'dark'
-    ? '0 4px 16px rgba(0,0,0,0.5)'
-    : '0 4px 16px rgba(0,0,0,0.13)'
-  return (
-    <div
-      className="rounded-lg px-3 py-2"
-      style={{ backgroundColor: C.surfacePopup, border: `1px solid ${C.border}`, boxShadow: shadow }}
-    >
-      <p className="text-sm font-semibold">{d.name}</p>
-      <span className="text-xs" style={{ color: C.muted }}>{fmt(d.value)} · {d.pct}%</span>
-    </div>
-  )
-}
-
 export default function SpendingDonut({ summary, activeType, onTypeChange }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
   const [hoveredName, setHoveredName] = useState(null)
+  const [hoveredSegment, setHoveredSegment] = useState(null)
 
   const total = summary.reduce((s, x) => s + x.total, 0)
   if (!summary.length || total === 0) {
@@ -56,7 +39,23 @@ export default function SpendingDonut({ summary, activeType, onTypeChange }) {
     <div className="flex flex-col sm:flex-row items-center gap-6">
       {/* Donut */}
       <div className="relative w-40 h-40 flex-shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
+        {/* Tooltip floats above, outside normal flow */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 rounded-lg px-3 py-1.5 pointer-events-none text-center whitespace-nowrap transition-opacity duration-150"
+          style={{
+            bottom: 'calc(100% + 6px)',
+            backgroundColor: C.surfacePopup,
+            border: `1px solid ${C.border}`,
+            boxShadow: C.mode === 'dark' ? '0 4px 16px rgba(0,0,0,0.5)' : '0 4px 16px rgba(0,0,0,0.13)',
+            zIndex: 10,
+            opacity: hoveredSegment ? 1 : 0,
+          }}
+        >
+          <p className="text-xs font-semibold" style={{ color: C.warmText }}>{hoveredSegment?.name ?? ' '}</p>
+          <span className="text-xs" style={{ color: C.muted }}>{hoveredSegment ? `${fmt(hoveredSegment.value)} · ${hoveredSegment.pct}%` : ' '}</span>
+        </div>
+
+        <ResponsiveContainer width={160} height={160}>
           <PieChart>
             <Pie
               data={data}
@@ -69,6 +68,8 @@ export default function SpendingDonut({ summary, activeType, onTypeChange }) {
               strokeWidth={0}
               style={{ cursor: 'pointer' }}
               onClick={(_, index) => handleClick(data[index].name)}
+              onMouseEnter={(entry) => { setHoveredName(entry.name); setHoveredSegment(entry) }}
+              onMouseLeave={() => { setHoveredName(null); setHoveredSegment(null) }}
             >
               {data.map((d, i) => (
                 <Cell
@@ -80,9 +81,9 @@ export default function SpendingDonut({ summary, activeType, onTypeChange }) {
                 />
               ))}
             </Pie>
-            <Tooltip content={<CustomTooltip />} />
           </PieChart>
         </ResponsiveContainer>
+
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
           <p className="text-sm font-bold leading-tight" style={{ fontSize: '0.9rem' }}>
             {selected ? fmt(data.find(d => d.name === selected)?.value ?? 0) : fmt(total)}

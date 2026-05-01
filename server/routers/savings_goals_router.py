@@ -44,14 +44,14 @@ def _portfolio_avg_net(conn, user_id: str, months: int = 3) -> float:
     placeholders = ",".join(["%s"] * len(past_months))
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
-        f"FROM incomes WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount),0) as total "
+        f"FROM incomes WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + past_months,
     )
     income_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
-        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount),0) as total "
+        f"FROM expenses WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + past_months,
     )
     expense_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
@@ -90,7 +90,7 @@ def _add_computed(goal: dict, conn, portfolio_avg: float = 0.0) -> dict:
     if goal["goal_type"] == "monthly":
         cursor.execute(
             "SELECT COALESCE(SUM(amount), 0) AS total FROM savings_contributions "
-            "WHERE goal_id = %s AND to_char(date::date, 'YYYY-MM') = %s",
+            "WHERE goal_id = %s AND LEFT(date, 7) = %s",
             (goal["id"], cur_month),
         )
         monthly_contributions = round(cursor.fetchone()["total"], 2)
@@ -232,14 +232,14 @@ def get_net_chart(months: int = 6, user_id: str = Depends(get_current_user)):
     month_list = _months_range(months)
     placeholders = ",".join(["%s"] * len(month_list))
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
-        f"FROM incomes WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount),0) as total "
+        f"FROM incomes WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     )
     income_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount),0) as total "
-        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount),0) as total "
+        f"FROM expenses WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     )
     expense_by_month = {row["month"]: row["total"] for row in cursor.fetchall()}

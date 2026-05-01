@@ -24,7 +24,7 @@ def get_incomes(
     conditions = ["user_id = %s"]
     params = [user_id]
     if month:
-        conditions.append("to_char(date::date, 'YYYY-MM') = %s")
+        conditions.append("LEFT(date, 7) = %s")
         params.append(month)
     if search:
         conditions.append("name LIKE %s")
@@ -49,7 +49,7 @@ def get_income_summary(month: Optional[str] = None, user_id: str = Depends(get_c
     if month:
         cursor.execute(
             "SELECT COALESCE(SUM(amount), 0) as total FROM incomes "
-            "WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') = %s AND credit_type IS NULL",
+            "WHERE user_id = %s AND LEFT(date, 7) = %s AND credit_type IS NULL",
             (user_id, month),
         )
     else:
@@ -67,7 +67,7 @@ def get_income_monthly_totals(months: int = 6, user_id: str = Depends(get_curren
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, SUM(amount) as total "
+        f"SELECT LEFT(date, 7) as month, SUM(amount) as total "
         f"FROM incomes WHERE user_id = %s AND credit_type IS NULL "
         f"AND date >= to_char(date_trunc('month', CURRENT_DATE - INTERVAL '{months - 1} months'), 'YYYY-MM-DD') "
         f"GROUP BY month ORDER BY month ASC",

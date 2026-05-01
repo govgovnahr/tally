@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useC } from '../colors'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -6,6 +7,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import api from '../api.js'
+import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import PolishedCheckbox from './PolishedCheckbox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -34,6 +36,8 @@ function ErrorMsg({ msg }) {
 
 export default function AddIncomeForm({ onClose, onAdded, income }) {
   const C = useC()
+  const queryClient = useQueryClient()
+  const { expenseTypes } = useExpenseTypes()
   const isEditing = Boolean(income)
   const [form, setForm] = useState({
     name: income?.name ?? '',
@@ -43,13 +47,8 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
   const [isRecurring, setIsRecurring] = useState(income?.is_recurring === 1)
   const [creditEnabled, setCreditEnabled] = useState(Boolean(income?.credit_type))
   const [creditType, setCreditType] = useState(income?.credit_type ?? '')
-  const [expenseTypes, setExpenseTypes] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    api.get('/expense-types').then(r => setExpenseTypes(r.data)).catch(() => {})
-  }, [])
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
@@ -75,7 +74,9 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
       const res = isEditing
         ? await api.put(`/incomes/${income.id}`, payload)
         : await api.post('/incomes', payload)
-      onAdded(res.data)
+      queryClient.invalidateQueries({ queryKey: ['incomes'] })
+      queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      onAdded?.(res.data)
       onClose()
     } catch (err) {
       setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} income.`)

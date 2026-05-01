@@ -19,6 +19,51 @@ _DEFAULT_TYPES = [
 ]
 
 
+def _make_raw_conn():
+    return psycopg2.connect(
+        os.environ["DATABASE_URL"],
+        cursor_factory=psycopg2.extras.RealDictCursor,
+        connect_timeout=10,
+        keepalives=1,
+        keepalives_idle=10,
+        keepalives_interval=5,
+        keepalives_count=3,
+    )
+
+
+class _ReconnectingCursor:
+    """Cursor wrapper that retries once on dropped SSL connections."""
+
+    def __init__(self, connection):
+        self._connection = connection  # _Connection instance
+        self._cur = connection._conn.cursor()
+
+    def execute(self, sql, params=()):
+        for attempt in range(2):
+            try:
+                self._cur.execute(sql, params)
+                return self
+            except psycopg2.OperationalError:
+                if attempt == 1:
+                    raise
+                try:
+                    self._connection._conn.close()
+                except Exception:
+                    pass
+                self._connection._conn = _make_raw_conn()
+                self._cur = self._connection._conn.cursor()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+
 class _Connection:
     """Thin wrapper adding sqlite3-compatible conn.execute() shorthand to psycopg2."""
 
@@ -26,12 +71,12 @@ class _Connection:
         self._conn = conn
 
     def execute(self, sql, params=()):
-        c = self._conn.cursor()
+        c = _ReconnectingCursor(self)
         c.execute(sql, params)
         return c
 
     def cursor(self):
-        return self._conn.cursor()
+        return _ReconnectingCursor(self)
 
     def commit(self):
         self._conn.commit()
@@ -51,11 +96,7 @@ class _Connection:
 
 
 def get_connection():
-    conn = psycopg2.connect(
-        os.environ["DATABASE_URL"],
-        cursor_factory=psycopg2.extras.RealDictCursor,
-    )
-    return _Connection(conn)
+    return _Connection(_make_raw_conn())
 
 
 def init_db():
@@ -206,7 +247,7 @@ def seed_recurring_forward(name: str, amount: float, type_: str, source_month: s
         target_str, ty, tm = _month_str(src_y, src_m + delta)
         target_date = f"{ty}-{tm:02d}-01"
         cursor.execute(
-            "SELECT 1 FROM expenses WHERE name = %s AND type = %s AND to_char(date::date, 'YYYY-MM') = %s AND user_id = %s",
+            "SELECT 1 FROM expenses WHERE name = %s AND type = %s AND LEFT(date, 7) = %s AND user_id = %s",
             (name, type_, target_str, user_id),
         )
         if not cursor.fetchone():
@@ -236,10 +277,10 @@ def apply_recurring_expenses():
                 SELECT id, name, amount, type, is_recurring FROM expenses
                 WHERE is_recurring = 1
                 AND user_id = %s
-                AND to_char(date::date, 'YYYY-MM') = %s
+                AND LEFT(date, 7) = %s
                 AND (name || '|' || type) NOT IN (
                     SELECT name || '|' || type FROM expenses
-                    WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') = %s
+                    WHERE user_id = %s AND LEFT(date, 7) = %s
                 )
             """, (user_id, src_str, user_id, target_str))
 
@@ -262,7 +303,7 @@ def seed_income_recurring_forward(name: str, amount: float, source_month: str, u
         target_str, ty, tm = _month_str(src_y, src_m + delta)
         target_date = f"{ty}-{tm:02d}-01"
         cursor.execute(
-            "SELECT 1 FROM incomes WHERE name = %s AND to_char(date::date, 'YYYY-MM') = %s AND user_id = %s",
+            "SELECT 1 FROM incomes WHERE name = %s AND LEFT(date, 7) = %s AND user_id = %s",
             (name, target_str, user_id),
         )
         if not cursor.fetchone():
@@ -291,9 +332,9 @@ def apply_recurring_incomes():
                 SELECT id, name, amount, is_recurring FROM incomes
                 WHERE is_recurring = 1
                 AND user_id = %s
-                AND to_char(date::date, 'YYYY-MM') = %s
+                AND LEFT(date, 7) = %s
                 AND name NOT IN (
-                    SELECT name FROM incomes WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') = %s
+                    SELECT name FROM incomes WHERE user_id = %s AND LEFT(date, 7) = %s
                 )
             """, (user_id, src_str, user_id, target_str))
             for row in cursor.fetchall():
@@ -316,8 +357,8 @@ def _outlier_filtered_totals(conn, months_list: list[str], by_type: bool = False
     uid_params = [user_id] if user_id else []
 
     cursor.execute(
-        f"SELECT id, type, amount, to_char(date::date, 'YYYY-MM') as mo "
-        f"FROM expenses WHERE to_char(date::date, 'YYYY-MM') IN ({placeholders}) {uid_clause}",
+        f"SELECT id, type, amount, LEFT(date, 7) as mo "
+        f"FROM expenses WHERE LEFT(date, 7) IN ({placeholders}) {uid_clause}",
         months_list + uid_params,
     )
     rows = cursor.fetchall()
@@ -335,9 +376,9 @@ def _outlier_filtered_totals(conn, months_list: list[str], by_type: bool = False
         cat_stats[t] = (mean, std)
 
     cursor.execute(
-        f"SELECT credit_type, to_char(date::date, 'YYYY-MM') as mo, SUM(amount) as total "
+        f"SELECT credit_type, LEFT(date, 7) as mo, SUM(amount) as total "
         f"FROM incomes WHERE credit_type IS NOT NULL "
-        f"AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) {uid_clause} "
+        f"AND LEFT(date, 7) IN ({placeholders}) {uid_clause} "
         f"GROUP BY credit_type, mo",
         months_list + uid_params,
     )
@@ -386,6 +427,25 @@ def get_avg_monthly_expenses(conn, months: int = 3, user_id: str = None) -> floa
     return round(sum(totals) / len(totals), 2)
 
 
+def _month_bounds(month: str):
+    """Return (start_date_str, exclusive_end_date_str) for a YYYY-MM month string."""
+    y, m = map(int, month.split("-"))
+    end_y, end_m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return f"{y}-{m:02d}-01", f"{end_y}-{end_m:02d}-01"
+
+
+def _fast_totals_by_type(conn, month: str, user_id: str) -> dict:
+    """SQL-aggregate totals per type for a past month — no row scanning in Python."""
+    start, end = _month_bounds(month)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT type, SUM(amount) as total FROM expenses "
+        "WHERE user_id = %s AND date >= %s AND date < %s GROUP BY type",
+        (user_id, start, end),
+    )
+    return {r["type"]: round(r["total"], 2) for r in cursor.fetchall()}
+
+
 def compute_budget_pacing(conn, month: str, lookback_months: int = 3, user_id: str = None) -> list:
     today = date.today()
     cur_month = f"{today.year}-{today.month:02d}"
@@ -398,15 +458,16 @@ def compute_budget_pacing(conn, month: str, lookback_months: int = 3, user_id: s
     is_current = month == cur_month
     days_elapsed = today.day if is_current else days_in_month
 
-    raw_month = _outlier_filtered_totals(conn, [month], by_type=True, user_id=user_id)
-    month_spending = {t: round(sum(mo_totals.values()), 2) for t, mo_totals in raw_month.items()}
-
     if not is_current:
+        month_spending = _fast_totals_by_type(conn, month, user_id)
         return [
             {"type": t, "spent": s, "projected_spend": None,
              "days_elapsed": days_elapsed, "days_in_month": days_in_month}
             for t, s in month_spending.items()
         ]
+
+    raw_month = _outlier_filtered_totals(conn, [month], by_type=True, user_id=user_id)
+    month_spending = {t: round(sum(mo_totals.values()), 2) for t, mo_totals in raw_month.items()}
 
     past_months = []
     for i in range(lookback_months, 0, -1):

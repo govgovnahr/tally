@@ -113,14 +113,14 @@ def get_category_stats(
     placeholders = ",".join(["%s"] * len(month_list))
 
     rows = conn.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, type, COALESCE(SUM(amount), 0) as total "
-        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) "
+        f"SELECT LEFT(date, 7) as month, type, COALESCE(SUM(amount), 0) as total "
+        f"FROM expenses WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) "
         f"GROUP BY month, type",
         [user_id] + month_list,
     ).fetchall()
     credit_rows = conn.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, credit_type as type, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE user_id = %s AND credit_type IS NOT NULL AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) "
+        f"SELECT LEFT(date, 7) as month, credit_type as type, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE user_id = %s AND credit_type IS NOT NULL AND LEFT(date, 7) IN ({placeholders}) "
         f"GROUP BY month, credit_type",
         [user_id] + month_list,
     ).fetchall()
@@ -199,7 +199,7 @@ def get_outliers(months: int = Query(3), user_id: str = Depends(get_current_user
 
     expenses = conn.execute(
         f"SELECT id, name, type, amount, date FROM expenses "
-        f"WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) ORDER BY date DESC",
+        f"WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) ORDER BY date DESC",
         [user_id] + month_list,
     ).fetchall()
     conn.close()
@@ -269,22 +269,22 @@ def get_month_over_month(months: int = Query(6), user_id: str = Depends(get_curr
     placeholders = ",".join(["%s"] * len(month_list))
 
     expense_rows = conn.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM expenses WHERE user_id = %s AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM expenses WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     ).fetchall()
     expense_by_month = {r["month"]: round(r["total"], 2) for r in expense_rows}
 
     income_rows = conn.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE user_id = %s AND credit_type IS NULL AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE user_id = %s AND credit_type IS NULL AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     ).fetchall()
     income_by_month = {r["month"]: round(r["total"], 2) for r in income_rows}
 
     credit_rows = conn.execute(
-        f"SELECT to_char(date::date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total "
-        f"FROM incomes WHERE user_id = %s AND credit_type IS NOT NULL AND to_char(date::date, 'YYYY-MM') IN ({placeholders}) GROUP BY month",
+        f"SELECT LEFT(date, 7) as month, COALESCE(SUM(amount), 0) as total "
+        f"FROM incomes WHERE user_id = %s AND credit_type IS NOT NULL AND LEFT(date, 7) IN ({placeholders}) GROUP BY month",
         [user_id] + month_list,
     ).fetchall()
     for cr in credit_rows:

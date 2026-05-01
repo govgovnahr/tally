@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import api from '../api.js'
+import { qk } from '../queryKeys.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
 import { Card } from 'glasscn-ui'
@@ -73,78 +75,80 @@ function CustomTooltip({ active, payload, totalBudget, activeType, expenseTypes,
   )
 }
 
-export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeType = 'All', onTypeChange, activeMacro, onMacroChange }) {
+export default function MonthlyTrendsChart({ selectedMonth, activeType = 'All', onTypeChange, activeMacro, onMacroChange }) {
   const C = useC()
   const INCOME_COLOR = C.income
   const TICK = { fill: C.muted, fontSize: 12 }
   const AXIS_LINE = { stroke: C.border }
   const { expenseTypes, macroMap } = useExpenseTypes()
   const [monthsToShow, setMonthsToShow] = useState(6)
-  const [maxMonths, setMaxMonths] = useState(12)
-  const [chartData, setChartData] = useState([])
-  const [totalBudget, setTotalBudget] = useState(0)
-  const [budgetByType, setBudgetByType] = useState({})
-  const [hasOverrides, setHasOverrides] = useState(false)
   const [hoveredBar, setHoveredBar] = useState(false)
 
-  useEffect(() => {
-    api.get('/analysis/months-available').then(r => setMaxMonths(Math.max(r.data.months, 2)))
-  }, [])
+  const { data: monthsAvail } = useQuery({
+    queryKey: qk.analysisMonthsAvailable(),
+    queryFn: () => api.get('/analysis/months-available').then(r => r.data),
+    staleTime: 10 * 60_000,
+  })
+  const maxMonths = Math.max(monthsAvail?.months ?? 12, 2)
 
-  useEffect(() => {
-    Promise.all([
-      api.get('/expenses/monthly-by-type', { params: { months: monthsToShow } }),
-      api.get('/incomes/monthly-totals', { params: { months: monthsToShow } }),
-      api.get('/budgets/effective-range', { params: { months: monthsToShow } }),
-    ]).then(([byTypeRes, incomeRes, budgetsRes]) => {
-      const budgetByMonth = Object.fromEntries(budgetsRes.data.map(r => [r.month, r]))
-      const defaultByType = budgetsRes.data[0]?.by_type ?? {}
-      const defaultTotal = Object.values(defaultByType).reduce((s, v) => s + v, 0)
-      setTotalBudget(defaultTotal)
-      setBudgetByType(defaultByType)
+  const { data: byTypeData = [], isFetching: fetchingByType, isPlaceholderData: byTypePlaceholder } = useQuery({
+    queryKey: qk.expensesMonthlyByType(monthsToShow),
+    queryFn: () => api.get('/expenses/monthly-by-type', { params: { months: monthsToShow } }).then(r => r.data),
+    staleTime: 2 * 60_000,
+    placeholderData: keepPreviousData,
+  })
 
-      const anyOverrides = budgetsRes.data.some(r => Math.abs(r.total - defaultTotal) > 0.001
-        || Object.entries(r.by_type).some(([t, v]) => Math.abs(v - (defaultByType[t] ?? 0)) > 0.001))
-      setHasOverrides(anyOverrides)
+  const { data: incomeTotals = [], isFetching: fetchingIncome, isPlaceholderData: incomePlaceholder } = useQuery({
+    queryKey: qk.incomesMonthlyTotals(monthsToShow),
+    queryFn: () => api.get('/incomes/monthly-totals', { params: { months: monthsToShow } }).then(r => r.data),
+    staleTime: 2 * 60_000,
+    placeholderData: keepPreviousData,
+  })
 
-      const monthSet = new Set([
-        ...byTypeRes.data.map(r => r.month),
-        ...incomeRes.data.map(r => r.month),
-        ...budgetsRes.data.map(r => r.month),
-      ])
-      const current = currentMonth()
-      const months = [...monthSet].sort()
+  const { data: budgetsRange = [], isFetching: fetchingBudgets } = useQuery({
+    queryKey: qk.budgetsEffectiveRange(monthsToShow),
+    queryFn: () => api.get('/budgets/effective-range', { params: { months: monthsToShow } }).then(r => r.data),
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  })
 
-      const incomeByMonth = Object.fromEntries(incomeRes.data.map(r => [r.month, r.total]))
+  const isLoading = fetchingByType || fetchingIncome || fetchingBudgets
 
-      const built = months.map(m => {
-        const bm = budgetByMonth[m]
-        const row = {
-          month: m,
-          label: shortLabel(m),
-          fullLabel: fullLabel(m),
-          income: incomeByMonth[m] ?? 0,
-          budget: bm?.total ?? defaultTotal,
-          budgetByType: bm?.by_type ?? defaultByType,
-          isCurrent: m === current,
-          isFuture: m > current,
-          isSelected: m === selectedMonth,
-        }
-        byTypeRes.data.filter(r => r.month === m).forEach(r => {
-          row[r.type] = r.total
-        })
-        return row
-      })
+  const budgetByMonth = Object.fromEntries(budgetsRange.map(r => [r.month, r]))
+  const defaultByType = budgetsRange[0]?.by_type ?? {}
+  const defaultTotal = Object.values(defaultByType).reduce((s, v) => s + v, 0)
+  const totalBudget = defaultTotal
+  const budgetByType = defaultByType
+  const hasOverrides = budgetsRange.some(r => Math.abs(r.total - defaultTotal) > 0.001
+    || Object.entries(r.by_type).some(([t, v]) => Math.abs(v - (defaultByType[t] ?? 0)) > 0.001))
 
-      setChartData(built)
-    })
-  }, [refreshKey, selectedMonth, monthsToShow])
+  // Budget months must NOT extend the axis — they can cover different ranges than transaction
+  // data and inject phantom empty bars. Budget data is looked up per-month in chartData below.
+  const monthSet = new Set([
+    ...byTypeData.map(r => r.month),
+    ...incomeTotals.map(r => r.month),
+  ])
+  const current = currentMonth()
+  const incomeByMonth = Object.fromEntries(incomeTotals.map(r => [r.month, r.total]))
+  const chartData = [...monthSet].sort().map(m => {
+    const bm = budgetByMonth[m]
+    const row = {
+      month: m, label: shortLabel(m), fullLabel: fullLabel(m),
+      income: incomeByMonth[m] ?? 0,
+      budget: bm?.total ?? defaultTotal,
+      budgetByType: bm?.by_type ?? defaultByType,
+      isCurrent: m === current,
+      isFuture: m > current,
+    }
+    byTypeData.filter(r => r.month === m).forEach(r => { row[r.type] = r.total })
+    return row
+  })
 
-  if (chartData.length === 0) return null
+  if (!isLoading && chartData.length === 0) return null
   const hasAnyData = chartData.some(d =>
     expenseTypes.some(t => (d[t.name] ?? 0) > 0) || d.income > 0
   )
-  if (!hasAnyData) return null
+  if (!isLoading && !hasAnyData) return null
 
   const activeTypes = expenseTypes.filter(t =>
     chartData.some(d => (d[t.name] ?? 0) > 0) &&
@@ -187,7 +191,7 @@ export default function MonthlyTrendsChart({ refreshKey, selectedMonth, activeTy
         </p>
         <div className="flex items-center gap-3">
           <div style={{ minWidth: 200 }}>
-            <MonthSlider value={monthsToShow} onChange={setMonthsToShow} min={1} max={maxMonths} />
+            <MonthSlider value={monthsToShow} onChange={setMonthsToShow} min={2} max={maxMonths} />
           </div>
           {activeMacro ? (
             <button

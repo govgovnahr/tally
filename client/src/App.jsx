@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { TallyLogo } from './components/TallyLogo.jsx'
 import api from './api.js'
 import { supabase } from './supabase.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import { ColorsProvider, useC } from './colors'
+import { qk } from './queryKeys.js'
 import ExpenseList from './components/ExpenseList.jsx'
 import BudgetSetup from './components/BudgetSetup.jsx'
 import DashboardPage from './components/DashboardPage.jsx'
@@ -30,14 +32,19 @@ const NAV_ITEMS = [
 function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [budgetsReady, setBudgetsReady] = useState(null)
   const [page, setPage] = useState('home')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [outlierMonth, setOutlierMonth] = useState(null)
   const [initialExpenseType, setInitialExpenseType] = useState(null)
   const [initialExpenseId, setInitialExpenseId] = useState(null)
   const [initialExpenseMonth, setInitialExpenseMonth] = useState(null)
+
+  const { data: budgetsData, isLoading: budgetsLoading } = useQuery({
+    queryKey: qk.budgets(),
+    queryFn: () => api.get('/budgets').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const budgetsReady = budgetsData ? budgetsData.length > 0 : null
 
   const handleNavigate = useCallback((pg, opts = {}) => {
     setPage(pg)
@@ -51,17 +58,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
     setPage('all-expenses')
   }, [])
 
-  useEffect(() => {
-    api.get('/budgets').then(res => {
-      setBudgetsReady(res.data.length > 0)
-    })
-  }, [refreshKey])
-
-  const refresh = useCallback(() => {
-    setRefreshKey(k => k + 1)
-  }, [])
-
-  if (budgetsReady === null || typesLoading) return (
+  if (budgetsLoading || budgetsReady === null || typesLoading) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 64, borderBottom: '1px solid rgba(128,128,128,0.15)' }} />
       <div style={{ flex: 1, padding: '24px 16px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
@@ -78,7 +75,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
   )
 
   if (!budgetsReady) {
-    return <BudgetSetup onComplete={refresh} />
+    return <BudgetSetup onComplete={() => {}} />
   }
 
   return (
@@ -208,8 +205,6 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           <DashboardPage
             selectedMonth={selectedMonth}
             onMonthChange={setSelectedMonth}
-            refreshKey={refreshKey}
-            onRefresh={refresh}
             onNavigate={handleNavigate}
           />
         )}
@@ -218,13 +213,11 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             <AnalysisPage outlierMonth={outlierMonth} onClearOutlierMonth={() => setOutlierMonth(null)} onShowInExpenses={handleShowInExpenses} />
           )}
           {page === 'savings' && <SavingsPage />}
-          {page === 'budgets' && <BudgetGoals onSaved={refresh} />}
+          {page === 'budgets' && <BudgetGoals />}
           {page === 'account' && <AccountPage user={user} onLogout={onLogout} />}
         </Suspense>
         {page === 'all-expenses' && (
           <ExpenseList
-            refreshKey={refreshKey}
-            onRefresh={refresh}
             initialType={initialExpenseType}
             initialHighlightId={initialExpenseId}
             initialMonth={initialExpenseMonth}
@@ -247,18 +240,16 @@ function ThemedApp() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        api.get('/auth/me').catch(() => {})
-        setUser({ id: session.user.id, email: session.user.email })
-      } else {
-        setUser(null)
-      }
+      setUser(session ? { id: session.user.id, email: session.user.email } : null)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') return
-      if (session) {
-        api.get('/auth/me').catch(() => {})
+      if (event === 'SIGNED_IN' && session) {
+        api.get('/auth/me')
+          .catch(() => {})
+          .finally(() => setUser({ id: session.user.id, email: session.user.email }))
+      } else if (session) {
         setUser({ id: session.user.id, email: session.user.email })
       } else {
         setUser(null)

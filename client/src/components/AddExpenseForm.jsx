@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useC } from '../colors'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -36,6 +37,7 @@ function ErrorMsg({ msg }) {
 
 export default function AddExpenseForm({ onClose, onAdded, expense }) {
   const C = useC()
+  const queryClient = useQueryClient()
   const { typeNames } = useExpenseTypes()
   const isEditing = Boolean(expense)
   const [form, setForm] = useState({
@@ -107,11 +109,14 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
       if (rememberRule && rulePattern.trim()) {
         await api.post('/import-rules', { pattern: rulePattern.trim(), expense_type: form.type })
       }
+      queryClient.invalidateQueries({ queryKey: ['expenses'] })
+      queryClient.invalidateQueries({ queryKey: ['incomes'] })
+      queryClient.invalidateQueries({ queryKey: ['analysis'] })
       if (!isEditing && form.type === 'Savings') {
         setSavingsExpense(res.data)
         return
       }
-      onAdded(res.data)
+      onAdded?.(res.data)
       onClose()
     } catch (err) {
       setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} expense.`)
