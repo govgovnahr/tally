@@ -41,7 +41,7 @@ def get_expenses(
         conditions.append("LEFT(date, 7) = %s")
         params.append(month)
     if search:
-        conditions.append("name LIKE %s")
+        conditions.append("name ILIKE %s")
         params.append(f"%{search}%")
     where = f"WHERE {' AND '.join(conditions)}"
     cursor.execute(f"SELECT COUNT(*) AS count FROM expenses {where}", params)
