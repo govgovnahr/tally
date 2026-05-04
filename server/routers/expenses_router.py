@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from database import get_connection, seed_recurring_forward
+from database import get_connection, seed_recurring_forward, month_start
 from models import Expense, Expenses, NewExpense, TypeSummary
 from auth import get_current_user
 
@@ -129,11 +129,10 @@ def get_monthly_totals(months: int = 6, user_id: str = Depends(get_current_user)
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT LEFT(date, 7) as month, SUM(amount) as total "
-        f"FROM expenses WHERE user_id = %s "
-        f"AND date >= to_char(date_trunc('month', CURRENT_DATE - INTERVAL '{months - 1} months'), 'YYYY-MM-DD') "
-        f"GROUP BY month ORDER BY month ASC",
-        (user_id,),
+        "SELECT LEFT(date, 7) as month, SUM(amount) as total "
+        "FROM expenses WHERE user_id = %s AND date >= %s "
+        "GROUP BY month ORDER BY month ASC",
+        (user_id, month_start(months - 1)),
     )
     rows = cursor.fetchall()
     conn.close()
@@ -145,11 +144,10 @@ def get_monthly_by_type(months: int = 6, user_id: str = Depends(get_current_user
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT LEFT(date, 7) as month, type, SUM(amount) as total "
-        f"FROM expenses WHERE user_id = %s "
-        f"AND date >= to_char(date_trunc('month', CURRENT_DATE - INTERVAL '{months - 1} months'), 'YYYY-MM-DD') "
-        f"GROUP BY month, type ORDER BY month ASC",
-        (user_id,),
+        "SELECT LEFT(date, 7) as month, type, SUM(amount) as total "
+        "FROM expenses WHERE user_id = %s AND date >= %s "
+        "GROUP BY month, type ORDER BY month ASC",
+        (user_id, month_start(months - 1)),
     )
     rows = cursor.fetchall()
     conn.close()

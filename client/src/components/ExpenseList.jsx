@@ -18,6 +18,8 @@ import ImportDialog from './ImportDialog.jsx'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { useC } from '../colors'
 import { Card } from 'glasscn-ui'
+import SourceChip from './SourceChip.jsx'
+import IconButton from './IconButton.jsx'
 
 function formatDate(dateStr) {
   const [year, month, day] = dateStr.split('-')
@@ -382,18 +384,22 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
                 </span>
               </div>
               <div className="flex items-center justify-between mt-1">
-                <button
-                  type="button"
-                  onClick={ev => { ev.stopPropagation(); if (!isIncome) handleTypeChange(row.type) }}
-                  className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent font-[inherit] transition-opacity duration-150 hover:opacity-70"
-                  style={{
-                    color: isIncome ? C.income : C.adaptColor(typeMap[row.type]?.color || C.dimText),
-                    borderColor: isIncome ? C.income : C.adaptColor(typeMap[row.type]?.color || C.dimText),
-                    cursor: isIncome ? 'default' : 'pointer',
-                  }}
-                >
-                  {isIncome ? 'Income' : row.type}
-                </button>
+                {isIncome ? (
+                  <SourceChip creditType={row.credit_type} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={ev => { ev.stopPropagation(); handleTypeChange(row.type) }}
+                    className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent font-[inherit] transition-opacity duration-150 hover:opacity-70"
+                    style={{
+                      color: C.adaptColor(typeMap[row.type]?.color || C.dimText),
+                      borderColor: C.adaptColor(typeMap[row.type]?.color || C.dimText),
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {row.type}
+                  </button>
+                )}
                 <span className="text-xs" style={{ color: C.muted }}>{formatDate(row.date)}</span>
               </div>
             </div>
@@ -433,36 +439,14 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {inc.credit_type ? (
-                        <span className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{ color: C.nearGoal, borderColor: C.nearGoal }}>
-                          Credit → {inc.credit_type}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{ color: C.income, borderColor: C.income }}>
-                          Income
-                        </span>
-                      )}
+                      <SourceChip creditType={inc.credit_type} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap" style={{ color: C.muted }}>{formatDate(inc.date)}</TableCell>
                     <TableCell className="text-right font-medium" style={{ color: C.income }}>${inc.amount.toFixed(2)}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-0.5">
-                        <button type="button" title="Edit income" onClick={() => setEditingIncome(inc)}
-                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                          style={{ color: C.muted }}
-                          onMouseEnter={e => e.currentTarget.style.color = C.primary}
-                          onMouseLeave={e => e.currentTarget.style.color = C.muted}>
-                          <Pencil size={14} />
-                        </button>
-                        <button type="button" title="Delete income" onClick={() => handleDeleteIncome(inc.id)}
-                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                          style={{ color: C.muted }}
-                          onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
-                          onMouseLeave={e => e.currentTarget.style.color = C.muted}>
-                          <Trash2 size={14} />
-                        </button>
+                        <IconButton title="Edit income" onClick={() => setEditingIncome(inc)}><Pencil size={14} /></IconButton>
+                        <IconButton title="Delete income" onClick={() => handleDeleteIncome(inc.id)} hoverColor={C.overBudget}><Trash2 size={14} /></IconButton>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -513,20 +497,8 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-0.5">
-                        <button type="button" title="Edit expense" onClick={() => setEditingExpense(e)}
-                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                          style={{ color: C.muted }}
-                          onMouseEnter={ev => ev.currentTarget.style.color = C.primary}
-                          onMouseLeave={ev => ev.currentTarget.style.color = C.muted}>
-                          <Pencil size={14} />
-                        </button>
-                        <button type="button" title="Delete expense" onClick={() => handleDeleteExpense(e.id)}
-                          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                          style={{ color: C.muted }}
-                          onMouseEnter={ev => ev.currentTarget.style.color = C.overBudget}
-                          onMouseLeave={ev => ev.currentTarget.style.color = C.muted}>
-                          <Trash2 size={14} />
-                        </button>
+                        <IconButton title="Edit expense" onClick={() => setEditingExpense(e)}><Pencil size={14} /></IconButton>
+                        <IconButton title="Delete expense" onClick={() => handleDeleteExpense(e.id)} hoverColor={C.overBudget}><Trash2 size={14} /></IconButton>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -555,10 +527,10 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
       )}
 
       {/* Forms & dialogs */}
-      {showExpenseForm && <AddExpenseForm onClose={() => setShowExpenseForm(false)} />}
-      {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} />}
-      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} />}
-      {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} />}
+      {showExpenseForm && <AddExpenseForm onClose={() => setShowExpenseForm(false)} onAdded={invalidateAll} />}
+      {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} onAdded={invalidateAll} />}
+      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={invalidateAll} />}
+      {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={invalidateAll} />}
       {showImport && (
         <ImportDialog
           defaultRecordType={isIncome ? 'income' : 'expense'}

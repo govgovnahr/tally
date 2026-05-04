@@ -13,25 +13,12 @@ import { ICON_REGISTRY, ICON_OPTIONS } from '../expenseTypes.js'
 import ImportBudgetsDialog from './ImportBudgetsDialog.jsx'
 import { useC, TYPE_PALETTE } from '../colors'
 import { Card } from 'glasscn-ui'
+import AlertBox from './AlertBox.jsx'
+import IconButton from './IconButton.jsx'
 
 const PRESET_COLORS = TYPE_PALETTE
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
-
-function AlertBox({ severity, children }) {
-  const C = useC()
-  const colors = {
-    error:   { bg: `${C.overBudget}15`, border: `${C.overBudget}40`, text: C.overBudget },
-    warning: { bg: `${C.atRisk}15`, border: `${C.atRisk}40`, text: C.atRisk },
-    success: { bg: `${C.onTrack}15`, border: `${C.onTrack}40`, text: C.onTrack },
-  }
-  const s = colors[severity] ?? colors.error
-  return (
-    <div className="text-sm px-3 py-2 rounded-lg" style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}>
-      {children}
-    </div>
-  )
-}
 
 function ColorSwatch({ color, selected, onClick }) {
   return (
@@ -642,20 +629,12 @@ function MacrocategoryManager() {
               {m.budget_limit > 0 && (
                 <span className="text-sm" style={{ color: C.muted }}>${m.budget_limit.toFixed(0)} ceiling</span>
               )}
-              <button type="button" onClick={() => { setEditTarget(m); setEditName(m.name); setEditColor(m.color); setEditBudget(m.budget_limit ? String(m.budget_limit) : ''); setError('') }}
-                className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                style={{ color: C.muted }}
-                onMouseEnter={e => e.currentTarget.style.color = C.primary}
-                onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+              <IconButton onClick={() => { setEditTarget(m); setEditName(m.name); setEditColor(m.color); setEditBudget(m.budget_limit ? String(m.budget_limit) : ''); setError('') }}>
                 <Pencil size={14} />
-              </button>
-              <button type="button" onClick={() => handleDelete(m.id)}
-                className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                style={{ color: C.muted }}
-                onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
-                onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+              </IconButton>
+              <IconButton onClick={() => handleDelete(m.id)} hoverColor={C.overBudget}>
                 <Trash2 size={14} />
-              </button>
+              </IconButton>
             </div>
           ))}
 
@@ -810,28 +789,16 @@ export default function BudgetGoals() {
             </select>
           )}
           {inputField}
-          <button type="button" title="View analysis" onClick={() => setAnalysisCategory({ name: t.name, color: t.color, icon: t.icon })}
-            className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-            style={{ color: C.muted }}
-            onMouseEnter={e => e.currentTarget.style.color = C.primary}
-            onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+          <IconButton title="View analysis" onClick={() => setAnalysisCategory({ name: t.name, color: t.color, icon: t.icon })} className="p-1">
             <BarChart2 size={14} />
-          </button>
-          <button type="button" title="Edit category" onClick={() => { setEditTarget(t); setFormOpen(true) }}
-            className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-            style={{ color: C.muted }}
-            onMouseEnter={e => e.currentTarget.style.color = C.primary}
-            onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+          </IconButton>
+          <IconButton title="Edit category" onClick={() => { setEditTarget(t); setFormOpen(true) }} className="p-1">
             <Pencil size={14} />
-          </button>
+          </IconButton>
           {t.name !== 'Other' && (
-            <button type="button" title="Delete category" onClick={() => setDeleteTarget(t)}
-              className="p-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-              style={{ color: C.muted }}
-              onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
-              onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+            <IconButton title="Delete category" onClick={() => setDeleteTarget(t)} className="p-1" hoverColor={C.overBudget}>
               <Trash2 size={14} />
-            </button>
+            </IconButton>
           )}
         </div>
         {/* Mobile */}

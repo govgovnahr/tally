@@ -10,30 +10,10 @@ import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import SavingsLinkModal from './SavingsLinkModal.jsx'
 import PolishedCheckbox from './PolishedCheckbox.jsx'
+import FieldGroup from './FieldGroup.jsx'
+import { ErrorMsg } from './AlertBox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
-
-function FieldGroup({ label, children }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium">{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function ErrorMsg({ msg }) {
-  const C = useC()
-  if (!msg) return null
-  return (
-    <div
-      className="text-sm px-3 py-2 rounded-lg"
-      style={{ backgroundColor: `${C.overBudget}18`, border: `1px solid ${C.overBudget}40`, color: C.overBudget }}
-    >
-      {msg}
-    </div>
-  )
-}
 
 export default function AddExpenseForm({ onClose, onAdded, expense }) {
   const C = useC()

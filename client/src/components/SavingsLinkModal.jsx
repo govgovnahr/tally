@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import api from '../api.js'
 import { useC } from '../colors'
+import { ErrorMsg } from './AlertBox.jsx'
 
 function getDefaultGoal(goals) {
   if (goals.length === 0) return null
@@ -18,19 +19,6 @@ function autoLabel(defaultGoal) {
   if (!defaultGoal) return ''
   if (defaultGoal.priority != null) return `Auto-assigned · priority #${defaultGoal.priority} goal`
   return 'Auto-assigned · first active goal'
-}
-
-function ErrorMsg({ msg }) {
-  const C = useC()
-  if (!msg) return null
-  return (
-    <div
-      className="text-sm px-3 py-2 rounded-lg mt-3"
-      style={{ backgroundColor: `${C.overBudget}18`, border: `1px solid ${C.overBudget}40`, color: C.overBudget }}
-    >
-      {msg}
-    </div>
-  )
 }
 
 export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {

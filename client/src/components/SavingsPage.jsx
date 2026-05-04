@@ -11,6 +11,8 @@ import { qk } from '../queryKeys.js'
 import NetSavingsChart from './NetSavingsChart.jsx'
 import { useC, palette, TYPE_PALETTE } from '../colors'
 import { Card } from 'glasscn-ui'
+import AlertBox from './AlertBox.jsx'
+import IconButton from './IconButton.jsx'
 
 const ONE_TIME_COLORS = TYPE_PALETTE.slice(0, 6)
 const GOAL_COLORS = [...TYPE_PALETTE.slice(0, 5), '#A0722A', '#8B3A2A', palette.grey, '#f4a261', '#9b72cf']
@@ -38,19 +40,6 @@ function fmtDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function AlertBox({ severity, children }) {
-  const C = useC()
-  const colors = {
-    error: { bg: `${C.overBudget}15`, border: `${C.overBudget}40`, text: C.overBudget },
-    warning: { bg: `${C.atRisk}15`, border: `${C.atRisk}40`, text: C.atRisk },
-  }
-  const s = colors[severity] ?? colors.error
-  return (
-    <div className="text-sm px-3 py-2 rounded-lg" style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}>
-      {children}
-    </div>
-  )
-}
 
 function ProgressBar({ value, color, height = 6 }) {
   const C = useC()
@@ -66,27 +55,11 @@ function CardActions({ goal, onEdit, onDelete, onPause }) {
   const C = useC()
   return (
     <div className="flex">
-      <button type="button" title={goal.paused ? 'Resume' : 'Pause'} onClick={onPause}
-        className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-        style={{ color: C.muted }}
-        onMouseEnter={e => e.currentTarget.style.color = C.primary}
-        onMouseLeave={e => e.currentTarget.style.color = C.muted}>
+      <IconButton title={goal.paused ? 'Resume' : 'Pause'} onClick={onPause}>
         {goal.paused ? <Play size={14} /> : <Pause size={14} />}
-      </button>
-      <button type="button" title="Edit" onClick={onEdit}
-        className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-        style={{ color: C.muted }}
-        onMouseEnter={e => e.currentTarget.style.color = C.primary}
-        onMouseLeave={e => e.currentTarget.style.color = C.muted}>
-        <Pencil size={14} />
-      </button>
-      <button type="button" title="Delete" onClick={onDelete}
-        className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-        style={{ color: C.muted }}
-        onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
-        onMouseLeave={e => e.currentTarget.style.color = C.muted}>
-        <Trash2 size={14} />
-      </button>
+      </IconButton>
+      <IconButton title="Edit" onClick={onEdit}><Pencil size={14} /></IconButton>
+      <IconButton title="Delete" onClick={onDelete} hoverColor={C.overBudget}><Trash2 size={14} /></IconButton>
     </div>
   )
 }
@@ -266,13 +239,7 @@ function CompletedGoalCard({ goal, color, onDelete }) {
             )}
           </div>
         </div>
-        <button type="button" onClick={onDelete}
-          className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-          style={{ color: C.muted }}
-          onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
-          onMouseLeave={e => e.currentTarget.style.color = C.muted}>
-          <Trash2 size={14} />
-        </button>
+        <IconButton onClick={onDelete} hoverColor={C.overBudget}><Trash2 size={14} /></IconButton>
       </div>
       <div className="flex items-baseline gap-1 mb-2">
         <span className="text-sm font-semibold" style={{ color: C.muted }}>${(goal.total_contributions ?? 0).toFixed(2)}</span>
@@ -333,13 +300,7 @@ function ContributionDialog({ open, onClose, goal }) {
                     <p className="text-sm font-medium">${c.amount.toFixed(2)}</p>
                     <p className="text-xs" style={{ color: C.muted }}>{fmtDate(c.date)}{c.note ? ` · ${c.note}` : ''}</p>
                   </div>
-                  <button type="button" onClick={() => handleDelete(c.id)}
-                    className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer transition-colors duration-150"
-                    style={{ color: C.muted }}
-                    onMouseEnter={e => e.currentTarget.style.color = C.overBudget}
-                    onMouseLeave={e => e.currentTarget.style.color = C.muted}>
-                    <Trash2 size={14} />
-                  </button>
+                  <IconButton onClick={() => handleDelete(c.id)} hoverColor={C.overBudget}><Trash2 size={14} /></IconButton>
                 </div>
               ))}
             </div>

@@ -295,7 +295,7 @@ def apply_recurring_expenses():
     conn.close()
 
 
-def seed_income_recurring_forward(name: str, amount: float, source_month: str, user_id: str):
+def seed_income_recurring_forward(name: str, amount: float, source_month: str, user_id: str, credit_type: str = None):
     conn = get_connection()
     cursor = conn.cursor()
     src_y, src_m = map(int, source_month.split('-'))
@@ -308,8 +308,8 @@ def seed_income_recurring_forward(name: str, amount: float, source_month: str, u
         )
         if not cursor.fetchone():
             cursor.execute(
-                "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                (str(uuid.uuid4()), name, amount, target_date, datetime.now().isoformat(), 1, user_id),
+                "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id, credit_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (str(uuid.uuid4()), name, amount, target_date, datetime.now().isoformat(), 1, user_id, credit_type),
             )
     conn.commit()
     conn.close()
@@ -329,7 +329,7 @@ def apply_recurring_incomes():
             target_date = f"{ty}-{tm:02d}-01"
             src_str, _, _ = _month_str(today.year, today.month + delta - 1)
             cursor.execute("""
-                SELECT id, name, amount, is_recurring FROM incomes
+                SELECT id, name, amount, is_recurring, credit_type FROM incomes
                 WHERE is_recurring = 1
                 AND user_id = %s
                 AND LEFT(date, 7) = %s
@@ -339,8 +339,8 @@ def apply_recurring_incomes():
             """, (user_id, src_str, user_id, target_str))
             for row in cursor.fetchall():
                 cursor.execute(
-                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                    (str(uuid.uuid4()), row["name"], row["amount"], target_date, datetime.now().isoformat(), 1, user_id),
+                    "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id, credit_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (str(uuid.uuid4()), row["name"], row["amount"], target_date, datetime.now().isoformat(), 1, user_id, row["credit_type"]),
                 )
 
     conn.commit()
@@ -434,6 +434,12 @@ def _month_bounds(month: str):
     return f"{y}-{m:02d}-01", f"{end_y}-{end_m:02d}-01"
 
 
+def month_start(months_back: int) -> str:
+    today = date.today()
+    total = today.year * 12 + today.month - 1 - months_back
+    return f"{total // 12}-{total % 12 + 1:02d}-01"
+
+
 def _fast_totals_by_type(conn, month: str, user_id: str) -> dict:
     """SQL-aggregate totals per type for a past month — no row scanning in Python."""
     start, end = _month_bounds(month)
@@ -443,7 +449,17 @@ def _fast_totals_by_type(conn, month: str, user_id: str) -> dict:
         "WHERE user_id = %s AND date >= %s AND date < %s GROUP BY type",
         (user_id, start, end),
     )
-    return {r["type"]: round(r["total"], 2) for r in cursor.fetchall()}
+    totals = {r["type"]: round(r["total"], 2) for r in cursor.fetchall()}
+    cursor.execute(
+        "SELECT credit_type as type, SUM(amount) as total FROM incomes "
+        "WHERE user_id = %s AND date >= %s AND date < %s AND credit_type IS NOT NULL GROUP BY credit_type",
+        (user_id, start, end),
+    )
+    for r in cursor.fetchall():
+        t = r["type"]
+        if t in totals:
+            totals[t] = round(max(0.0, totals[t] - r["total"]), 2)
+    return totals
 
 
 def compute_budget_pacing(conn, month: str, lookback_months: int = 3, user_id: str = None) -> list:

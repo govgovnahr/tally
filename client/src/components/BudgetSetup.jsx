@@ -9,6 +9,7 @@ import api from '../api.js'
 import { useExpenseTypes } from '../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../expenseTypes.js'
 import { TallyLogo } from './TallyLogo.jsx'
+import { ErrorMsg } from './AlertBox.jsx'
 
 const FEATURES = [
   { icon: Receipt,   label: 'Expense Tracking', desc: 'Log and categorize spending with custom types' },
@@ -16,19 +17,6 @@ const FEATURES = [
   { icon: PiggyBank, label: 'Savings Goals',     desc: 'Monthly, one-time, and emergency fund tracking' },
   { icon: BarChart2, label: 'Spending Analysis', desc: 'Trends, outliers, and month-over-month breakdowns' },
 ]
-
-function ErrorMsg({ msg }) {
-  const C = useC()
-  if (!msg) return null
-  return (
-    <div
-      className="text-sm px-3 py-2 rounded-lg"
-      style={{ backgroundColor: `${C.overBudget}18`, border: `1px solid ${C.overBudget}40`, color: C.overBudget }}
-    >
-      {msg}
-    </div>
-  )
-}
 
 // ─── Welcome ────────────────────────────────────────────────────────────────
 

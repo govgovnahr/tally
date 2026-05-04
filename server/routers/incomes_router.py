@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from database import get_connection, seed_income_recurring_forward
+from database import get_connection, seed_income_recurring_forward, month_start
 from models import Income, NewIncome
 from auth import get_current_user
 
@@ -67,11 +67,10 @@ def get_income_monthly_totals(months: int = 6, user_id: str = Depends(get_curren
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT LEFT(date, 7) as month, SUM(amount) as total "
-        f"FROM incomes WHERE user_id = %s AND credit_type IS NULL "
-        f"AND date >= to_char(date_trunc('month', CURRENT_DATE - INTERVAL '{months - 1} months'), 'YYYY-MM-DD') "
-        f"GROUP BY month ORDER BY month ASC",
-        (user_id,),
+        "SELECT LEFT(date, 7) as month, SUM(amount) as total "
+        "FROM incomes WHERE user_id = %s AND credit_type IS NULL AND date >= %s "
+        "GROUP BY month ORDER BY month ASC",
+        (user_id, month_start(months - 1)),
     )
     rows = cursor.fetchall()
     conn.close()
@@ -101,7 +100,7 @@ def add_income(new_income: NewIncome, user_id: str = Depends(get_current_user)):
     conn.commit()
     conn.close()
     if income.is_recurring:
-        seed_income_recurring_forward(income.name, income.amount, income.date[:7], user_id)
+        seed_income_recurring_forward(income.name, income.amount, income.date[:7], user_id, income.credit_type)
     return vars(income)
 
 
@@ -122,7 +121,7 @@ def update_income(income_id: str, updated: NewIncome, user_id: str = Depends(get
     conn.commit()
     conn.close()
     if updated.is_recurring:
-        seed_income_recurring_forward(updated.name.strip(), round(updated.amount, 2), updated.date[:7], user_id)
+        seed_income_recurring_forward(updated.name.strip(), round(updated.amount, 2), updated.date[:7], user_id, updated.credit_type)
     return {"id": income_id, "name": updated.name.strip(), "amount": round(updated.amount, 2),
             "date": updated.date, "is_recurring": updated.is_recurring, "credit_type": updated.credit_type}
 

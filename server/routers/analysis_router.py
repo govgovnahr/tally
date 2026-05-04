@@ -33,7 +33,7 @@ def _effective_budgets_map(conn, month: str, user_id: str) -> dict:
                  for r in conn.execute(
                      "SELECT type, monthly_limit FROM monthly_budgets WHERE user_id = %s AND month = %s", (user_id, month)
                  ).fetchall()}
-    return overrides if overrides else defaults
+    return {**defaults, **overrides}
 
 
 @router.get("/analysis/pacing")
