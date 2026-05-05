@@ -129,7 +129,7 @@ function PacingSection({ month, onMonthChange, maxMonths = 12 }) {
   const isPast = data && !data.is_current_month && !isFuture
 
   return (
-    <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6">
+    <Card className="rounded-xl p-4 sm:p-6">
       <div className="flex items-start justify-between flex-wrap gap-4 mb-5">
         <div>
           <h2 className="text-base sm:text-lg font-semibold" style={{ color: C.warmText }}>Budget Pacing</h2>
@@ -263,7 +263,7 @@ function BudgetPerformanceSection({ months }) {
 
   return (
     <>
-    <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6 mt-4">
+    <Card className="rounded-xl p-4 sm:p-6 mt-4">
       <h2 className="text-base sm:text-lg font-semibold mb-0.5" style={{ color: C.warmText }}>Budget Performance</h2>
       <p className="text-sm mb-5" style={{ color: C.muted }}>Average monthly spend vs budget over the selected period</p>
 
@@ -544,8 +544,6 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
     <>
       <Card
         ref={sectionRef}
-        variant="glass"
-        blur="xl"
         className="rounded-xl p-4 sm:p-6 mt-4"
       >
         <div className="flex items-start justify-between gap-2 mb-0.5">
@@ -712,7 +710,7 @@ function MonthOverMonthSection({ months }) {
   const avgSpent = data.length > 0 ? data.reduce((s, d) => s + d.total_spent, 0) / data.length : 0
 
   return (
-    <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-6 mt-4 mb-4">
+    <Card className="rounded-xl p-4 sm:p-6 mt-4 mb-4">
       <h2 className="text-base sm:text-lg font-semibold mb-0.5" style={{ color: C.warmText }}>Monthly Trends</h2>
       <p className="text-sm mb-4" style={{ color: C.muted }}>Total spending, income, and net by month</p>
 

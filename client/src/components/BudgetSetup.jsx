@@ -268,8 +268,6 @@ export default function BudgetSetup({ onComplete }) {
       style={{ backgroundColor: 'var(--bg)' }}
     >
       <Card
-        variant="glass"
-        blur="xl"
         className="w-full max-w-[480px] rounded-2xl p-6 sm:p-8"
       >
         {/* Step progress */}

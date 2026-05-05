@@ -228,7 +228,7 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
     : C.primary
 
   return (
-    <Card variant="glass" blur="xl" className="rounded-xl overflow-hidden mb-4">
+    <Card className="rounded-xl overflow-hidden mb-4">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-3">
         <h2 className="text-base font-semibold" style={{ color: C.warmText }}>

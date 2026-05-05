@@ -76,21 +76,20 @@ def get_effective_range(months: int = Query(6), user_id: str = Depends(get_curre
     month_list = _month_range(months)
 
     today = date.today()
-    nm = today.month + 1
-    ny = today.year
-    if nm > 12:
-        nm = 1
-        ny += 1
-    next_month = f"{ny}-{nm:02d}"
 
     conn = get_connection()
     defaults = {r["type"]: r["monthly_limit"]
                 for r in conn.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s", (user_id,)).fetchall()}
-    has_next_overrides = conn.execute(
-        "SELECT 1 FROM monthly_budgets WHERE user_id = %s AND month = %s LIMIT 1", (user_id, next_month)
-    ).fetchone() is not None
-    if has_next_overrides:
-        month_list.append(next_month)
+    for i in range(1, 7):
+        nm = today.month + i
+        ny = today.year + (nm - 1) // 12
+        nm = ((nm - 1) % 12) + 1
+        future_m = f"{ny}-{nm:02d}"
+        has = conn.execute(
+            "SELECT 1 FROM monthly_budgets WHERE user_id = %s AND month = %s LIMIT 1", (user_id, future_m)
+        ).fetchone() is not None
+        if has and future_m not in month_list:
+            month_list.append(future_m)
 
     placeholders = ",".join(["%s"] * len(month_list))
     all_overrides = conn.execute(

@@ -17,12 +17,8 @@ function fmt(n) { return `$${n.toFixed(2)}` }
 
 function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, progress, progressColor }) {
   const C = useC()
-  // TODO(human): Replace the outer div below with a glasscn-ui Card.
-  // Use: <Card variant="glass" blur="xl" className="rounded-xl p-3.5 sm:p-5">
-  // Remove backgroundColor and border from the style prop — Card handles those.
-  // Keep all inner content exactly as-is.
   return (
-    <Card variant="glass" blur="xl" className='rounded-xl p-3.5 sm:p-5' style={{ minHeight: '6rem' }}>
+    <Card className='rounded-xl p-3.5 sm:p-5' style={{ minHeight: '6rem' }}>
       <p className="text-[11px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.muted }}>
         {label}
       </p>
@@ -199,7 +195,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
       {/* Donut + Budget Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 items-start">
         {/* Left: Spending Donut */}
-        <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-5">
+        <Card className="rounded-xl p-4 sm:p-5">
           <p className="text-[11px] font-semibold uppercase tracking-widest mb-4" style={{ color: C.muted }}>
             Spending Breakdown
           </p>
@@ -211,7 +207,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
         </Card>
 
         {/* Right: Goals + Budget Status */}
-        <Card variant="glass" blur="xl" className="rounded-xl p-4 sm:p-5">
+        <Card className="rounded-xl p-4 sm:p-5">
           {hasGoals && (
             <>
               <p className="text-[11px] font-semibold uppercase tracking-widest mb-4" style={{ color: C.muted }}>

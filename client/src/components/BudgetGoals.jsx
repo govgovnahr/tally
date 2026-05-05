@@ -213,7 +213,7 @@ function buildOverrideMonthOptions() {
   const now = new Date()
   let y = now.getFullYear(), m = now.getMonth() - 10
   while (m <= 0) { m += 12; y-- }
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 12; i++) {
     const key = `${y}-${String(m).padStart(2, '0')}`
     result.push({ key, label: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }) })
     if (++m > 12) { m = 1; y++ }
@@ -221,6 +221,26 @@ function buildOverrideMonthOptions() {
   return result
 }
 const OVERRIDE_MONTH_OPTIONS = buildOverrideMonthOptions()
+
+function addMonths(ym, n) {
+  const [y, m] = ym.split('-').map(Number)
+  const total = (y * 12 + m - 1) + n
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
+}
+
+function buildPlanMonthOptions() {
+  const cur = currentMonth()
+  return Array.from({ length: 12 }, (_, i) => {
+    const key = addMonths(cur, i)
+    const [y, m] = key.split('-').map(Number)
+    return {
+      key,
+      label: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      short: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short', year: '2-digit' }),
+    }
+  })
+}
+const PLAN_MONTH_OPTIONS = buildPlanMonthOptions()
 
 function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
   const C = useC()
@@ -275,7 +295,7 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
     }).catch(() => {})
   }, [isNextMonth, avgMonths, excludeOutliers])
 
-  const otherMonths = overrideMonths.filter(m => m !== selectedMonth).sort((a, b) => b.localeCompare(a))
+  const otherMonths = overrideMonths.filter(m => m !== selectedMonth && m <= currentMonth()).sort((a, b) => b.localeCompare(a))
 
   function expandPastMonth(month) {
     if (expandedPastMonth === month) { setExpandedPastMonth(null); return }
@@ -325,10 +345,11 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
 
   return (
     <div>
-      <div className="h-px my-5" style={{ backgroundColor: C.hoverStrong }} />
-      <div className="flex items-center justify-between cursor-pointer select-none"
-        style={{ marginBottom: open ? 16 : 0 }}
-        onClick={() => setOpen(o => !o)}>
+      <div className="h-px" style={{ backgroundColor: C.hoverStrong }} />
+      <div className="flex items-center justify-between cursor-pointer select-none py-4 -mx-5 px-5 sm:-mx-7 sm:px-7 rounded-xl transition-colors duration-150"
+        onClick={() => setOpen(o => !o)}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hoverMed}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
         <div>
           <p className="text-sm font-semibold" style={{ color: C.warmText }}>Monthly Overrides</p>
           <p className="text-sm" style={{ color: C.muted }}>Override budget limits for any month.</p>
@@ -542,6 +563,240 @@ function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
   )
 }
 
+// ─── Budget Plan ──────────────────────────────────────────────────────────────
+
+function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onAnalysis }) {
+  const C = useC()
+  const [open, setOpen] = useState(false)
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const [planLimits, setPlanLimits] = useState({})
+  const [existingOverrides, setExistingOverrides] = useState(new Set())
+  const [catStats, setCatStats] = useState({})
+  const [prevGoals, setPrevGoals] = useState({})
+  const [avgMonths, setAvgMonths] = useState(3)
+  const [excludeOutliers, setExcludeOutliers] = useState(false)
+  const [plannedMonths, setPlannedMonths] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  useEffect(() => {
+    api.get('/budgets/monthly-overrides').then(r => setPlannedMonths(r.data)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setSaved(false)
+    const prevMonth = addMonths(selectedMonth, -1)
+    Promise.all([
+      api.get('/budgets/monthly-overrides', { params: { month: selectedMonth } }),
+      api.get('/budgets/effective', { params: { month: prevMonth } }),
+    ]).then(([overridesRes, goalsRes]) => {
+      const overrides = Object.fromEntries(overridesRes.data.map(b => [b.type, b.monthly_limit]))
+      setExistingOverrides(new Set(Object.keys(overrides)))
+      const merged = {}
+      expenseTypes.forEach(t => {
+        merged[t.name] = t.name in overrides ? String(overrides[t.name]) : (defaultLimits[t.name] ?? '')
+      })
+      setPlanLimits(merged)
+      const goalsMap = {}
+      goalsRes.data.forEach(b => { goalsMap[b.type] = b.monthly_limit })
+      setPrevGoals(goalsMap)
+    }).catch(() => {})
+  }, [expenseTypes, selectedMonth, defaultLimits])
+
+  useEffect(() => {
+    api.get('/analysis/category-stats', { params: { months: avgMonths, exclude_outliers: excludeOutliers } })
+      .then(r => {
+        const map = {}
+        r.data.forEach(s => { map[s.type] = { avg: s.avg_monthly, lastSpend: s.last_month } })
+        setCatStats(map)
+      }).catch(() => {})
+  }, [avgMonths, excludeOutliers])
+
+  async function handleSave() {
+    const budgets = expenseTypes
+      .filter(t => planLimits[t.name] !== '' && Number(planLimits[t.name]) >= 0)
+      .map(t => ({ type: t.name, monthly_limit: parseFloat(planLimits[t.name]) }))
+    if (budgets.length === 0) { setSaveError('Enter at least one budget limit.'); return }
+    setSaving(true); setSaveError('')
+    try {
+      await api.post('/budgets/monthly-overrides', { month: selectedMonth, budgets })
+      // TODO(human): if a category previously had a saved override (existingOverrides)
+      // but its input is now empty, delete that override so the DB stays in sync.
+      // The delete endpoint is: DELETE /budgets/monthly-overrides/{month}/{typeName}
+      // api.delete(`/budgets/monthly-overrides/${selectedMonth}/${encodeURIComponent(typeName)}`)
+      setSaved(true)
+      setExistingOverrides(new Set(budgets.map(b => b.type)))
+      setPlannedMonths(prev => prev.includes(selectedMonth) ? prev : [...prev, selectedMonth])
+      onChanged?.()
+    } catch { setSaveError('Failed to save. Please try again.') }
+    finally { setSaving(false) }
+  }
+
+  const isPillMonth = PLAN_MONTH_OPTIONS.slice(0, 3).some(o => o.key === selectedMonth)
+  const selectedLabel = PLAN_MONTH_OPTIONS.find(o => o.key === selectedMonth)?.label ?? ''
+
+  return (
+    <div>
+      <div className="h-px" style={{ backgroundColor: C.hoverStrong }} />
+      <div className="flex items-center justify-between cursor-pointer select-none py-4 -mx-5 px-5 sm:-mx-7 sm:px-7 rounded-xl transition-colors duration-150"
+        onClick={() => setOpen(o => !o)}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hoverMed}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: C.warmText }}>Plan</p>
+          <p className="text-sm" style={{ color: C.muted }}>Set budget limits for current and upcoming months.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {plannedMonths.length > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: C.hoverStrong, color: C.muted }}>
+              {plannedMonths.length} month{plannedMonths.length !== 1 ? 's' : ''} planned
+            </span>
+          )}
+          <button type="button" className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
+            {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: open ? '9999px' : '0px' }}>
+        <div className="flex flex-col gap-4">
+
+          {/* Month selector + controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {PLAN_MONTH_OPTIONS.slice(0, 3).map(({ key, short }) => {
+              const isSelected = key === selectedMonth
+              const hasplan = plannedMonths.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedMonth(key)}
+                  className="h-8 px-3 rounded-lg text-sm font-medium transition-colors duration-150 flex items-center gap-1.5 border-none cursor-pointer"
+                  style={{
+                    backgroundColor: isSelected ? C.primary : C.hoverStrong,
+                    color: isSelected ? 'white' : C.warmText,
+                  }}
+                >
+                  {hasplan && !isSelected && (
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: C.primary, display: 'inline-block', flexShrink: 0 }} />
+                  )}
+                  {short}
+                </button>
+              )
+            })}
+            <select
+              value={isPillMonth ? '' : selectedMonth}
+              onChange={e => { if (e.target.value) setSelectedMonth(e.target.value) }}
+              className="h-8 rounded-lg border px-3 text-sm bg-transparent"
+              style={{
+                borderColor: isPillMonth ? C.borderLight : C.primary,
+                color: isPillMonth ? C.muted : C.warmText,
+                minWidth: 160,
+              }}
+            >
+              <option value="">{isPillMonth ? 'More months…' : selectedLabel}</option>
+              {PLAN_MONTH_OPTIONS.slice(3).map(({ key, label }) => (
+                <option key={key} value={key}>
+                  {plannedMonths.includes(key) ? '● ' : ''}{label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={avgMonths}
+              onChange={e => setAvgMonths(Number(e.target.value))}
+              className="h-8 rounded-lg border px-3 text-sm bg-transparent"
+              style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 110 }}
+            >
+              {[3, 6, 9, 12].map(n => <option key={n} value={n}>{n}-mo avg</option>)}
+            </select>
+            <label className="flex items-center gap-2 cursor-pointer select-none text-sm" style={{ color: C.muted }}>
+              <div
+                onClick={() => setExcludeOutliers(v => !v)}
+                className="relative w-9 h-5 rounded-full cursor-pointer transition-colors duration-200 flex-shrink-0"
+                style={{ backgroundColor: excludeOutliers ? C.primary : C.hoverStrong }}
+              >
+                <div className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200"
+                  style={{ left: excludeOutliers ? '18px' : '2px' }} />
+              </div>
+              Exclude outliers
+            </label>
+          </div>
+
+          {/* Category cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {expenseTypes.map(t => {
+              const IconComp = ICON_REGISTRY[t.icon]
+              const tColor = C.adaptColor(t.color)
+              const stats = catStats[t.name]
+              const hasOverride = existingOverrides.has(t.name)
+              const statItems = [
+                { label: `${avgMonths}-mo avg`, value: stats?.avg != null ? `$${stats.avg.toFixed(0)}` : '—' },
+                { label: 'Prev. goal', value: prevGoals[t.name] != null ? `$${Number(prevGoals[t.name]).toFixed(0)}` : '—' },
+                { label: 'Prev. spending', value: stats?.lastSpend != null ? `$${stats.lastSpend.toFixed(0)}` : '—' },
+              ]
+              return (
+                <div
+                  key={t.id}
+                  className="rounded-xl overflow-hidden flex flex-col"
+                  style={{ backgroundColor: `${tColor}09`, border: `1px solid ${tColor}28` }}
+                >
+                  {/* Icon + name + planned badge + analysis */}
+                  <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
+                    {IconComp && <IconComp style={{ fontSize: 16, color: tColor, flexShrink: 0 }} />}
+                    <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: C.warmText }}>{t.name}</span>
+                    {hasOverride && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: `${C.primary}22`, color: C.primary }}>planned</span>
+                    )}
+                    <IconButton title="View analysis" onClick={() => onAnalysis({ name: t.name, color: t.color, icon: t.icon })}>
+                      <BarChart2 size={13} />
+                    </IconButton>
+                  </div>
+                  {/* Budget input */}
+                  <div className="px-3 pb-2">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
+                      <Input
+                        type="number"
+                        placeholder="No limit"
+                        value={planLimits[t.name] ?? ''}
+                        onChange={e => { setPlanLimits(prev => ({ ...prev, [t.name]: e.target.value })); setSaved(false) }}
+                        className="pl-7 text-right h-9 text-sm w-full"
+                        min="0"
+                        step="1"
+                      />
+                    </div>
+                  </div>
+                  {/* Stats */}
+                  <div className="flex gap-4 flex-wrap px-3 py-2 mt-auto" style={{ borderTop: `1px solid ${tColor}20` }}>
+                    {statItems.map(({ label, value }) => (
+                      <div key={label} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] leading-none" style={{ color: C.dimText }}>{label}</span>
+                        <span className="text-sm font-semibold" style={{ color: C.warmText }}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {saveError && <AlertBox severity="error">{saveError}</AlertBox>}
+
+          <div className="flex items-center justify-end gap-3">
+            {saved && <span className="text-sm" style={{ color: C.primary }}>Saved!</span>}
+            <Button onClick={handleSave} disabled={saving} className="font-semibold">
+              {saving ? 'Saving…' : `Save Plan for ${selectedLabel}`}
+            </Button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Macrocategory Manager ────────────────────────────────────────────────────
 
 function MacrocategoryManager() {
@@ -581,10 +836,11 @@ function MacrocategoryManager() {
 
   return (
     <div>
-      <div className="h-px my-5" style={{ backgroundColor: C.hoverStrong }} />
-      <div className="flex items-center justify-between cursor-pointer select-none"
-        style={{ marginBottom: open ? 16 : 0 }}
-        onClick={() => setOpen(o => !o)}>
+      <div className="h-px" style={{ backgroundColor: C.hoverStrong }} />
+      <div className="flex items-center justify-between cursor-pointer select-none py-4 -mx-5 px-5 sm:-mx-7 sm:px-7 rounded-xl transition-colors duration-150"
+        onClick={() => setOpen(o => !o)}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hoverMed}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
         <div>
           <p className="text-sm font-semibold" style={{ color: C.warmText }}>Macrocategories</p>
           <p className="text-sm" style={{ color: C.muted }}>Group categories into larger buckets.</p>
@@ -602,7 +858,7 @@ function MacrocategoryManager() {
       </div>
 
       <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: open ? '9999px' : '0px' }}>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 pb-5 sm:pb-7">
           {macrocategories.map(m => editTarget?.id === m.id ? (
             <div key={m.id} className="flex items-center gap-3 flex-wrap px-3 py-2 rounded-xl"
               style={{ border: `1px solid ${m.color}`, backgroundColor: C.subtleBg }}>
@@ -739,88 +995,73 @@ export default function BudgetGoals() {
     const IconComp = ICON_REGISTRY[t.icon]
     const tColor = C.adaptColor(t.color)
     const hasOverride = currentOverrides[t.name] != null
-    const inputField = (
-      <div className="relative flex-shrink-0 w-32">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
-        <Input
-          type="number"
-          placeholder="No limit"
-          value={limits[t.name] ?? ''}
-          onChange={e => handleLimitChange(t.name, e.target.value)}
-          className="pl-7 text-right h-8 text-sm"
-          min="0"
-          step="0.01"
-        />
-      </div>
-    )
-    const overrideLabel = hasOverride ? (
-      <span className="text-xs flex-shrink-0 whitespace-nowrap" style={{ color: C.muted }}>
-        <span style={{ color: C.primary }}>{currentMonthShort} Override: ${Number(currentOverrides[t.name]).toFixed(0)}</span>
-        {limits[t.name] && ` | Default: $${parseFloat(limits[t.name]).toFixed(0)}`}
-      </span>
-    ) : null
 
     return (
       <div
         key={t.id}
-        className="rounded-xl px-3 py-2 transition-colors duration-150"
-        style={{ border: `1px solid ${C.hoverStrong}` }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = `${tColor}14`}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+        className="rounded-xl flex flex-col"
+        style={{ backgroundColor: `${tColor}09`, border: `1px solid ${tColor}28` }}
       >
-        {/* Desktop */}
-        <div className="hidden sm:flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tColor }} />
-          {IconComp && <IconComp style={{ fontSize: 18, color: tColor, flexShrink: 0 }} />}
+        {/* Header: icon + name + actions */}
+        <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
+          {IconComp && <IconComp style={{ fontSize: 16, color: tColor, flexShrink: 0 }} />}
           <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: C.warmText }}>{t.name}</span>
-          {overrideLabel}
-          {macrocategories.length > 0 && (
+          <div className="flex items-center gap-0 flex-shrink-0">
+            <IconButton title="View analysis" onClick={() => setAnalysisCategory({ name: t.name, color: t.color, icon: t.icon })}>
+              <BarChart2 size={13} />
+            </IconButton>
+            <IconButton title="Edit category" onClick={() => { setEditTarget(t); setFormOpen(true) }}>
+              <Pencil size={13} />
+            </IconButton>
+            {t.name !== 'Other' && (
+              <IconButton title="Delete category" onClick={() => setDeleteTarget(t)} hoverColor={C.overBudget}>
+                <Trash2 size={13} />
+              </IconButton>
+            )}
+          </div>
+        </div>
+
+        {/* Macrocategory selector */}
+        {macrocategories.length > 0 && (
+          <div className="px-3 pb-1.5">
             <select
               value={t.macrocategory_id ?? ''}
               onChange={async e => {
                 await api.put(`/expense-types/${t.id}`, { name: t.name, color: t.color, icon: t.icon, macrocategory_id: e.target.value || null })
                 await reloadTypes()
               }}
-              className="h-8 rounded-lg border px-2 text-xs bg-transparent flex-shrink-0"
-              style={{ borderColor: C.borderLight, color: C.muted, minWidth: 120 }}
+              className="w-full h-7 rounded-lg border px-2 text-xs bg-transparent"
+              style={{ borderColor: C.borderLight, color: C.muted }}
             >
               <option value="">— No group —</option>
               {macrocategories.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
-          )}
-          {inputField}
-          <IconButton title="View analysis" onClick={() => setAnalysisCategory({ name: t.name, color: t.color, icon: t.icon })} className="p-1">
-            <BarChart2 size={14} />
-          </IconButton>
-          <IconButton title="Edit category" onClick={() => { setEditTarget(t); setFormOpen(true) }} className="p-1">
-            <Pencil size={14} />
-          </IconButton>
-          {t.name !== 'Other' && (
-            <IconButton title="Delete category" onClick={() => setDeleteTarget(t)} className="p-1" hoverColor={C.overBudget}>
-              <Trash2 size={14} />
-            </IconButton>
-          )}
-        </div>
-        {/* Mobile */}
-        <div className="sm:hidden">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tColor }} />
-            {IconComp && <IconComp style={{ fontSize: 18, color: tColor, flexShrink: 0 }} />}
-            <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: C.warmText }}>{t.name}</span>
-            <button type="button" onClick={() => { setEditTarget(t); setFormOpen(true) }}
-              className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
-              <Pencil size={14} />
-            </button>
-            {t.name !== 'Other' && (
-              <button type="button" onClick={() => setDeleteTarget(t)}
-                className="p-1 rounded-lg bg-transparent border-none cursor-pointer" style={{ color: C.muted }}>
-                <Trash2 size={14} />
-              </button>
-            )}
           </div>
-          <div className="flex items-center justify-between gap-2 mt-2">
-            {inputField}
-            {overrideLabel}
+        )}
+
+        {/* Current month override badge */}
+        {hasOverride && (
+          <div className="px-3 pb-1">
+            <span className="text-[10px]" style={{ color: C.primary }}>
+              {currentMonthShort}: ${Number(currentOverrides[t.name]).toFixed(0)}
+              {limits[t.name] && <span style={{ color: C.dimText }}> / default ${parseFloat(limits[t.name]).toFixed(0)}</span>}
+            </span>
+          </div>
+        )}
+
+        {/* Budget input */}
+        <div className="px-3 pb-2.5">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: C.muted }}>$</span>
+            <Input
+              type="number"
+              placeholder="No limit"
+              value={limits[t.name] ?? ''}
+              onChange={e => handleLimitChange(t.name, e.target.value)}
+              className="pl-7 text-right h-9 text-sm w-full"
+              min="0"
+              step="0.01"
+            />
           </div>
         </div>
       </div>
@@ -829,7 +1070,7 @@ export default function BudgetGoals() {
 
   function renderGrouped() {
     if (macrocategories.length === 0) return (
-      <div className="flex flex-col gap-1.5 mb-4">{expenseTypes.map(renderRow)}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">{expenseTypes.map(renderRow)}</div>
     )
     const grouped = {}
     macrocategories.forEach(m => { grouped[m.id] = [] })
@@ -847,13 +1088,13 @@ export default function BudgetGoals() {
               <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>{m.name}</span>
               {m.budget_limit > 0 && <span className="text-xs" style={{ color: C.muted }}>— ${m.budget_limit.toFixed(0)} ceiling</span>}
             </div>
-            <div className="flex flex-col gap-1.5">{grouped[m.id].map(renderRow)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">{grouped[m.id].map(renderRow)}</div>
           </div>
         ))}
         {ungrouped.length > 0 && (
           <div className="mb-4">
             <span className="text-xs font-semibold uppercase tracking-widest mb-2 block" style={{ color: C.muted }}>Ungrouped</span>
-            <div className="flex flex-col gap-1.5">{ungrouped.map(renderRow)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">{ungrouped.map(renderRow)}</div>
           </div>
         )}
       </div>
@@ -861,7 +1102,7 @@ export default function BudgetGoals() {
   }
 
   return (
-    <Card variant="glass" blur="xl" className="rounded-xl p-5 sm:p-7">
+    <Card className="rounded-xl p-5 sm:p-7 pb-0 sm:pb-0">
       {/* Header */}
       <div className="flex items-start justify-between mb-2">
         <div>
@@ -882,8 +1123,10 @@ export default function BudgetGoals() {
 
       {/* Default limits */}
       <div
-        className="flex items-center justify-between cursor-pointer select-none py-4"
+        className="flex items-center justify-between cursor-pointer select-none py-4 -mx-5 px-5 sm:-mx-7 sm:px-7 rounded-xl transition-colors duration-150"
         onClick={() => setDefaultsOpen(o => !o)}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hoverMed}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         <div>
           <p className="text-sm font-semibold" style={{ color: C.warmText }}>Default Limits</p>
@@ -911,6 +1154,14 @@ export default function BudgetGoals() {
         )}
       </div>
 
+      <BudgetPlan expenseTypes={expenseTypes} defaultLimits={limits} onAnalysis={setAnalysisCategory} onChanged={() => {
+        setCurrentOverrides({})
+        api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
+          .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))
+          .catch(() => {})
+        queryClient.invalidateQueries({ queryKey: ['budgets'] })
+        queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      }} />
       <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} onChanged={() => {
         setCurrentOverrides({})
         api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })

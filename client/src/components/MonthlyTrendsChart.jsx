@@ -171,8 +171,6 @@ export default function MonthlyTrendsChart({ selectedMonth, activeType = 'All', 
 
   return (
     <Card
-      variant="glass"
-      blur="xl"
       className="rounded-2xl p-4 sm:p-6 mb-6"
     >
       <div className="flex items-center justify-between mb-4">

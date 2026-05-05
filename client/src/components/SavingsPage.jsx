@@ -73,7 +73,7 @@ function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
   const pct = goal.progress_pct
 
   return (
-    <Card variant="glass" blur="md" className="rounded-xl p-4 sm:p-5 mb-4" style={{
+    <Card className="rounded-xl p-4 sm:p-5 mb-4" style={{
       border: `1px solid ${cardColor}${C.cardBorderAlpha}`,
       opacity: goal.paused ? 0.65 : 1,
     }}>
@@ -109,7 +109,7 @@ function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onC
   const met = pct >= 100
 
   return (
-    <Card variant="glass" blur="md" className="rounded-xl p-4 sm:p-5" style={{
+    <Card className="rounded-xl p-4 sm:p-5" style={{
       border: `1px solid ${color}${C.cardBorderAlpha}`,
       opacity: goal.paused ? 0.65 : 1,
     }}>
@@ -173,7 +173,7 @@ function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPaus
   const met = pct >= 100
 
   return (
-    <Card variant="glass" blur="md" className="rounded-xl p-4 sm:p-5" style={{
+    <Card className="rounded-xl p-4 sm:p-5" style={{
       border: `1px solid ${color}${C.cardBorderAlpha}`,
       opacity: goal.paused ? 0.65 : 1,
     }}>
