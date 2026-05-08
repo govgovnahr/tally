@@ -130,7 +130,6 @@ def _infer_type(name: str, valid_types: list[str], rules: list[tuple] = []) -> s
                           "theater", "concert", "game", "steam", "xbox", "playstation"],
         "shopping": ["amazon", "walmart", "target", "costco", "store", "shop", "mall", "ebay"],
     }
-    name_lower = name.lower()
     for category, keywords in KEYWORDS.items():
         if any(kw in name_lower for kw in keywords):
             matched = _soft_match_type(category, valid_types)

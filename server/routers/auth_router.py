@@ -25,3 +25,55 @@ def me(user_id: str = Depends(get_current_user)):
     conn.commit()
     conn.close()
     return {"id": user_id}
+
+
+_CATEGORY_TABLES = {
+    "expenses":     (["expenses"], None),
+    "income":       (["incomes"], None),
+    "budgets":      (["monthly_budgets", "budgets"], None),
+    "savings":      (["savings_contributions", "savings_goals"], None),
+    "import-rules": (["import_rules"], None),
+    "categories":   (["expense_types"], "reseed"),
+    "groups":       (["macrocategories"], "nullify_macro"),
+}
+
+
+@router.delete("/data/{category}")
+def clear_category(category: str, user_id: str = Depends(get_current_user)):
+    if category not in _CATEGORY_TABLES:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Unknown category: {category}")
+    tables, special = _CATEGORY_TABLES[category]
+    conn = get_connection()
+    cursor = conn.cursor()
+    if special == "nullify_macro":
+        cursor.execute("UPDATE expense_types SET macrocategory_id = NULL WHERE user_id = %s", (user_id,))
+    for table in tables:
+        cursor.execute(f"DELETE FROM {table} WHERE user_id = %s", (user_id,))
+    if special == "reseed":
+        _seed_default_types(cursor, user_id)
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.delete("/data")
+def clear_all_data(user_id: str = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    for table in [
+        "savings_contributions",
+        "savings_goals",
+        "expenses",
+        "incomes",
+        "budgets",
+        "monthly_budgets",
+        "import_rules",
+        "expense_types",
+        "macrocategories",
+    ]:
+        cursor.execute(f"DELETE FROM {table} WHERE user_id = %s", (user_id,))
+    _seed_default_types(cursor, user_id)
+    conn.commit()
+    conn.close()
+    return {"ok": True}

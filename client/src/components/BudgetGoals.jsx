@@ -621,10 +621,11 @@ function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onAnalysis }) {
     setSaving(true); setSaveError('')
     try {
       await api.post('/budgets/monthly-overrides', { month: selectedMonth, budgets })
-      // TODO(human): if a category previously had a saved override (existingOverrides)
-      // but its input is now empty, delete that override so the DB stays in sync.
-      // The delete endpoint is: DELETE /budgets/monthly-overrides/{month}/{typeName}
-      // api.delete(`/budgets/monthly-overrides/${selectedMonth}/${encodeURIComponent(typeName)}`)
+      await Promise.all(
+        [...existingOverrides]
+          .filter(e => planLimits[e] === '')
+          .map(e => api.delete(`/budgets/monthly-overrides/${selectedMonth}/${encodeURIComponent(e)}`))
+      )
       setSaved(true)
       setExistingOverrides(new Set(budgets.map(b => b.type)))
       setPlannedMonths(prev => prev.includes(selectedMonth) ? prev : [...prev, selectedMonth])
@@ -1106,7 +1107,7 @@ export default function BudgetGoals() {
       {/* Header */}
       <div className="flex items-start justify-between mb-2">
         <div>
-          <h2 className="text-base font-semibold mb-0.5" style={{ color: C.warmText }}>Settings</h2>
+          <h2 className="text-base font-semibold mb-0.5" style={{ color: C.warmText }}>Budget Planning</h2>
           <p className="text-sm" style={{ color: C.muted }}>Manage spending categories and budget limits.</p>
         </div>
         <div className="flex gap-2 flex-wrap">

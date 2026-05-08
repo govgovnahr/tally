@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { LogOut, KeyRound, User, Upload } from 'lucide-react'
+import ClearAllDialog from './ClearAllDialog.jsx'
 import { supabase } from '../supabase.js'
 import { useC } from '../colors'
 import api from '../api.js'
@@ -191,7 +192,7 @@ export default function AccountPage({ user, onLogout }) {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setPwStatus(null); setCurrentPassword(''); setNewPassword(''); setConfirmPassword('') }}
+                onClick={() => { setShowForm(false); setPwStatus(null); setNewPassword(''); setConfirmPassword('') }}
                 style={{
                   padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`,
                   background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600,
@@ -294,6 +295,8 @@ export default function AccountPage({ user, onLogout }) {
           )}
         </DialogContent>
       </Dialog>
+
+      <ClearAllDialog/>
 
       {/* Sign out */}
       <div style={section}>
