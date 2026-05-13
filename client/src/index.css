@@ -130,45 +130,45 @@
 
 /* ─── Dark mode ──────────────────────────────────────────────────────────── */
 .dark {
-  /* shadcn/ui HSL tokens - dark (Tally dark earth palette) */
-  --background:            26 37% 7%;    /* #1A120C */
+  /* shadcn/ui HSL tokens - dark */
+  --background:            0 0% 5.9%;    /* #0F0F0F */
   --foreground:            33 37% 95%;   /* #F7F3EE cream */
-  --card:                  23 32% 11%;   /* #251A13 */
+  --card:                  0 0% 8.6%;   /* #161616 */
   --card-foreground:       33 37% 95%;
-  --popover:               23 32% 11%;
+  --popover:               0 0% 11.8%;  /* #1E1E1E */
   --popover-foreground:    33 37% 95%;
   --primary:               87 64% 37%;   /* #639922 fern */
   --primary-foreground:    100 48% 12%;  /* #1A2E10 */
-  --secondary:             23 32% 15%;
+  --secondary:             0 0% 11.8%;  /* #1E1E1E */
   --secondary-foreground:  33 37% 95%;
-  --muted:                 23 32% 18%;
+  --muted:                 0 0% 11.8%;  /* #1E1E1E */
   --muted-foreground:      18 20% 71%;   /* #C4AFA6 sand */
-  --accent:                23 32% 18%;
+  --accent:                0 0% 11.8%;  /* #1E1E1E */
   --accent-foreground:     33 37% 95%;
   --destructive:           10 54% 56%;   /* lighter terracotta */
-  --destructive-foreground:23 32% 11%;
-  --border:                23 32% 18%;
-  --input:                 23 32% 18%;
+  --destructive-foreground:0 0% 8.6%;   /* #161616 */
+  --border:                0 0% 16.5%;  /* #2A2A2A */
+  --input:                 0 0% 11.8%;  /* #1E1E1E */
   --ring:                  87 64% 37%;
 
   /* Our semantic tokens - dark */
-  --bg: #1A120C;
+  --bg: #0F0F0F;
   --c-primary:           #639922;
   --c-primary-hover:     #8BAF5A;
-  --c-surface:           #251A13;
-  --c-surface-alt:       #2D1F15;
+  --c-surface:           #161616;
+  --c-surface-alt:       #1E1E1E;
   --c-subtle-bg:         rgba(99,153,34,0.04);
-  --c-border:            rgba(61,45,34,0.9);
-  --c-border-subtle:     rgba(61,45,34,0.6);
-  --c-border-light:      #3D2D22;
-  --c-border-med:        #3D2D22;
-  --c-border-strong:     #5C4535;
-  --c-border-hover:      #7A5C48;
-  --c-hover:             rgba(196,175,166,0.05);
-  --c-hover-med:         rgba(196,175,166,0.08);
-  --c-hover-strong:      rgba(196,175,166,0.12);
+  --c-border:            rgba(255,255,255,0.07);
+  --c-border-subtle:     rgba(255,255,255,0.04);
+  --c-border-light:      #2A2A2A;
+  --c-border-med:        #2A2A2A;
+  --c-border-strong:     #383838;
+  --c-border-hover:      #4A4A4A;
+  --c-hover:             rgba(255,255,255,0.04);
+  --c-hover-med:         rgba(255,255,255,0.07);
+  --c-hover-strong:      rgba(255,255,255,0.11);
   --c-warm-text:         #F7F3EE;
-  --c-dim-text:          #7A5C48;
+  --c-dim-text:          rgba(240,235,227,0.35);
   --c-muted:             #C4AFA6;
   --c-income:            #97C459;
   --c-spent:             #8BAF5A;
@@ -260,7 +260,7 @@ body {
   background-color: #F7F3EE !important;
 }
 .dark .dark\:bg-gray-950\/50 {
-  background-color: #251A13 !important;
+  background-color: #161616 !important;
 }
 [class*="backdrop-blur"] {
   backdrop-filter: none !important;

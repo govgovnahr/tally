@@ -84,10 +84,10 @@
 @media (prefers-color-scheme: dark) {
   :root {
     /* App surfaces */
-    --surface-page:       #1A120C;
-    --surface-card:       #251A13;
-    --surface-nav:        #160E08;
-    --surface-input:      #2D1F15;
+    --surface-page:       #0F0F0F;
+    --surface-card:       #161616;
+    --surface-nav:        #0A0A0A;
+    --surface-input:      #1E1E1E;
 
     /* Text */
     --text-primary:       #F7F3EE;
@@ -100,9 +100,9 @@
     --text-warning:       #E8A838;
 
     /* Borders */
-    --border-default:     #3D2D22;
-    --border-subtle:      #2D1F15;
-    --border-strong:      #5C4535;
+    --border-default:     #2A2A2A;
+    --border-subtle:      #2A2A2A;
+    --border-strong:      #383838;
 
     /* Semantic status — dark mode */
     --color-on-track-bg:      #1A2E10;
@@ -135,10 +135,10 @@
 
 /* ── Tally class also supports [data-theme="dark"] for manual toggle ── */
 [data-theme="dark"] {
-  --surface-page:       #1A120C;
-  --surface-card:       #251A13;
-  --surface-nav:        #160E08;
-  --surface-input:      #2D1F15;
+  --surface-page:       #0F0F0F;
+  --surface-card:       #161616;
+  --surface-nav:        #0A0A0A;
+  --surface-input:      #1E1E1E;
   --text-primary:       #F7F3EE;
   --text-secondary:     #C4AFA6;
   --text-tertiary:      #7A5C48;
@@ -147,9 +147,9 @@
   --text-income:        #97C459;
   --text-expense:       #E08070;
   --text-warning:       #E8A838;
-  --border-default:     #3D2D22;
-  --border-subtle:      #2D1F15;
-  --border-strong:      #5C4535;
+  --border-default:     #2A2A2A;
+  --border-subtle:      #2A2A2A;
+  --border-strong:      #383838;
   --color-on-track-bg:      #1A2E10;
   --color-on-track-text:    #C0DD97;
   --color-on-track-border:  #3B6D11;

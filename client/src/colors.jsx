@@ -18,11 +18,11 @@ export const palette = {
 
   // Dark mode surfaces
   dark: {
-    bg:            '#1A120C',
-    paper:         '#251A13',
-    elevated:      '#2D1F15',
-    text:          '#F7F3EE',
-    textSecondary: 'rgba(247,243,238,0.5)',
+    bg:            '#0F0F0F',
+    paper:         '#161616',
+    elevated:      '#1E1E1E',
+    text:          '#F0EBE3',
+    textSecondary: 'rgba(240,235,227,0.5)',
   },
 
   // Light mode surfaces
@@ -123,7 +123,7 @@ function makeDarkC() {
 
     // Text / labels
     warmText:  '#F7F3EE',
-    dimText:   '#7A5C48',
+    dimText:   'rgba(240,235,227,0.35)',
     tickLight: '#8BAF5A',
     muted:     '#C4AFA6',
 
@@ -133,26 +133,26 @@ function makeDarkC() {
     cardBorderAlpha:       '32',
 
     // Surfaces & borders
-    surface:      '#251A13',
-    surfaceAlt:   '#2D1F15',
-    surfacePopup: '#251A13',
+    surface:      '#161616',
+    surfaceAlt:   '#1E1E1E',
+    surfacePopup: '#1E1E1E',
     subtleBg:     'rgba(99,153,34,0.04)',
-    border:       'rgba(61,45,34,0.9)',
-    borderSubtle: 'rgba(61,45,34,0.6)',
-    borderLight:  '#3D2D22',
-    borderMed:    '#3D2D22',
-    borderStrong: '#5C4535',
-    borderHover:  '#7A5C48',
+    border:       'rgba(255,255,255,0.07)',
+    borderSubtle: 'rgba(255,255,255,0.04)',
+    borderLight:  '#2A2A2A',
+    borderMed:    '#2A2A2A',
+    borderStrong: '#383838',
+    borderHover:  '#4A4A4A',
     refLine:      'rgba(99,153,34,0.15)',
     gridLine:     'rgba(99,153,34,0.06)',
-    hover:        'rgba(196,175,166,0.05)',
-    hoverMed:     'rgba(196,175,166,0.08)',
-    hoverStrong:  'rgba(196,175,166,0.12)',
+    hover:        'rgba(255,255,255,0.04)',
+    hoverMed:     'rgba(255,255,255,0.07)',
+    hoverStrong:  'rgba(255,255,255,0.11)',
     adaptColor:   hex => hex,
 
     // Nav
-    nav:     '#160E08',
-    navText: '#F7F3EE',
+    nav:     '#0A0A0A',
+    navText: '#F0EBE3',
   }
 }
 

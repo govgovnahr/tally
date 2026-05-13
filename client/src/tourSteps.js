@@ -1,0 +1,193 @@
+// ─── Basic Tour ────────────────────────────────────────────────────────────────
+// 7-step overview fired automatically after first BudgetSetup is skipped
+export const BASIC_TOUR = [
+  {
+    id: 'welcome',
+    targetPage: null,
+    targetSelector: null,
+    title: 'Welcome to Tally',
+    body: "Let's take a quick tour to show you the key features. You can skip at any time.",
+    placement: 'center',
+  },
+  {
+    id: 'nav',
+    targetPage: 'home',
+    targetSelector: '[data-tour="nav"]',
+    title: 'Navigation',
+    body: 'Switch between Overview, Analysis, Savings, Budgets, and Expenses from here.',
+    placement: 'bottom',
+  },
+  {
+    id: 'summary-bar',
+    targetPage: 'home',
+    targetSelector: '[data-tour="summary-bar"]',
+    title: 'Your Overview',
+    body: 'Track spending vs budget, income, burn rate, and savings rate for any month at a glance.',
+    placement: 'bottom',
+  },
+  {
+    id: 'add-expense',
+    targetPage: 'home',
+    targetSelector: '[data-tour="add-expense"]',
+    title: 'Track Spending',
+    body: 'Add expenses here. Categorize them by type — Tally uses these to power your budgets and analysis.',
+    placement: 'top',
+  },
+  {
+    id: 'budget-goals',
+    targetPage: 'budgets',
+    targetSelector: '[data-tour="budget-list"]',
+    title: 'Budget Goals',
+    body: "Set monthly limits per spending category. Tally projects whether you'll stay on track for the rest of the month.",
+    placement: 'top',
+  },
+  {
+    id: 'analysis',
+    targetPage: 'analysis',
+    targetSelector: '[data-tour="pacing-section"]',
+    title: 'Spending Analysis',
+    body: 'See budget pacing, spending trends, outliers, and month-over-month comparisons across all your categories.',
+    placement: 'bottom',
+  },
+  {
+    id: 'savings',
+    targetPage: 'savings',
+    targetSelector: '[data-tour="goals-list"]',
+    title: 'Savings Goals',
+    body: 'Create one-time or monthly savings goals, track contributions, and see projected completion dates.',
+    placement: 'top',
+  },
+]
+
+// ─── Onboarding Tour ──────────────────────────────────────────────────────────
+// Interactive walkthrough for new users: budgets → expenses → savings
+export const ONBOARDING_TOUR = [
+  {
+    id: 'ob-welcome',
+    targetPage: null,
+    targetSelector: null,
+    title: "Let's get you set up",
+    body: "We'll walk through setting budget limits, logging expenses, and tracking savings. Takes about 3 minutes.",
+    placement: 'center',
+  },
+  {
+    id: 'ob-budgets',
+    targetPage: 'budgets',
+    targetSelector: '[data-tour="budget-list"]',
+    title: 'Set budget limits',
+    body: 'Enter a monthly limit for each spending category under Default Limits, then hit Save Changes. These tell Tally how much you plan to spend per category each month.',
+    placement: 'top',
+    ctaLabel: 'Saved, continue →',
+  },
+  {
+    id: 'ob-add-expense',
+    targetPage: 'home',
+    targetSelector: '[data-tour="add-expense"]',
+    watchFor: '[data-tour="add-expense-modal"]',
+    title: 'Log your first expense',
+    body: 'Click Add Expense and enter a recent purchase. Pick a category — this is how Tally maps spending to your budget limits.',
+    placement: 'top',
+    ctaLabel: 'Done, continue →',
+  },
+  {
+    id: 'ob-recurring',
+    targetPage: null,
+    targetSelector: null,
+    title: 'Mark recurring expenses',
+    body: "Check 'Recurring monthly expense' when adding rent, subscriptions, or any fixed monthly bill. Tally uses these in projections and separates fixed from variable spending in your analysis. It'll also automatically log the recurring expense every month.",
+    placement: 'center',
+  },
+  {
+    id: 'ob-savings',
+    targetPage: 'savings',
+    targetSelector: '[data-tour="goals-list"]',
+    title: 'Create a savings goal',
+    body: "Set a one-time or monthly savings target — like an emergency fund or vacation. Tally projects when you'll reach it based on your monthly contributions.",
+    placement: 'top',
+    ctaLabel: 'Got it, continue →',
+  },
+  {
+    id: 'ob-savings-contrib',
+    targetPage: 'savings',
+    targetSelector: '[data-tour="goals-list"]',
+    title: 'Log contributions',
+    body: 'Click any goal to open it, then use the + button to record a contribution. Each contribution creates a linked Savings expense — your budget and savings stay in sync automatically.',
+    placement: 'top',
+    ctaLabel: 'Got it, continue →',
+  },
+  {
+    id: 'ob-done',
+    targetPage: null,
+    targetSelector: null,
+    title: "You're all set",
+    body: "Log expenses regularly and Tally will project your month-end spend, flag over-budget categories, and track progress toward your savings goals.",
+    placement: 'center',
+  },
+]
+
+// ─── Advanced Tour ────────────────────────────────────────────────────────────
+// Deep-dive into projections, overrides, budget plans, and CSV import
+export const ADVANCED_TOUR = [
+  {
+    id: 'adv-welcome',
+    targetPage: null,
+    targetSelector: null,
+    title: 'Advanced Features',
+    body: "This tour covers budget plans, monthly overrides, how Tally's projections work, and bulk importing from CSV.",
+    placement: 'center',
+  },
+  {
+    id: 'adv-budget-plan',
+    targetPage: 'budgets',
+    targetSelector: '[data-tour="budget-plan"]',
+    title: 'Budget Plan',
+    body: 'Set a planned total budget for a specific month — useful for holidays, travel, or any month where your usual limits need a blanket adjustment.',
+    placement: 'top',
+  },
+  {
+    id: 'adv-overrides',
+    targetPage: 'budgets',
+    targetSelector: '[data-tour="monthly-overrides"]',
+    title: 'Monthly Overrides',
+    body: 'Fine-tune individual category limits for a single month without affecting your default limits. Great for one-off higher grocery months or a big utility bill.',
+    placement: 'top',
+  },
+  {
+    id: 'adv-pacing',
+    targetPage: 'analysis',
+    targetSelector: '[data-tour="pacing-section"]',
+    title: 'Budget Pacing',
+    body: 'For the current month, Tally projects your end-of-month spend using your historical daily spend rate × remaining days. Past months show actual spend; future months are empty.',
+    placement: 'bottom',
+  },
+  {
+    id: 'adv-projections-detail',
+    targetPage: null,
+    targetSelector: null,
+    title: 'How projections work',
+    body: 'Projected spend = actual spend so far + (total spent in past N months ÷ total days in those months) × days left this month. The two-tone bar shows actual (solid) vs projected extension (faded). Status turns red when the projection exceeds your limit — not just current spend.',
+    placement: 'center',
+  },
+  {
+    id: 'adv-import-categories',
+    targetPage: 'budgets',
+    targetSelector: '[data-tour="import-categories-btn"]',
+    title: 'Import categories first',
+    body: "If you're migrating from another budgeting app, import your categories here before importing expenses. Tally uses your existing category names to auto-suggest types during expense import — the more categories you have set up, the better the matching.",
+    placement: 'bottom',
+  },
+  {
+    id: 'adv-import-expenses',
+    targetPage: 'all-expenses',
+    targetSelector: '[data-tour="import-btn"]',
+    title: 'Import expenses from CSV',
+    body: 'Bulk-import transactions from a bank or credit card export. Tally maps columns to date, amount, and description, then auto-suggests a category for each row based on your existing categories and past entries.',
+    placement: 'top',
+  },
+]
+
+export const TOURS = {
+  basic: BASIC_TOUR,
+  onboarding: ONBOARDING_TOUR,
+  advanced: ADVANCED_TOUR,
+}

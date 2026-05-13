@@ -1,21 +1,22 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
-import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle } from 'lucide-react'
+import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle, HelpCircle } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { TallyLogo } from './components/TallyLogo.jsx'
+import { TallyLogo } from './components/ui/TallyLogo.jsx'
 import api from './api.js'
 import { supabase } from './supabase.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
+import { TutorialProvider, useTutorial } from './TutorialContext.jsx'
 import { ColorsProvider, useC } from './colors'
 import { qk } from './queryKeys.js'
-import ExpenseList from './components/ExpenseList.jsx'
-import BudgetSetup from './components/BudgetSetup.jsx'
-import DashboardPage from './components/DashboardPage.jsx'
-import AuthPage from './components/AuthPage.jsx'
+import ExpenseList from './components/pages/ExpenseList.jsx'
+import BudgetSetup from './components/pages/BudgetSetup.jsx'
+import DashboardPage from './components/pages/DashboardPage.jsx'
+import AuthPage from './components/pages/AuthPage.jsx'
 
-const BudgetGoals  = lazy(() => import('./components/BudgetGoals.jsx'))
-const SavingsPage  = lazy(() => import('./components/SavingsPage.jsx'))
-const AnalysisPage = lazy(() => import('./components/AnalysisPage.jsx'))
-const AccountPage  = lazy(() => import('./components/AccountPage.jsx'))
+const BudgetGoals  = lazy(() => import('./components/pages/BudgetGoals.jsx'))
+const SavingsPage  = lazy(() => import('./components/pages/SavingsPage.jsx'))
+const AnalysisPage = lazy(() => import('./components/pages/AnalysisPage.jsx'))
+const AccountPage  = lazy(() => import('./components/pages/AccountPage.jsx'))
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -32,7 +33,9 @@ const NAV_ITEMS = [
 function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
+  const { registerNavigate, trackPage, start: startTour } = useTutorial()
   const [page, setPage] = useState('home')
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [outlierMonth, setOutlierMonth] = useState(null)
   const [initialExpenseType, setInitialExpenseType] = useState(null)
@@ -45,6 +48,19 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
     staleTime: 5 * 60_000,
   })
   const budgetsReady = budgetsData ? budgetsData.length > 0 : null
+
+  // Give the tutorial context access to navigation and track current page
+  useEffect(() => { registerNavigate(pg => setPage(pg)) }, [])
+  useEffect(() => { trackPage(page) }, [page])
+
+  // Auto-start onboarding tour once after first BudgetSetup completion
+  useEffect(() => {
+    if (sessionStorage.getItem('tally_tour_pending') === '1') {
+      sessionStorage.removeItem('tally_tour_pending')
+      const t = setTimeout(() => startTour('onboarding'), 500)
+      return () => clearTimeout(t)
+    }
+  }, [])
 
   const handleNavigate = useCallback((pg, opts = {}) => {
     setPage(pg)
@@ -75,7 +91,11 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
   )
 
   if (!budgetsReady) {
-    return <BudgetSetup onComplete={() => {}} />
+    return <BudgetSetup onComplete={() => {
+      if (!localStorage.getItem('tally_tour_seen')) {
+        sessionStorage.setItem('tally_tour_pending', '1')
+      }
+    }} />
   }
 
   return (
@@ -96,7 +116,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
         </div>
 
         {/* Nav tabs */}
-        <div className="flex gap-1 flex-1">
+        <div className="flex gap-1 flex-1" data-tour="nav">
           {NAV_ITEMS.map(({ value, label }) => {
             const active = page === value
             return (
@@ -117,8 +137,8 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           })}
         </div>
 
-        {/* Theme toggle + account */}
-        <div className="flex items-center gap-1">
+        {/* Theme toggle + help + account */}
+        <div className="flex items-center gap-1" style={{ position: 'relative' }}>
           <button
             type="button"
             onClick={onToggleMode}
@@ -127,6 +147,50 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           >
             {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          <button
+            type="button"
+            onClick={() => setHelpMenuOpen(o => !o)}
+            className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
+            style={{ color: helpMenuOpen ? C.navText : 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
+            title="Tour & help"
+          >
+            <HelpCircle size={18} />
+          </button>
+          {helpMenuOpen && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setHelpMenuOpen(false)} />
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 50,
+                backgroundColor: C.surfacePopup,
+                border: `1px solid ${C.border}`,
+                borderRadius: 12, padding: '6px 0',
+                boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
+                minWidth: 200,
+              }}>
+                {[
+                  { id: 'basic',      label: 'Quick Tour',        desc: 'Overview of every section' },
+                  { id: 'onboarding', label: 'Getting Started',   desc: 'Set budgets & log expenses' },
+                  { id: 'advanced',   label: 'Advanced Features', desc: 'Projections, overrides & import' },
+                ].map(({ id, label, desc }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => { setHelpMenuOpen(false); startTour(id) }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '9px 16px', background: 'none', border: 'none',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hover}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.warmText }}>{label}</div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setPage('account')}
@@ -160,6 +224,15 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
             style={{ color: 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
           >
             {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setHelpMenuOpen(o => !o)}
+            className="p-1.5 rounded-lg border-none cursor-pointer"
+            style={{ color: helpMenuOpen ? C.navText : 'var(--text-on-nav-muted)', backgroundColor: 'transparent' }}
+            title="Tour & help"
+          >
+            <HelpCircle size={16} />
           </button>
           <button
             type="button"
@@ -278,7 +351,9 @@ function ThemedApp() {
   return (
     <ColorsProvider mode={mode}>
       <ExpenseTypesProvider>
-        <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} user={user} />
+        <TutorialProvider>
+          <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} user={user} />
+        </TutorialProvider>
       </ExpenseTypesProvider>
     </ColorsProvider>
   )
