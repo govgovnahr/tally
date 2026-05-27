@@ -8,6 +8,8 @@ logger = logging.getLogger("budget_app.auth")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
+DEV_MODE = os.environ.get("DEV_MODE", "").lower() in ("1", "true", "yes")
+DEV_USER_ID = "dev-user-00000000-0000-0000-0000-000000000001"
 
 _jwks_cache = None
 
@@ -31,6 +33,8 @@ def _get_jwks():
 
 
 def get_current_user(authorization: str = Header(default=None)) -> str:
+    if DEV_MODE:
+        return DEV_USER_ID
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.removeprefix("Bearer ")

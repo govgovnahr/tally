@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Sparkles } from 'lucide-react'
 import { useC } from '../../colors'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -7,6 +8,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import api from '../../api.js'
+import { qk } from '../../queryKeys.js'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import { useTutorial } from '../../TutorialContext.jsx'
 import SavingsLinkModal from '../dialogs/SavingsLinkModal.jsx'
@@ -35,7 +37,42 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [savingsExpense, setSavingsExpense] = useState(null)
+  const [nlText, setNlText] = useState('')
+  const [nlLoading, setNlLoading] = useState(false)
+  const [nlError, setNlError] = useState('')
   const typeAutoSet = useRef(!isEditing)
+
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const aiEnabled = settings?.ai_enabled ?? false
+
+  async function handleNlParse() {
+    if (!nlText.trim()) return
+    setNlLoading(true)
+    setNlError('')
+    try {
+      const { data } = await api.post('/ai/parse-expense', {
+        text: nlText.trim(),
+        expense_types: typeNames,
+      })
+      typeAutoSet.current = false
+      setForm(f => ({
+        ...f,
+        name: data.name || f.name,
+        amount: data.amount > 0 ? String(data.amount) : f.amount,
+        date: data.date || f.date,
+        type: data.type && typeNames.includes(data.type) ? data.type : f.type,
+      }))
+      setNlText('')
+    } catch (err) {
+      setNlError(err.response?.data?.detail || 'Could not parse. Try again.')
+    } finally {
+      setNlLoading(false)
+    }
+  }
   const debounceTimer = useRef(null)
 
   useEffect(() => {
@@ -115,6 +152,52 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
           <DialogTitle>{isEditing ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {!isEditing && aiEnabled && (
+            <div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <Sparkles
+                    size={13}
+                    color={C.primary}
+                    style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                  />
+                  <input
+                    type="text"
+                    value={nlText}
+                    onChange={e => { setNlText(e.target.value); setNlError('') }}
+                    placeholder="Describe your expense in plain English…"
+                    disabled={nlLoading}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleNlParse() } }}
+                    style={{
+                      width: '100%', paddingLeft: 30, paddingRight: 12, paddingTop: 7, paddingBottom: 7,
+                      borderRadius: 8, border: `1px solid ${C.borderLight}`,
+                      background: 'transparent', color: C.warmText, fontSize: 13,
+                      outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                      opacity: nlLoading ? 0.6 : 1,
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNlParse}
+                  disabled={nlLoading || !nlText.trim()}
+                  style={{
+                    padding: '7px 13px', borderRadius: 8, border: 'none',
+                    background: C.primary, color: '#fff', fontSize: 12, fontWeight: 700,
+                    cursor: nlLoading || !nlText.trim() ? 'not-allowed' : 'pointer',
+                    opacity: nlLoading || !nlText.trim() ? 0.55 : 1,
+                    fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap',
+                  }}
+                >
+                  {nlLoading ? '…' : 'Parse'}
+                </button>
+              </div>
+              {nlError && (
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: C.overBudget }}>{nlError}</p>
+              )}
+              <div style={{ height: 1, background: C.hoverStrong, margin: '14px 0 2px' }} />
+            </div>
+          )}
           <FieldGroup label="Name">
             <Input
               name="name"

@@ -215,6 +215,13 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id    TEXT PRIMARY KEY,
+            ai_enabled BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    """)
+
     for sql in [
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)",
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_type ON expenses(user_id, type)",
@@ -228,8 +235,58 @@ def init_db():
     ]:
         cursor.execute(sql)
 
+    # Embeddings table for AI semantic search.
+    # Wrapped in try/except because this requires the pgvector extension in Supabase.
+    # If it hasn't been enabled yet (CREATE EXTENSION IF NOT EXISTS vector), we warn and
+    # continue — the rest of the app works fine without it.
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transaction_embeddings (
+                id          TEXT PRIMARY KEY,
+                source_type TEXT NOT NULL,
+                source_id   TEXT NOT NULL,
+                user_id     TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                embedding   vector(1536),
+                created_at  TEXT NOT NULL,
+                UNIQUE (source_type, source_id)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_embeddings_user "
+            "ON transaction_embeddings (user_id, source_type)"
+        )
+    except Exception as emb_err:
+        import logging
+        logging.getLogger("budget_app").warning(
+            "transaction_embeddings init failed — run "
+            "CREATE EXTENSION IF NOT EXISTS vector in Supabase first. Error: %s",
+            str(emb_err),
+        )
+
     conn.commit()
     conn.close()
+
+
+def get_user_settings(conn, user_id: str) -> dict:
+    row = conn.execute(
+        "SELECT ai_enabled FROM user_settings WHERE user_id = %s", (user_id,)
+    ).fetchone()
+    if row is None:
+        return {"ai_enabled": True}
+    return {"ai_enabled": bool(row["ai_enabled"])}
+
+
+def save_user_settings(conn, user_id: str, ai_enabled: bool):
+    conn.execute(
+        """
+        INSERT INTO user_settings (user_id, ai_enabled)
+        VALUES (%s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET ai_enabled = EXCLUDED.ai_enabled
+        """,
+        (user_id, ai_enabled),
+    )
+    conn.commit()
 
 
 def _month_str(year, month):
@@ -527,3 +584,76 @@ def compute_budget_pacing(conn, month: str, lookback_months: int = 3, user_id: s
         })
 
     return result
+
+
+def get_outliers_for_agent(conn, user_id, months=3):
+    """
+    Shared outlier detection consumed by both the /analysis/outliers HTTP endpoint and
+    the AI agent's flag_anomalies tool.  Keeping the logic here ensures both callers
+    always flag the same transactions — no risk of two independent implementations
+    drifting over time.
+    """
+    import math
+
+    today = date.today()
+    month_list = []
+    for i in range(months - 1, -1, -1):
+        y = today.year
+        m = today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        month_list.append("{}-{:02d}".format(y, m))
+
+    if not month_list:
+        return []
+
+    placeholders = ",".join(["%s"] * len(month_list))
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, name, type, amount, date FROM expenses "
+        "WHERE user_id = %s AND LEFT(date, 7) IN (" + placeholders + ") "
+        "ORDER BY date DESC",
+        [user_id] + month_list,
+    )
+    expenses = cursor.fetchall()
+
+    by_type = {}
+    for e in expenses:
+        t = e["type"]
+        if t not in by_type:
+            by_type[t] = []
+        by_type[t].append(e["amount"])
+
+    type_stats = {}
+    for t, amounts in by_type.items():
+        n = len(amounts)
+        mean = sum(amounts) / n
+        std = math.sqrt(sum((a - mean) ** 2 for a in amounts) / n) if n > 1 else 0.0
+        type_stats[t] = {"mean": mean, "std": std, "n": n}
+
+    outliers = []
+    for e in expenses:
+        stats = type_stats.get(e["type"])
+        if not stats or stats["n"] < 3 or stats["std"] == 0:
+            continue
+        z = (e["amount"] - stats["mean"]) / stats["std"]
+        if z < 1.5:
+            continue
+        pct_above = round(((e["amount"] - stats["mean"]) / stats["mean"]) * 100) if stats["mean"] > 0 else 0
+        outliers.append({
+            "id": e["id"],
+            "name": e["name"],
+            "type": e["type"],
+            "amount": round(e["amount"], 2),
+            "date": e["date"][:10],
+            "category_avg": round(stats["mean"], 2),
+            "z_score": round(z, 2),
+            "pct_above_avg": int(pct_above),
+        })
+
+    def _by_z(item):
+        return item["z_score"]
+
+    outliers.sort(key=_by_z, reverse=True)
+    return outliers[:15]

@@ -3,6 +3,11 @@ import os
 import time
 import logging
 import threading
+from dotenv import load_dotenv
+
+# Walk up from the server/ directory to find the project-root .env
+_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(dotenv_path=os.path.abspath(_env_path))
 import webbrowser
 import uvicorn
 from fastapi import FastAPI, Request
@@ -15,6 +20,7 @@ from slowapi import _rate_limit_exceeded_handler
 from limiter import limiter
 from database import get_connection, init_db, apply_recurring_expenses, apply_recurring_incomes
 from routers.auth_router import router as auth_router
+from routers.ai_router import router as ai_router
 from routers.expenses_router import router as expenses_router
 from routers.budgets_router import router as budgets_router
 from routers.types_router import router as types_router
@@ -24,6 +30,7 @@ from routers.import_rules_router import router as import_rules_router
 from routers.macrocategories_router import router as macrocategories_router
 from routers.savings_goals_router import router as savings_goals_router
 from routers.analysis_router import router as analysis_router
+from routers.settings_router import router as settings_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +76,7 @@ async def _log_requests(request: Request, call_next):
     return response
 
 app.include_router(auth_router)
+app.include_router(ai_router)
 app.include_router(expenses_router)
 app.include_router(budgets_router)
 app.include_router(types_router)
@@ -78,6 +86,7 @@ app.include_router(import_rules_router)
 app.include_router(macrocategories_router)
 app.include_router(savings_goals_router)
 app.include_router(analysis_router)
+app.include_router(settings_router)
 
 
 @app.get("/health")
@@ -95,11 +104,28 @@ def health():
     return JSONResponse({"status": status, "db": db}, status_code=code)
 
 
+def _run_embedding_backfill():
+    """
+    Runs in a daemon thread so the server starts accepting requests immediately.
+    Backfilling can take minutes on large datasets — blocking startup would cause
+    health-check timeouts on Render's free tier.
+    """
+    try:
+        from embeddings import backfill_all_users
+        conn = get_connection()
+        backfill_all_users(conn)
+        conn.close()
+    except Exception:
+        logger.exception("Embedding backfill failed at startup")
+
+
 @app.on_event("startup")
 def startup():
     init_db()
     apply_recurring_expenses()
     apply_recurring_incomes()
+    if os.environ.get("OPENAI_API_KEY"):
+        threading.Thread(target=_run_embedding_backfill, daemon=True).start()
 
 
 def _is_bundled():

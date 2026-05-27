@@ -183,3 +183,18 @@ class NewContribution(BaseModel):
     expense_id: Optional[str] = None
 
     _vdate = field_validator("date")(_valid_date)
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=5000)
+    history: List[ChatMessage] = Field(default_factory=list)
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    history: List[ChatMessage]

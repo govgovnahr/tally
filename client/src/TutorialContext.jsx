@@ -102,6 +102,8 @@ export function TutorialProvider({ children }) {
   function start(tourId = 'basic') {
     setSuggestion(null)
     activeTourIdRef.current = tourId
+    // Mark as suggested so the App-level trigger doesn't race with auto-start
+    if (tourId === 'onboarding') localStorage.setItem('tally_onboarding_suggested', '1')
     const tourSteps = TOURS[tourId] ?? TOURS.basic
     setSteps(tourSteps)
     setStepIndex(0)
@@ -119,7 +121,7 @@ export function TutorialProvider({ children }) {
 
   function suggestOnboardingTour() {
     if (active) return
-    if (localStorage.getItem('tally_tour_seen')) return
+    if (localStorage.getItem('tally_onboarding_seen')) return
     if (localStorage.getItem('tally_onboarding_suggested')) return
     localStorage.setItem('tally_onboarding_suggested', '1')
     setSuggestion('onboarding')

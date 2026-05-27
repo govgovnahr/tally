@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { LogOut, KeyRound, User, Upload } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { LogOut, KeyRound, User, Upload, Bot } from 'lucide-react'
 import ClearAllDialog from '../dialogs/ClearAllDialog.jsx'
 import { supabase } from '../../supabase.js'
 import { useC } from '../../colors'
@@ -17,6 +17,42 @@ export default function AccountPage({ user, onLogout }) {
   const [pwLoading, setPwLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
+
+  const [aiEnabled, setAiEnabled] = useState(true)
+  const [aiSettingsLoading, setAiSettingsLoading] = useState(true)
+  const [aiDataDeleting, setAiDataDeleting] = useState(false)
+  const [aiDataMsg, setAiDataMsg] = useState(null)
+
+  useEffect(() => {
+    api.get('/settings').then(r => {
+      setAiEnabled(r.data.ai_enabled)
+      setAiSettingsLoading(false)
+    }).catch(() => setAiSettingsLoading(false))
+  }, [])
+
+  const handleAiToggle = async (enabled) => {
+    setAiEnabled(enabled)
+    try {
+      await api.put('/settings', { ai_enabled: enabled })
+      if (!enabled) setAiDataMsg('AI features disabled. Your embedding data has been deleted.')
+      else setAiDataMsg(null)
+    } catch {
+      setAiEnabled(!enabled)
+    }
+  }
+
+  const handleDeleteAiData = async () => {
+    setAiDataDeleting(true)
+    setAiDataMsg(null)
+    try {
+      const { data } = await api.delete('/settings/ai-data')
+      setAiDataMsg(`Deleted ${data.deleted} stored AI data record${data.deleted !== 1 ? 's' : ''}.`)
+    } catch {
+      setAiDataMsg('Failed to delete AI data.')
+    } finally {
+      setAiDataDeleting(false)
+    }
+  }
 
   const fileRef = useRef(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -297,6 +333,60 @@ export default function AccountPage({ user, onLogout }) {
       </Dialog>
 
       <ClearAllDialog/>
+
+      {/* AI & Privacy */}
+      <div style={section}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Bot size={16} color={C.muted} />
+            <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>AI Features</span>
+          </div>
+          <button
+            type="button"
+            disabled={aiSettingsLoading}
+            onClick={() => handleAiToggle(!aiEnabled)}
+            style={{
+              width: 44, height: 24, borderRadius: 12, border: 'none', padding: 0,
+              background: aiEnabled ? C.primary : C.border,
+              cursor: aiSettingsLoading ? 'not-allowed' : 'pointer',
+              position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+              opacity: aiSettingsLoading ? 0.5 : 1,
+            }}
+            aria-label={aiEnabled ? 'Disable AI' : 'Enable AI'}
+          >
+            <span style={{
+              position: 'absolute', top: 3, left: aiEnabled ? 23 : 3,
+              width: 18, height: 18, borderRadius: '50%', background: '#fff',
+              transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            }} />
+          </button>
+        </div>
+
+        <p style={{ margin: '0 0 8px', fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+          Tally uses AI to power the chatbot and semantic search. To do this, it stores
+          vector embeddings of your transactions — compact numerical representations, not raw text.
+          Disabling AI removes these embeddings immediately.
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <button
+            type="button"
+            onClick={handleDeleteAiData}
+            disabled={aiDataDeleting}
+            style={{
+              padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
+              background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600,
+              cursor: aiDataDeleting ? 'not-allowed' : 'pointer',
+              opacity: aiDataDeleting ? 0.6 : 1, fontFamily: 'inherit',
+            }}
+          >
+            {aiDataDeleting ? 'Deleting…' : 'Delete my AI data'}
+          </button>
+          {aiDataMsg && (
+            <p style={{ margin: 0, fontSize: 12, color: C.muted }}>{aiDataMsg}</p>
+          )}
+        </div>
+      </div>
 
       {/* Sign out */}
       <div style={section}>

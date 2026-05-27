@@ -12,6 +12,28 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from database import get_connection
 from auth import get_current_user
 
+
+def _get_ai_categorizer():
+    """
+    Returns ai_suggest_category if OPENAI_API_KEY is set, else None.
+    Lazy-checked at call time so the router still loads when AI deps are absent.
+    """
+    if not os.environ.get("OPENAI_API_KEY"):
+        return None
+    try:
+        from ai_helpers import ai_suggest_category
+        return ai_suggest_category
+    except ImportError:
+        return None
+
+
+def _is_other_fallback(expense_type, valid_types):
+    """True when _infer_type returned the catch-all 'Other' — no keyword matched."""
+    for v in valid_types:
+        if v.lower() == "other" and v == expense_type:
+            return True
+    return False
+
 router = APIRouter()
 
 HEADER_KEYWORDS = {
@@ -337,6 +359,10 @@ async def import_records(
     imported = 0
     errors = []
     savings_expenses = []
+    ai_categorized_count = 0
+    from database import get_user_settings
+    user_ai_settings = get_user_settings(conn, user_id)
+    ai_categorize_fn = _get_ai_categorizer() if user_ai_settings["ai_enabled"] else None
 
     for i, row in enumerate(data_rows, start=header_row + 2):
         try:
@@ -379,6 +405,14 @@ async def import_records(
                     expense_type = _soft_match_type(raw_type, valid_types) or _infer_type(name, valid_types, rules)
                 else:
                     expense_type = _infer_type(name, valid_types, rules)
+                    # If the keyword matcher gave up and fell back to 'Other', escalate to AI.
+                    # The LLM recognises brands and merchant names that keyword lists miss.
+                    if ai_categorize_fn and _is_other_fallback(expense_type, valid_types):
+                        suggestion = ai_categorize_fn(name, amount, valid_types)
+                        suggested = suggestion.get("category")
+                        if suggested and suggested in valid_types:
+                            expense_type = suggested
+                            ai_categorized_count += 1
 
                 cursor.execute(
                     "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -401,7 +435,13 @@ async def import_records(
     conn.commit()
     conn.close()
 
-    return {"imported": imported, "skipped": len(errors), "errors": errors, "savings_expenses": savings_expenses}
+    return {
+        "imported": imported,
+        "skipped": len(errors),
+        "errors": errors,
+        "savings_expenses": savings_expenses,
+        "ai_categorized": ai_categorized_count,
+    }
 
 
 @router.post("/import/legacy-db")

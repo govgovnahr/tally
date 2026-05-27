@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
-import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle, HelpCircle } from 'lucide-react'
+import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle, HelpCircle, MessageCircle } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { TallyLogo } from './components/ui/TallyLogo.jsx'
 import api from './api.js'
@@ -9,7 +9,6 @@ import { TutorialProvider, useTutorial } from './TutorialContext.jsx'
 import { ColorsProvider, useC } from './colors'
 import { qk } from './queryKeys.js'
 import ExpenseList from './components/pages/ExpenseList.jsx'
-import BudgetSetup from './components/pages/BudgetSetup.jsx'
 import DashboardPage from './components/pages/DashboardPage.jsx'
 import AuthPage from './components/pages/AuthPage.jsx'
 
@@ -17,6 +16,7 @@ const BudgetGoals  = lazy(() => import('./components/pages/BudgetGoals.jsx'))
 const SavingsPage  = lazy(() => import('./components/pages/SavingsPage.jsx'))
 const AnalysisPage = lazy(() => import('./components/pages/AnalysisPage.jsx'))
 const AccountPage  = lazy(() => import('./components/pages/AccountPage.jsx'))
+const ChatPage     = lazy(() => import('./components/pages/ChatPage.jsx'))
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -28,12 +28,13 @@ const NAV_ITEMS = [
   { value: 'savings',      label: 'Savings',   Icon: PiggyBank },
   { value: 'budgets',      label: 'Budgets',   Icon: Landmark },
   { value: 'all-expenses', label: 'Expenses',  Icon: Receipt },
+  { value: 'chat',         label: 'Ask Tally', Icon: MessageCircle },
 ]
 
 function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
-  const { registerNavigate, trackPage, start: startTour } = useTutorial()
+  const { registerNavigate, trackPage, start: startTour, suggestOnboardingTour } = useTutorial()
   const [page, setPage] = useState('home')
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
@@ -47,19 +48,23 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
     queryFn: () => api.get('/budgets').then(r => r.data),
     staleTime: 5 * 60_000,
   })
-  const budgetsReady = budgetsData ? budgetsData.length > 0 : null
 
   // Give the tutorial context access to navigation and track current page
   useEffect(() => { registerNavigate(pg => setPage(pg)) }, [])
   useEffect(() => { trackPage(page) }, [page])
 
-  // Auto-start onboarding tour once after first BudgetSetup completion
+  // Auto-start onboarding tour for brand new users
   useEffect(() => {
-    if (sessionStorage.getItem('tally_tour_pending') === '1') {
-      sessionStorage.removeItem('tally_tour_pending')
+    if (!localStorage.getItem('tally_tour_seen') && !localStorage.getItem('tally_onboarding_seen')) {
       const t = setTimeout(() => startTour('onboarding'), 500)
       return () => clearTimeout(t)
     }
+  }, [])
+
+  // Prompt existing users who have never seen the onboarding tour
+  useEffect(() => {
+    const t = setTimeout(() => suggestOnboardingTour(), 1500)
+    return () => clearTimeout(t)
   }, [])
 
   const handleNavigate = useCallback((pg, opts = {}) => {
@@ -74,7 +79,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
     setPage('all-expenses')
   }, [])
 
-  if (budgetsLoading || budgetsReady === null || typesLoading) return (
+  if (budgetsLoading || typesLoading) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 64, borderBottom: '1px solid rgba(128,128,128,0.15)' }} />
       <div style={{ flex: 1, padding: '24px 16px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
@@ -89,14 +94,6 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
       </div>
     </div>
   )
-
-  if (!budgetsReady) {
-    return <BudgetSetup onComplete={() => {
-      if (!localStorage.getItem('tally_tour_seen')) {
-        sessionStorage.setItem('tally_tour_pending', '1')
-      }
-    }} />
-  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -288,6 +285,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           {page === 'savings' && <SavingsPage />}
           {page === 'budgets' && <BudgetGoals />}
           {page === 'account' && <AccountPage user={user} onLogout={onLogout} />}
+          {page === 'chat' && <ChatPage />}
         </Suspense>
         {page === 'all-expenses' && (
           <ExpenseList

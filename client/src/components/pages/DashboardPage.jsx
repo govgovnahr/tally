@@ -12,6 +12,7 @@ import ExpenseList from './ExpenseList.jsx'
 import OutlierAlert from '../charts/OutlierAlert.jsx'
 import SpendingDonut from '../charts/SpendingDonut.jsx'
 import SavingsGoalsMini from '../widgets/SavingsGoalsMini.jsx'
+import AIInsightsCard from '../widgets/AIInsightsCard.jsx'
 import ColorDot from '../ui/ColorDot.jsx'
 
 function fmt(n) { return `$${n.toFixed(2)}` }
@@ -192,6 +193,8 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
           color={savingsColor}
         />
       </div>
+
+      <AIInsightsCard onNavigate={onNavigate} />
 
       {/* Donut + Budget Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 items-start">

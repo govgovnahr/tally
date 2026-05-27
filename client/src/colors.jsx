@@ -162,17 +162,17 @@ function makeLightC() {
     income:      '#3B6D11',   // moss
     spent:       '#7A5C48',   // clay
     netPositive: '#3B6D11',
-    netNegative: '#8B3A2A',   // terracotta dark
+    netNegative: '#C0392B',   // red
 
     // Status
     onTrack:    '#3B6D11',
     nearGoal:   '#639922',    // fern
     atRisk:     '#A0722A',    // amber dark
-    overBudget: '#8B3A2A',    // terracotta dark
+    overBudget: '#C0392B',    // red
     noBudget:   'rgba(74,55,40,0.08)',
 
     // Trend direction
-    trendUp:   '#8B3A2A',
+    trendUp:   '#C0392B',
     trendDown: '#3B6D11',
 
     // Primary UI

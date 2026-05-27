@@ -22,4 +22,6 @@ export const qk = {
   analysisMonthOverMonth: (months) => ['analysis', 'month-over-month', months],
   analysisMonthsAvailable: () => ['analysis', 'months-available'],
   analysisAvgMonthlyExpenses: () => ['analysis', 'avg-monthly-expenses'],
+  settings: () => ['settings'],
+  aiInsights: () => ['ai', 'insights'],
 }
