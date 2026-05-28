@@ -7,6 +7,7 @@ import { supabase } from './supabase.js'
 import { ExpenseTypesProvider, useExpenseTypes } from './ExpenseTypesContext.jsx'
 import { TutorialProvider, useTutorial } from './TutorialContext.jsx'
 import { ColorsProvider, useC } from './colors'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { qk } from './queryKeys.js'
 import ExpenseList from './components/pages/ExpenseList.jsx'
 import DashboardPage from './components/pages/DashboardPage.jsx'
@@ -153,41 +154,6 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           >
             <HelpCircle size={18} />
           </button>
-          {helpMenuOpen && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setHelpMenuOpen(false)} />
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 50,
-                backgroundColor: C.surfacePopup,
-                border: `1px solid ${C.border}`,
-                borderRadius: 12, padding: '6px 0',
-                boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
-                minWidth: 200,
-              }}>
-                {[
-                  { id: 'basic',      label: 'Quick Tour',        desc: 'Overview of every section' },
-                  { id: 'onboarding', label: 'Getting Started',   desc: 'Set budgets & log expenses' },
-                  { id: 'advanced',   label: 'Advanced Features', desc: 'Projections, overrides & import' },
-                ].map(({ id, label, desc }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => { setHelpMenuOpen(false); startTour(id) }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '9px 16px', background: 'none', border: 'none',
-                      cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hover}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.warmText }}>{label}</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{desc}</div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
           <button
             type="button"
             onClick={() => setPage('account')}
@@ -244,6 +210,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
 
       {/* Mobile bottom nav */}
       <nav
+        data-tour="nav-mobile"
         className="flex sm:hidden fixed bottom-0 left-0 right-0 z-50"
         style={{
           height: 60,
@@ -268,6 +235,43 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           )
         })}
       </nav>
+
+      {/* Help dropdown — rendered outside both navs so it's visible on mobile and desktop */}
+      {helpMenuOpen && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setHelpMenuOpen(false)} />
+          <div style={{
+            position: 'fixed', top: 60, right: 12, zIndex: 9000,
+            backgroundColor: C.surfacePopup,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: '6px 0',
+            boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
+            minWidth: 200,
+          }}>
+            {[
+              { id: 'basic',      label: 'Quick Tour',        desc: 'Overview of every section' },
+              { id: 'onboarding', label: 'Getting Started',   desc: 'Set budgets & log expenses' },
+              { id: 'advanced',   label: 'Advanced Features', desc: 'Projections, overrides & import' },
+            ].map(({ id, label, desc }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setHelpMenuOpen(false); startTour(id) }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '9px 16px', background: 'none', border: 'none',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = C.hover}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.warmText }}>{label}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{desc}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Page content */}
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 py-6 pb-[72px] sm:pb-6">
@@ -347,13 +351,15 @@ function ThemedApp() {
   )
 
   return (
-    <ColorsProvider mode={mode}>
-      <ExpenseTypesProvider>
-        <TutorialProvider>
-          <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} user={user} />
-        </TutorialProvider>
-      </ExpenseTypesProvider>
-    </ColorsProvider>
+    <TooltipProvider delayDuration={300}>
+      <ColorsProvider mode={mode}>
+        <ExpenseTypesProvider>
+          <TutorialProvider>
+            <AppContent mode={mode} onToggleMode={toggleMode} onLogout={handleLogout} user={user} />
+          </TutorialProvider>
+        </ExpenseTypesProvider>
+      </ColorsProvider>
+    </TooltipProvider>
   )
 }
 

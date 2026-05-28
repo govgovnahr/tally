@@ -139,18 +139,6 @@ def _build_tools(user_id):
         goal_amount: the savings target to reach
         months_to_project: number of months to forecast
         """
-        # TODO(human): implement the savings projection.
-        #
-        # Iterate over months_to_project, accumulating monthly_net into a running total
-        # each month. Track when running_total first reaches or exceeds goal_amount.
-        #
-        # Return a dict like:
-        # {
-        #   "months": [{"month": 1, "running_total": 500.0, "reached_goal": False}, ...],
-        #   "months_to_goal": 10   <- None if the goal isn't reached within the window
-        # }
-        #
-        # Consider: what if monthly_net is 0 or negative? Handle it gracefully.
         if monthly_net < 1:
             return {
                 "error": "monthly net is less than 1; user is not currently contributing to savings goal",
@@ -488,19 +476,80 @@ def should_continue(state):
     This function is the core of the ReAct loop — without it the agent can never
     use its tools, even if the LLM requests them.
     """
-    # TODO(human): implement the routing decision.
-    #
-    # 1. Get the last message: state["messages"][-1]
-    # 2. Check whether the LLM issued tool calls.
-    #    LangChain AIMessage objects expose this as `.tool_calls` (a list; empty if none).
-    # 3. Return the string "tools" to route to the tool executor node,
-    #    or return END (imported from langgraph.graph) to finish the turn.
-    #
-    # Without this working, the agent answers from LLM knowledge only (no tool calls).
-    # The chat page works but the 5 tools are never invoked.
     if state["messages"][-1].tool_calls:
         return "tools"
     return END
+
+
+def stream_agent(user_id, history, new_message):
+    """
+    Generator yielding SSE-ready dicts.
+    Uses stream_mode=["updates","messages"] so tool events and reply tokens
+    come from a single graph run — no double LLM call.
+    Emits:
+      {"type": "tool_start", "tool": <name>}  — once per tool call, as it's invoked
+      {"type": "token", "content": <str>}      — reply tokens as they stream
+      {"type": "done", "tool_steps": [...], "history": [...]}
+    """
+    from langchain_core.messages import AIMessageChunk
+
+    tools = _build_tools(user_id)
+    # streaming=True lets LangGraph intercept token chunks via the callback system
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, streaming=True).bind_tools(tools)
+    tool_node = ToolNode(tools)
+
+    def agent_node(state):
+        response = llm.invoke(state["messages"])
+        return {"messages": [response], "user_id": state["user_id"]}
+
+    graph_builder = StateGraph(AgentState)
+    graph_builder.add_node("agent", agent_node)
+    graph_builder.add_node("tools", tool_node)
+    graph_builder.set_entry_point("agent")
+    graph_builder.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+    graph_builder.add_edge("tools", "agent")
+    graph = graph_builder.compile()
+
+    messages = [SystemMessage(content=_build_system_prompt())]
+    for msg in history:
+        if msg["role"] == "user":
+            messages.append(HumanMessage(content=msg["content"]))
+        elif msg["role"] == "assistant":
+            messages.append(AIMessage(content=msg["content"]))
+    messages.append(HumanMessage(content=new_message))
+
+    tool_steps = []
+    final_reply = ""
+
+    for event in graph.stream(
+        {"messages": messages, "user_id": user_id},
+        config={"recursion_limit": 15},
+        stream_mode=["updates", "messages"],
+    ):
+        mode, data = event
+
+        if mode == "updates":
+            if "agent" in data:
+                last = data["agent"]["messages"][-1]
+                if hasattr(last, "tool_calls") and last.tool_calls:
+                    for tc in last.tool_calls:
+                        tool_steps.append(tc["name"])
+                        yield {"type": "tool_start", "tool": tc["name"]}
+                elif last.content:
+                    final_reply = last.content
+
+        elif mode == "messages":
+            msg_chunk, _ = data
+            # Planning LLM calls produce empty content with tool_calls populated.
+            # Only the final reply call produces non-empty content — emit those as tokens.
+            if isinstance(msg_chunk, AIMessageChunk) and msg_chunk.content:
+                yield {"type": "token", "content": msg_chunk.content}
+
+    updated_history = list(history)
+    updated_history.append({"role": "user", "content": new_message})
+    updated_history.append({"role": "assistant", "content": final_reply})
+
+    yield {"type": "done", "tool_steps": tool_steps, "history": updated_history}
 
 
 def run_agent(user_id, history, new_message):
@@ -543,8 +592,14 @@ def run_agent(user_id, history, new_message):
     final_message = result["messages"][-1]
     reply = final_message.content
 
+    tool_steps = []
+    for msg in result["messages"]:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for tc in msg.tool_calls:
+                tool_steps.append(tc["name"])
+
     updated_history = list(history)
     updated_history.append({"role": "user", "content": new_message})
     updated_history.append({"role": "assistant", "content": reply})
 
-    return reply, updated_history
+    return reply, updated_history, tool_steps

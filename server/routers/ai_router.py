@@ -4,13 +4,16 @@ import os
 from datetime import date, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+import base64
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from langgraph.errors import GraphRecursionError
 from auth import get_current_user
 from database import get_connection, get_user_settings, compute_budget_pacing, get_outliers_for_agent
 from models import ChatRequest, ChatResponse, ChatMessage
-from ai_agent import run_agent
+from ai_agent import run_agent, stream_agent
 
 router = APIRouter()
 logger = logging.getLogger("budget_app")
@@ -39,6 +42,7 @@ def get_insights(user_id: str = Depends(get_current_user)):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             response_format={"type": "json_object"},
+            temperature=0,
             messages=[
                 {"role": "system", "content": (
                     "You are a personal finance assistant. Given a user's financial data, return ONLY "
@@ -228,6 +232,181 @@ def _gather_insights_context(conn, user_id: str) -> str:
     return "\n\n".join(parts) if parts else ""
 
 
+def _gather_budget_context(conn, user_id: str, lookback: int = 3, exclude_outliers: bool = False) -> dict:
+    today = date.today()
+    months = []
+    for i in range(lookback - 1, -1, -1):
+        y, m = today.year, today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(f"{y}-{m:02d}")
+
+    cursor = conn.cursor()
+    placeholders = ",".join(["%s"] * len(months))
+    cursor.execute(
+        f"SELECT type, LEFT(date, 7) AS month, SUM(amount) AS total "
+        f"FROM expenses WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) "
+        f"GROUP BY type, month",
+        [user_id] + months,
+    )
+    by_type: dict = {}
+    for r in cursor.fetchall():
+        by_type.setdefault(r["type"], []).append(float(r["total"]))
+    if exclude_outliers:
+        filtered: dict = {}
+        for t, totals in by_type.items():
+            if len(totals) >= 3:
+                mean = sum(totals) / len(totals)
+                std = (sum((v - mean) ** 2 for v in totals) / len(totals)) ** 0.5
+                if std > 0:
+                    filtered[t] = [v for v in totals if abs(v - mean) / std < 1.5]
+                    continue
+            filtered[t] = totals
+        by_type = filtered
+
+    # Match category-stats: divide by non-zero months only (same as avg_monthly on the card)
+    spending = {t: round(sum(totals) / len(totals), 2) for t, totals in by_type.items() if totals}
+
+    cursor.execute("SELECT type, monthly_limit FROM budgets WHERE user_id = %s", (user_id,))
+    current_limits = {r["type"]: float(r["monthly_limit"]) for r in cursor.fetchall()}
+
+    return {"spending": spending, "current_limits": current_limits, "months_analyzed": months}
+
+
+@router.post("/ai/scan-receipt")
+async def scan_receipt(file: UploadFile = File(...), user_id: str = Depends(get_current_user)):
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="AI not available")
+
+    conn = get_connection()
+    try:
+        settings = get_user_settings(conn, user_id)
+        if not settings["ai_enabled"]:
+            raise HTTPException(status_code=403, detail="AI features are disabled.")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM expense_types WHERE user_id = %s", (user_id,))
+        expense_types = [row["name"] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image.")
+
+    image_bytes = await file.read()
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large. Please use an image under 10MB.")
+
+    b64 = base64.b64encode(image_bytes).decode()
+    system_prompt = (
+        "You are a receipt parser. Extract key information from the receipt image.\n\n"
+        f"Available expense categories: {', '.join(expense_types)}\n\n"
+        "Return ONLY valid JSON:\n"
+        "{\"name\": \"<merchant or description>\", \"amount\": <total as number>, "
+        "\"date\": \"<YYYY-MM-DD or null>\", \"type_suggestion\": \"<matching category or null>\"}\n\n"
+        "Rules:\n"
+        "- name: merchant name or brief description, max 40 chars\n"
+        "- amount: the final total including tax, as a positive number\n"
+        "- date: transaction date in YYYY-MM-DD, or null if not visible\n"
+        "- type_suggestion: must exactly match one of the available categories, or null"
+    )
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+            temperature=0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{file.content_type};base64,{b64}", "detail": "low"}},
+                    {"type": "text", "text": "Extract the receipt information."},
+                ]},
+            ],
+            max_tokens=300,
+        )
+        raw = json.loads(response.choices[0].message.content)
+        amount_raw = raw.get("amount")
+        return {
+            "name": str(raw.get("name", ""))[:40],
+            "amount": round(float(amount_raw), 2) if amount_raw and float(amount_raw) > 0 else None,
+            "date": raw.get("date") or date.today().isoformat(),
+            "type_suggestion": raw.get("type_suggestion") if raw.get("type_suggestion") in expense_types else None,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Receipt scan failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Could not read receipt. Please try again.")
+
+
+@router.post("/ai/budget-recommendations")
+def get_budget_recommendations(months: int = Query(default=3, ge=1, le=12), exclude_outliers: bool = Query(default=False), user_id: str = Depends(get_current_user)):
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="AI not available")
+
+    conn = get_connection()
+    try:
+        settings = get_user_settings(conn, user_id)
+        if not settings["ai_enabled"]:
+            raise HTTPException(status_code=403, detail="AI features are disabled.")
+        context = _gather_budget_context(conn, user_id, lookback=months, exclude_outliers=exclude_outliers)
+    finally:
+        conn.close()
+
+    if not context["spending"]:
+        raise HTTPException(status_code=400, detail="Not enough spending history to generate recommendations.")
+
+    system_prompt = (
+        "You are Tally AI, a personal finance assistant generating monthly budget recommendations from 3 months of spending data.\n\n"
+        "RECOMMENDATIONS:\n"
+        "For fixed categories (e.g. Housing, Rent, Loans), recommend the average spend with up to 3% buffer.\n"
+        "For variable categories, recommend average spend with a 10-15% buffer.\n\n"
+        "HANDLING ZERO-HISTORY CATEGORIES:\n"
+        "If a category has no spend data across all 3 months, omit it from the recommendations entirely.\n\n"
+        "RATIONALE:\n"
+        "One sentence, grounded in numbers. Example: 'You averaged $X/mo; $Y adds a 12% buffer for variability.'\n\n"
+        "OUTPUT:\n"
+        "Return ONLY valid JSON: {\"recommendations\": [{\"type\": \"<category name>\", \"recommended_limit\": <number>, \"rationale\": \"<one sentence>\"}]}\n"
+        "Never fabricate data. Only recommend categories present in the spending input."
+    )
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            temperature=0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(context, indent=2)},
+            ],
+            max_tokens=1500,
+        )
+        raw = json.loads(response.choices[0].message.content)
+        recs = raw.get("recommendations", [])
+        valid = []
+        for r in recs:
+            if not isinstance(r, dict) or "type" not in r or "recommended_limit" not in r:
+                continue
+            valid.append({
+                "type": str(r["type"]),
+                "recommended_limit": round(float(r["recommended_limit"]), 2),
+                "current_limit": context["current_limits"].get(str(r["type"]), 0.0),
+                "avg_spend": context["spending"].get(str(r["type"]), 0.0),
+                "rationale": str(r.get("rationale", "")),
+            })
+        return valid
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Budget recommendations failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Could not generate recommendations. Please try again.")
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(body: ChatRequest, user_id: str = Depends(get_current_user)):
     conn = get_connection()
@@ -237,25 +416,20 @@ def chat(body: ChatRequest, user_id: str = Depends(get_current_user)):
         conn.close()
     if not settings["ai_enabled"]:
         raise HTTPException(status_code=403, detail="AI features are disabled. Enable them in Account settings.")
-
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    history = []
-    for msg in body.history:
-        history.append({"role": msg.role, "content": msg.content})
+    history = [{"role": msg.role, "content": msg.content} for msg in body.history]
 
-    try:
-        reply, updated_history = run_agent(user_id, history, body.message)
-    except GraphRecursionError:
-        logger.warning("Agent hit recursion limit for user %s", user_id)
-        raise HTTPException(status_code=500, detail="The agent took too many steps. Try a more specific question.")
-    except Exception as e:
-        logger.exception("Agent error for user %s", user_id)
-        raise HTTPException(status_code=500, detail="Agent failed: " + str(e))
+    def generate():
+        try:
+            for event in stream_agent(user_id, history, body.message):
+                yield f"data: {json.dumps(event)}\n\n"
+        except GraphRecursionError:
+            logger.warning("Agent hit recursion limit for user %s", user_id)
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'The agent took too many steps. Try a more specific question.'})}\n\n"
+        except Exception as e:
+            logger.exception("Agent error for user %s", user_id)
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'Something went wrong. Please try again.'})}\n\n"
 
-    updated_messages = []
-    for msg in updated_history:
-        updated_messages.append(ChatMessage(role=msg["role"], content=msg["content"]))
-
-    return ChatResponse(reply=reply, history=updated_messages)
+    return StreamingResponse(generate(), media_type="text/event-stream")

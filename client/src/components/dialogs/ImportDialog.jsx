@@ -13,6 +13,7 @@ import api from '../../api.js'
 import SavingsLinkModal from './SavingsLinkModal.jsx'
 import AlertBox from '../ui/AlertBox.jsx'
 import NativeSelect from '../inputs/NativeSelect.jsx'
+import InferenceBadge from '../ui/InferenceBadge.jsx'
 
 const IMPORT_FIELDS = [
   { key: 'name',         label: 'Name / Description',       required: true,  hint: null },
@@ -55,7 +56,11 @@ export default function ImportDialog({ onClose, onImported }) {
   const [selectedSheet, setSelectedSheet] = useState('')
   const [mapping, setMapping] = useState({})
   const [loading, setLoading] = useState(false)
+  const [suggestLoading, setSuggestLoading] = useState(false)
   const [error, setError] = useState('')
+  const [suggestions, setSuggestions] = useState(null)
+  const [overrides, setOverrides] = useState({})
+  const [activeFilter, setActiveFilter] = useState('fallback')
   const [results, setResults] = useState(null)
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
   const fileInputRef = useRef(null)
@@ -109,6 +114,27 @@ export default function ImportDialog({ onClose, onImported }) {
     await fetchPreview(file, null, sheet)
   }
 
+  async function handleFetchSuggestions() {
+    setSuggestLoading(true)
+    setError('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('mapping', JSON.stringify(mapping))
+      fd.append('header_row', String(headerRow))
+      if (selectedSheet) fd.append('sheet_name', selectedSheet)
+      const res = await api.post('/import/suggest', fd, { timeout: 90000 })
+      setSuggestions(res.data)
+      setOverrides({})
+      setActiveFilter('fallback')
+      setStep(2)
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to analyze file.')
+    } finally {
+      setSuggestLoading(false)
+    }
+  }
+
   async function handleImport() {
     setLoading(true)
     setError('')
@@ -118,9 +144,15 @@ export default function ImportDialog({ onClose, onImported }) {
       fd.append('mapping', JSON.stringify(mapping))
       fd.append('header_row', String(headerRow))
       if (selectedSheet) fd.append('sheet_name', selectedSheet)
+      if (suggestions) {
+        const confirmed = Object.fromEntries(
+          suggestions.rows.map(r => [String(r.row_idx), overrides[r.row_idx] ?? r.suggested_type])
+        )
+        fd.append('confirmed_types', JSON.stringify(confirmed))
+      }
       const res = await api.post('/import', fd)
       setResults(res.data)
-      setStep(2)
+      setStep(3)
       if (res.data.savings_expenses?.length > 0) setSavingsModalOpen(true)
     } catch (e) {
       setError(e.response?.data?.detail || 'Import failed.')
@@ -131,11 +163,11 @@ export default function ImportDialog({ onClose, onImported }) {
 
   const requiredMapped = fields.filter(f => f.required).every(f => mapping[f.key])
 
-  const title = step === 0 ? 'Import from CSV / Excel' : step === 1 ? 'Import — Map Columns' : 'Import — Results'
+  const title = ['Import from CSV / Excel', 'Import — Map Columns', 'Import — Review & Confirm', 'Import — Results'][step]
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={step === 2 ? 'max-w-4xl' : 'max-w-lg'}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -227,8 +259,20 @@ export default function ImportDialog({ onClose, onImported }) {
           </div>
         )}
 
-        {/* Step 2: Results */}
-        {step === 2 && results && (
+        {/* Step 2: Review & Confirm */}
+        {step === 2 && suggestions && (
+          <ReviewStep
+            suggestions={suggestions}
+            overrides={overrides}
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+            onOverride={(rowIdx, category) => setOverrides(prev => ({ ...prev, [rowIdx]: category }))}
+            error={error}
+          />
+        )}
+
+        {/* Step 3: Results */}
+        {step === 3 && results && (
           <div className="flex flex-col gap-4 pt-1">
             <AlertBox severity={results.imported === 0 ? 'error' : results.skipped > 0 ? 'warning' : 'success'}>
               {results.imported} record{results.imported !== 1 ? 's' : ''} imported
@@ -277,11 +321,21 @@ export default function ImportDialog({ onClose, onImported }) {
         <DialogFooter>
           {step < 2 && <Button variant="ghost" onClick={onClose}>Cancel</Button>}
           {step === 1 && (
-            <Button onClick={handleImport} disabled={loading || !requiredMapped} className="font-semibold">
-              {loading ? <><Loader2 className="animate-spin mr-2" size={16} />Importing…</> : 'Import'}
+            <Button onClick={handleFetchSuggestions} disabled={suggestLoading || !requiredMapped} className="font-semibold">
+              {suggestLoading ? <><Loader2 className="animate-spin mr-2" size={16} />Analyzing…</> : 'Review →'}
             </Button>
           )}
           {step === 2 && (
+            <>
+              <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
+              <Button onClick={handleImport} disabled={loading} className="font-semibold">
+                {loading
+                  ? <><Loader2 className="animate-spin mr-2" size={16} />Importing…</>
+                  : `Import ${suggestions?.rows?.length ?? ''} rows`}
+              </Button>
+            </>
+          )}
+          {step === 3 && (
             <Button onClick={results?.imported > 0 ? onImported : onClose} className="font-semibold">
               Done
             </Button>
@@ -298,5 +352,147 @@ export default function ImportDialog({ onClose, onImported }) {
         />
       )}
     </Dialog>
+  )
+}
+
+const FILTER_DEFS = [
+  { key: 'fallback', label: 'Unmatched' },
+  { key: 'ai',       label: 'AI' },
+  { key: 'file',     label: 'From File' },
+  { key: 'keyword',  label: 'Keyword' },
+  { key: 'rule',     label: 'Your Rules' },
+  { key: 'user',     label: 'You changed' },
+  { key: 'all',      label: 'All' },
+]
+
+function effectiveSource(row, overrides) {
+  const isOverridden = !!overrides[row.row_idx] && overrides[row.row_idx] !== row.suggested_type
+  return isOverridden ? 'user' : row.source
+}
+
+function ReviewStep({ suggestions, overrides, activeFilter, onFilterChange, onOverride, error }) {
+  const C = useC()
+  const { rows, income_count, ai_cap_reached, ai_enabled, valid_types } = suggestions
+
+  const counts = { all: rows.length }
+  for (const row of rows) {
+    const src = effectiveSource(row, overrides)
+    counts[src] = (counts[src] ?? 0) + 1
+  }
+
+  const visibleFilters = FILTER_DEFS.filter(f => (counts[f.key] ?? 0) > 0)
+
+  const safeFilter = counts[activeFilter] > 0 ? activeFilter : 'all'
+  const displayRows = safeFilter === 'all'
+    ? rows
+    : rows.filter(r => effectiveSource(r, overrides) === safeFilter)
+
+  return (
+    <div className="flex flex-col gap-3 pt-1">
+      {/* Summary line */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs" style={{ color: C.muted }}>
+          {rows.length} expense{rows.length !== 1 ? 's' : ''}
+          {income_count > 0 && ` · ${income_count} income`}
+          {counts.fallback > 0
+            ? <span style={{ color: C.atRisk }}> · {counts.fallback} unmatched</span>
+            : <span style={{ color: C.income }}> · all categorized</span>
+          }
+        </span>
+        {ai_cap_reached && (
+          <span className="text-xs" style={{ color: C.muted }}>· AI cap reached (50)</span>
+        )}
+      </div>
+
+      {/* AI-disabled notice */}
+      {!ai_enabled && counts.fallback > 0 && (
+        <AlertBox severity="info">
+          AI categorization is off — {counts.fallback} row{counts.fallback !== 1 ? 's' : ''} couldn't be matched automatically.
+          Enable AI in Account Settings for smarter suggestions on future imports.
+        </AlertBox>
+      )}
+
+      {/* Filter chips */}
+      <div className="flex gap-1.5 flex-wrap">
+        {visibleFilters.map(f => {
+          const isActive = safeFilter === f.key
+          return (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => onFilterChange(f.key)}
+              className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors duration-100 cursor-pointer"
+              style={{
+                backgroundColor: isActive ? C.primary + '18' : 'transparent',
+                borderColor: isActive ? C.primary : C.borderMed,
+                color: isActive ? C.primary : C.muted,
+              }}
+            >
+              {f.label} {counts[f.key] ?? 0}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Table */}
+      {displayRows.length === 0 ? (
+        <div className="py-6 text-center text-sm" style={{ color: C.muted }}>
+          No rows match this filter.
+        </div>
+      ) : (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ border: `1px solid ${C.borderMed}`, maxHeight: 420, overflowY: 'auto' }}
+        >
+          <Table>
+            <TableHeader style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: C.surfaceAlt }}>
+              <TableRow>
+                <TableHead className="text-xs">Name</TableHead>
+                <TableHead className="text-xs">Amount</TableHead>
+                <TableHead className="text-xs">Date</TableHead>
+                <TableHead className="text-xs">Category</TableHead>
+                <TableHead className="text-xs">Source</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayRows.map(row => {
+                const effectiveCategory = overrides[row.row_idx] ?? row.suggested_type
+                const isOverridden = !!overrides[row.row_idx] && overrides[row.row_idx] !== row.suggested_type
+                return (
+                  <TableRow
+                    key={row.row_idx}
+                    style={{ backgroundColor: isOverridden ? C.primary + '0a' : undefined }}
+                  >
+                    <TableCell className="text-xs py-2" style={{ color: C.warmText, maxWidth: 200 }}>
+                      <span className="block truncate" title={row.name}>{row.name}</span>
+                    </TableCell>
+                    <TableCell className="text-xs py-2 font-mono" style={{ color: C.warmText }}>
+                      ${row.amount.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-xs py-2 whitespace-nowrap" style={{ color: C.muted }}>
+                      {row.date}
+                    </TableCell>
+                    <TableCell className="text-xs py-2">
+                      <NativeSelect
+                        value={effectiveCategory}
+                        onChange={val => onOverride(row.row_idx, val)}
+                        style={{ fontSize: 12, height: 28, minWidth: 120 }}
+                      >
+                        {valid_types.map(t => <option key={t} value={t}>{t}</option>)}
+                      </NativeSelect>
+                    </TableCell>
+                    <TableCell className="text-xs py-2">
+                      <InferenceBadge source={isOverridden ? 'user' : row.source} />
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {error && <AlertBox severity="error">{error}</AlertBox>}
+    </div>
   )
 }

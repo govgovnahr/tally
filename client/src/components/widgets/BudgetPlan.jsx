@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { BarChart2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { BarChart2, Loader2 } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import api from '../../api.js'
 import { useC } from '../../colors'
@@ -10,7 +11,7 @@ import { currentMonth, addMonths, PLAN_MONTH_OPTIONS } from '../../lib/budgetMon
 import CollapsibleSection from '../ui/CollapsibleSection.jsx'
 import DollarInput from '../inputs/DollarInput.jsx'
 
-export default function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onAnalysis }) {
+export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = false, onChanged, onAnalysis }) {
   const C = useC()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [planLimits, setPlanLimits] = useState({})
@@ -23,6 +24,9 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onA
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [aiSuggestions, setAiSuggestions] = useState({})
+  const [aiLoading, setAiLoading] = useState(false)
+  const aiCache = useRef({})
 
   useEffect(() => {
     api.get('/budgets/monthly-overrides').then(r => setPlannedMonths(r.data)).catch(() => {})
@@ -56,6 +60,25 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onA
         setCatStats(map)
       }).catch(() => {})
   }, [avgMonths, excludeOutliers])
+
+  useEffect(() => {
+    if (!aiEnabled) { setAiSuggestions({}); return }
+    const cacheKey = `${avgMonths}-${excludeOutliers}`
+    if (aiCache.current[cacheKey]) {
+      setAiSuggestions(aiCache.current[cacheKey])
+      return
+    }
+    setAiLoading(true)
+    api.post('/ai/budget-recommendations', null, { params: { months: avgMonths, exclude_outliers: excludeOutliers } })
+      .then(r => {
+        const map = {}
+        r.data.forEach(rec => { map[rec.type] = rec })
+        aiCache.current[cacheKey] = map
+        setAiSuggestions(map)
+      })
+      .catch(() => {})
+      .finally(() => setAiLoading(false))
+  }, [aiEnabled, avgMonths, excludeOutliers])
 
   async function handleSave() {
     const budgets = expenseTypes
@@ -164,6 +187,7 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onA
             const tColor = C.adaptColor(t.color)
             const stats = catStats[t.name]
             const hasOverride = existingOverrides.has(t.name)
+            const rec = aiSuggestions[t.name]
             const statItems = [
               { label: `${avgMonths}-mo avg`, value: stats?.avg != null ? `$${stats.avg.toFixed(0)}` : '—' },
               { label: 'Prev. goal', value: prevGoals[t.name] != null ? `$${Number(prevGoals[t.name]).toFixed(0)}` : '—' },
@@ -203,6 +227,29 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, onChanged, onA
                       <span className="text-sm font-semibold" style={{ color: C.warmText }}>{value}</span>
                     </div>
                   ))}
+                  {aiEnabled && (
+                    aiLoading ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] leading-none" style={{ color: C.primary }}>✨ Tally</span>
+                        <Loader2 size={14} className="animate-spin mt-0.5" style={{ color: C.primary }} />
+                      </div>
+                    ) : rec ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div
+                            className="flex flex-col gap-0.5 cursor-pointer"
+                            onClick={() => { setPlanLimits(prev => ({ ...prev, [t.name]: String(rec.recommended_limit.toFixed(0)) })); setSaved(false) }}
+                          >
+                            <span className="text-[10px] leading-none" style={{ color: C.primary }}>✨ Tally</span>
+                            <span className="text-sm font-semibold underline decoration-dotted" style={{ color: C.primary }}>${rec.recommended_limit.toFixed(0)}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[220px] text-xs leading-snug">
+                          {rec.rationale}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null
+                  )}
                 </div>
               </div>
             )

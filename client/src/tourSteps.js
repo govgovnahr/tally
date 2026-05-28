@@ -12,7 +12,7 @@ export const BASIC_TOUR = [
   {
     id: 'nav',
     targetPage: 'home',
-    targetSelector: '[data-tour="nav"]',
+    targetSelector: ['[data-tour="nav-mobile"]', '[data-tour="nav"]'],
     title: 'Navigation',
     body: 'Switch between Overview, Analysis, Savings, Budgets, and Expenses from here.',
     placement: 'bottom',
@@ -28,7 +28,7 @@ export const BASIC_TOUR = [
   {
     id: 'add-expense',
     targetPage: 'home',
-    targetSelector: '[data-tour="add-expense"]',
+    targetSelector: ['[data-tour="add-expense-mobile"]', '[data-tour="add-expense"]'],
     title: 'Track Spending',
     body: 'Add expenses here. Categorize them by type — Tally uses these to power your budgets and analysis.',
     placement: 'top',
@@ -57,6 +57,22 @@ export const BASIC_TOUR = [
     body: 'Create one-time or monthly savings goals, track contributions, and see projected completion dates.',
     placement: 'top',
   },
+  {
+    id: 'ai-insights',
+    targetPage: 'home',
+    targetSelector: '[data-tour="ai-insights-card"]',
+    title: 'Tally AI',
+    body: 'Tally analyzes your spending and surfaces proactive insights — flagging over-budget categories, unusual outliers, and savings progress without you having to dig for them.',
+    placement: 'bottom',
+  },
+  {
+    id: 'ai-privacy',
+    targetPage: 'account',
+    targetSelector: '[data-tour="ai-privacy"]',
+    title: 'AI is opt-out',
+    body: 'AI features are on by default but fully optional. You can disable them here at any time — this immediately deletes your stored vector embeddings. No data is used for training.',
+    placement: 'top',
+  },
 ]
 
 // ─── Onboarding Tour ──────────────────────────────────────────────────────────
@@ -82,7 +98,7 @@ export const ONBOARDING_TOUR = [
   {
     id: 'ob-add-expense',
     targetPage: 'home',
-    targetSelector: '[data-tour="add-expense"]',
+    targetSelector: ['[data-tour="add-expense-mobile"]', '[data-tour="add-expense"]'],
     watchFor: '[data-tour="add-expense-modal"]',
     title: 'Log your first expense',
     body: 'Click Add Expense and enter a recent purchase. Pick a category — this is how Tally maps spending to your budget limits.',
@@ -179,7 +195,7 @@ export const ADVANCED_TOUR = [
   {
     id: 'adv-import-expenses',
     targetPage: 'all-expenses',
-    targetSelector: '[data-tour="import-btn"]',
+    targetSelector: ['[data-tour="import-btn-mobile"]', '[data-tour="import-btn"]'],
     title: 'Import expenses from CSV',
     body: 'Bulk-import transactions from a bank or credit card export. Tally maps columns to date, amount, and description, then auto-suggests a category for each row based on your existing categories and past entries.',
     placement: 'top',

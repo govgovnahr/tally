@@ -155,7 +155,7 @@ export function TutorialProvider({ children }) {
       const wasBasic = activeTourIdRef.current === 'basic'
       stop()
       if (wasBasic && !localStorage.getItem('tally_onboarding_seen')) {
-        setTimeout(() => start('onboarding'), 500)
+        setTimeout(() => setSuggestion('onboarding'), 500)
       }
       return
     }

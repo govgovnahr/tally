@@ -10,9 +10,30 @@ const CARD_H   = 200   // used for placement math only; card auto-heights
 const SPOT_PAD = 10
 const CARD_GAP = 16
 
-function computeCardPos(rect, placement) {
+// When targetSelector is an array, pick the first one whose element has a
+// non-zero bounding rect (i.e. is actually visible in the current layout).
+function resolveSelector(selector) {
+  if (!selector) return null
+  if (!Array.isArray(selector)) return selector
+  for (const sel of selector) {
+    const el = document.querySelector(sel)
+    if (el) {
+      const r = el.getBoundingClientRect()
+      if (r.width > 0 || r.height > 0) return sel
+    }
+  }
+  return selector[0] ?? null
+}
+
+function computeCardPos(rect, placement, cardW) {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+
   if (!rect || placement === 'center') {
-    return { top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }
+    return {
+      top:  Math.round((vh - CARD_H) / 2),
+      left: Math.round((vw - cardW) / 2),
+    }
   }
 
   let top, left
@@ -20,12 +41,12 @@ function computeCardPos(rect, placement) {
   switch (placement) {
     case 'bottom':
       top  = rect.bottom + CARD_GAP
-      left = rect.left + rect.width / 2 - CARD_W / 2
-      if (top + CARD_H > window.innerHeight - 16) top = rect.top - CARD_GAP - CARD_H
+      left = rect.left + rect.width / 2 - cardW / 2
+      if (top + CARD_H > vh - 16) top = rect.top - CARD_GAP - CARD_H
       break
     case 'top':
       top  = rect.top - CARD_GAP - CARD_H
-      left = rect.left + rect.width / 2 - CARD_W / 2
+      left = rect.left + rect.width / 2 - cardW / 2
       if (top < 16) top = rect.bottom + CARD_GAP
       break
     case 'right':
@@ -34,15 +55,18 @@ function computeCardPos(rect, placement) {
       break
     case 'left':
       top  = rect.top + rect.height / 2 - CARD_H / 2
-      left = rect.left - CARD_GAP - CARD_W
+      left = rect.left - CARD_GAP - cardW
       break
     default:
-      return { top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }
+      return {
+        top:  Math.round((vh - CARD_H) / 2),
+        left: Math.round((vw - cardW) / 2),
+      }
   }
 
   return {
-    top:  Math.max(16, Math.min(top,  window.innerHeight - CARD_H - 16)),
-    left: Math.max(16, Math.min(left, window.innerWidth  - CARD_W - 16)),
+    top:  Math.max(16, Math.min(top,  vh - CARD_H - 16)),
+    left: Math.max(16, Math.min(left, vw - cardW - 16)),
   }
 }
 
@@ -65,7 +89,7 @@ export default function TutorialOverlay() {
 
   // Reset activeSelector whenever the step changes
   useEffect(() => {
-    setActiveSelector(step.targetSelector ?? null)
+    setActiveSelector(resolveSelector(step.targetSelector ?? null))
   }, [step.id])
 
   // ── watchFor: switch spotlight to modal/element when it appears ───────────
@@ -143,7 +167,8 @@ export default function TutorialOverlay() {
   const spotY = rect ? rect.y - SPOT_PAD : 0
   const spotW = rect ? rect.width  + SPOT_PAD * 2 : 0
   const spotH = rect ? rect.height + SPOT_PAD * 2 : 0
-  const cardPos  = computeCardPos(rect, step.placement)
+  const cardW    = Math.min(CARD_W, window.innerWidth - 32)
+  const cardPos  = computeCardPos(rect, step.placement, cardW)
   const nextLabel = step.ctaLabel ?? (isLast ? 'Finish' : 'Next →')
 
   return createPortal(
@@ -184,7 +209,7 @@ export default function TutorialOverlay() {
             position: 'fixed',
             ...cardPos,
             zIndex: 9999,
-            width: CARD_W,
+            width: cardW,
             backgroundColor: C.surfacePopup,
             border: `1px solid ${C.border}`,
             borderRadius: 16,

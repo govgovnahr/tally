@@ -18,7 +18,7 @@ import { ErrorMsg } from '../ui/AlertBox.jsx'
 
 const today = () => new Date().toISOString().split('T')[0]
 
-export default function AddExpenseForm({ onClose, onAdded, expense }) {
+export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
   const C = useC()
   const queryClient = useQueryClient()
   const { typeNames } = useExpenseTypes()
@@ -26,10 +26,10 @@ export default function AddExpenseForm({ onClose, onAdded, expense }) {
   useEffect(() => { suggestOnboardingTour?.() }, [])
   const isEditing = Boolean(expense)
   const [form, setForm] = useState({
-    name: expense?.name ?? '',
-    amount: expense?.amount ?? '',
-    type: expense?.type ?? typeNames[0] ?? '',
-    date: expense?.date ?? today(),
+    name: expense?.name ?? prefill?.name ?? '',
+    amount: expense?.amount ?? prefill?.amount ?? '',
+    type: expense?.type ?? (prefill?.type && typeNames.includes(prefill.type) ? prefill.type : typeNames[0] ?? ''),
+    date: expense?.date ?? prefill?.date ?? today(),
   })
   const [isRecurring, setIsRecurring] = useState(expense?.is_recurring === 1)
   const [rememberRule, setRememberRule] = useState(false)

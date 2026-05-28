@@ -335,7 +335,7 @@ export default function AccountPage({ user, onLogout }) {
       <ClearAllDialog/>
 
       {/* AI & Privacy */}
-      <div style={section}>
+      <div style={section} data-tour="ai-privacy">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Bot size={16} color={C.muted} />

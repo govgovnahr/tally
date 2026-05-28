@@ -131,35 +131,43 @@ def _soft_match_type(raw: str, valid: list[str]) -> Optional[str]:
     return None
 
 
-def _infer_type(name: str, valid_types: list[str], rules: list[tuple] = []) -> str:
+KEYWORDS = {
+    "food": ["restaurant", "food", "grocery", "groceries", "cafe", "coffee", "lunch", "dinner",
+             "breakfast", "pizza", "burger", "sushi", "diner", "bakery", "donut", "sandwich"],
+    "transport": ["uber", "lyft", "gas", "fuel", "parking", "transit", "metro", "bus", "train",
+                  "airline", "flight", "taxi", "toll", "shell", "chevron", "bp", "car"],
+    "housing": ["rent", "mortgage", "electric", "electricity", "water", "internet", "cable",
+                "utilities", "utility", "hoa", "insurance"],
+    "health": ["pharmacy", "cvs", "walgreens", "doctor", "hospital", "medical", "dental",
+               "health", "gym", "fitness", "clinic", "optician"],
+    "entertainment": ["netflix", "spotify", "hulu", "disney", "apple tv", "movie", "cinema",
+                      "theater", "concert", "game", "steam", "xbox", "playstation"],
+    "shopping": ["amazon", "walmart", "target", "costco", "store", "shop", "mall", "ebay"],
+}
+
+
+def _infer_type_with_source(name: str, valid_types: list[str], rules: list[tuple] = []) -> tuple[str, str]:
+    """Returns (category, source) where source is 'rule', 'keyword', or 'fallback'."""
     name_lower = name.lower()
     for pattern, expense_type in rules:
         if pattern.lower() in name_lower:
             matched = _soft_match_type(expense_type, valid_types)
             if matched:
-                return matched
-
-    KEYWORDS = {
-        "food": ["restaurant", "food", "grocery", "groceries", "cafe", "coffee", "lunch", "dinner",
-                 "breakfast", "pizza", "burger", "sushi", "diner", "bakery", "donut", "sandwich"],
-        "transport": ["uber", "lyft", "gas", "fuel", "parking", "transit", "metro", "bus", "train",
-                      "airline", "flight", "taxi", "toll", "shell", "chevron", "bp", "car"],
-        "housing": ["rent", "mortgage", "electric", "electricity", "water", "internet", "cable",
-                    "utilities", "utility", "hoa", "insurance"],
-        "health": ["pharmacy", "cvs", "walgreens", "doctor", "hospital", "medical", "dental",
-                   "health", "gym", "fitness", "clinic", "optician"],
-        "entertainment": ["netflix", "spotify", "hulu", "disney", "apple tv", "movie", "cinema",
-                          "theater", "concert", "game", "steam", "xbox", "playstation"],
-        "shopping": ["amazon", "walmart", "target", "costco", "store", "shop", "mall", "ebay"],
-    }
+                return matched, "rule"
     for category, keywords in KEYWORDS.items():
         if any(kw in name_lower for kw in keywords):
             matched = _soft_match_type(category, valid_types)
             if not matched:
                 matched = next((v for v in valid_types if category in v.lower()), None)
             if matched:
-                return matched
-    return next((v for v in valid_types if v.lower() == "other"), None) or (valid_types[0] if valid_types else "Other")
+                return matched, "keyword"
+    fallback = next((v for v in valid_types if v.lower() == "other"), None) or (valid_types[0] if valid_types else "Other")
+    return fallback, "fallback"
+
+
+def _infer_type(name: str, valid_types: list[str], rules: list[tuple] = []) -> str:
+    category, _ = _infer_type_with_source(name, valid_types, rules)
+    return category
 
 
 INCOME_SIGNALS = {"credit", "cr", "income", "deposit", "refund", "payment received"}
@@ -201,6 +209,109 @@ def infer_type_endpoint(
     if not valid_types:
         return {"type": "Other"}
     return {"type": _infer_type(name, valid_types, rules)}
+
+
+@router.post("/import/suggest")
+async def suggest_import_categories(
+    file: UploadFile = File(...),
+    mapping: str = Form(...),
+    header_row: int = Form(...),
+    sheet_name: Optional[str] = Form(None),
+    user_id: str = Depends(get_current_user),
+):
+    """Run the full inference pipeline without writing to DB. Returns per-row category suggestions."""
+    try:
+        col_map = json.loads(mapping)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid mapping JSON")
+
+    content = await file.read()
+    raw_rows = _get_raw_rows(content, file.filename, sheet_name)
+    _, data_rows = _rows_to_dicts(raw_rows, header_row)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM expense_types WHERE user_id = %s ORDER BY sort_order", (user_id,))
+    valid_types = [r["name"] for r in cursor.fetchall()]
+    cursor.execute("SELECT pattern, expense_type FROM import_rules WHERE user_id = %s", (user_id,))
+    rules = [(r["pattern"], r["expense_type"]) for r in cursor.fetchall()]
+    from database import get_user_settings
+    user_ai_settings = get_user_settings(conn, user_id)
+    conn.close()
+
+    ai_categorize_fn = _get_ai_categorizer() if user_ai_settings["ai_enabled"] else None
+
+    AI_CAP = 50
+    ai_calls = 0
+    ai_rows_count = 0
+    income_count = 0
+    rows = []
+
+    for i, row in enumerate(data_rows):
+        try:
+            name = row.get(col_map.get("name", ""), "").strip()
+            if not name:
+                continue
+            raw_amt = row.get(col_map.get("amount", ""), "")
+            amount_float = float(str(raw_amt).replace(",", "").replace("$", "").replace("(", "-").replace(")", "").strip())
+            if amount_float == 0:
+                continue
+            amount = round(abs(amount_float), 2)
+            raw_date = row.get(col_map.get("date", ""), "").strip()
+            date_str = _parse_date(raw_date)
+            record_type_col_val = row.get(col_map.get("record_type", ""), "") if col_map.get("record_type") else ""
+            row_type = _determine_record_type(amount_float, record_type_col_val)
+
+            if row_type == "income":
+                income_count += 1
+                continue
+
+            raw_type = row.get(col_map.get("type", ""), "").strip() if col_map.get("type") else ""
+            ai_reasoning = None
+
+            if raw_type and raw_type.lower() == "savings":
+                suggested_type = "Savings"
+                source = "file"
+            elif raw_type:
+                matched = _soft_match_type(raw_type, valid_types)
+                if matched:
+                    suggested_type, source = matched, "file"
+                else:
+                    suggested_type, source = _infer_type_with_source(name, valid_types, rules)
+            else:
+                suggested_type, source = _infer_type_with_source(name, valid_types, rules)
+
+            if source == "fallback" and ai_categorize_fn and ai_calls < AI_CAP:
+                suggestion = ai_categorize_fn(name, amount, valid_types)
+                ai_calls += 1
+                suggested = suggestion.get("category")
+                if suggested and suggested in valid_types:
+                    suggested_type = suggested
+                    source = "ai"
+                    ai_reasoning = suggestion.get("reasoning")
+                    ai_rows_count += 1
+
+            rows.append({
+                "row_idx": i,
+                "name": name,
+                "amount": amount,
+                "date": date_str,
+                "record_type": "expense",
+                "suggested_type": suggested_type,
+                "source": source,
+                "ai_reasoning": ai_reasoning,
+            })
+        except (ValueError, KeyError, TypeError):
+            continue
+
+    return {
+        "rows": rows,
+        "income_count": income_count,
+        "ai_rows_count": ai_rows_count,
+        "ai_cap_reached": ai_calls >= AI_CAP and ai_calls > 0,
+        "ai_enabled": user_ai_settings["ai_enabled"],
+        "valid_types": valid_types,
+    }
 
 
 _DEFAULT_COLORS = [
@@ -338,6 +449,7 @@ async def import_records(
     mapping: str = Form(...),
     header_row: int = Form(...),
     sheet_name: Optional[str] = Form(None),
+    confirmed_types: Optional[str] = Form(None),
     user_id: str = Depends(get_current_user),
 ):
     try:
@@ -363,6 +475,7 @@ async def import_records(
     from database import get_user_settings
     user_ai_settings = get_user_settings(conn, user_id)
     ai_categorize_fn = _get_ai_categorizer() if user_ai_settings["ai_enabled"] else None
+    overrides = json.loads(confirmed_types) if confirmed_types else {}
 
     for i, row in enumerate(data_rows, start=header_row + 2):
         try:
@@ -391,28 +504,34 @@ async def import_records(
             now = datetime.now().isoformat()
 
             if row_type == "expense":
-                raw_type = row.get(col_map.get("type", ""), "").strip() if col_map.get("type") else ""
+                row_0idx = str(i - (header_row + 2))
+                confirmed = overrides.get(row_0idx)
 
-                if raw_type and raw_type.lower() == "savings":
-                    if "Savings" not in valid_types:
-                        cursor.execute(
-                            "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
-                            (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1, user_id),
-                        )
-                        valid_types.append("Savings")
-                    expense_type = "Savings"
-                elif raw_type:
-                    expense_type = _soft_match_type(raw_type, valid_types) or _infer_type(name, valid_types, rules)
+                if confirmed and confirmed in valid_types:
+                    expense_type = confirmed
                 else:
-                    expense_type = _infer_type(name, valid_types, rules)
-                    # If the keyword matcher gave up and fell back to 'Other', escalate to AI.
-                    # The LLM recognises brands and merchant names that keyword lists miss.
-                    if ai_categorize_fn and _is_other_fallback(expense_type, valid_types):
-                        suggestion = ai_categorize_fn(name, amount, valid_types)
-                        suggested = suggestion.get("category")
-                        if suggested and suggested in valid_types:
-                            expense_type = suggested
-                            ai_categorized_count += 1
+                    raw_type = row.get(col_map.get("type", ""), "").strip() if col_map.get("type") else ""
+
+                    if raw_type and raw_type.lower() == "savings":
+                        if "Savings" not in valid_types:
+                            cursor.execute(
+                                "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
+                                (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1, user_id),
+                            )
+                            valid_types.append("Savings")
+                        expense_type = "Savings"
+                    elif raw_type:
+                        expense_type = _soft_match_type(raw_type, valid_types) or _infer_type(name, valid_types, rules)
+                    else:
+                        expense_type = _infer_type(name, valid_types, rules)
+                        # If the keyword matcher gave up and fell back to 'Other', escalate to AI.
+                        # The LLM recognises brands and merchant names that keyword lists miss.
+                        if ai_categorize_fn and _is_other_fallback(expense_type, valid_types):
+                            suggestion = ai_categorize_fn(name, amount, valid_types)
+                            suggested = suggestion.get("category")
+                            if suggested and suggested in valid_types:
+                                expense_type = suggested
+                                ai_categorized_count += 1
 
                 cursor.execute(
                     "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",

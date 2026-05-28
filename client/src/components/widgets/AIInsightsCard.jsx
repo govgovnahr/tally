@@ -49,7 +49,7 @@ export default function AIInsightsCard({ onNavigate }) {
   }
 
   return (
-    <Card className="rounded-xl p-4 sm:p-5 mb-4">
+    <Card className="rounded-xl p-4 sm:p-5 mb-4" data-tour="ai-insights-card">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
         <Sparkles size={13} color={C.primary} />

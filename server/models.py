@@ -198,3 +198,4 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     history: List[ChatMessage]
+    tool_steps: List[str] = Field(default_factory=list)

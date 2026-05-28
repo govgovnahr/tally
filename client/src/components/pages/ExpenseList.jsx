@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { startTransition } from 'react'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { qk } from '../../queryKeys.js'
-import { Plus, Trash2, Pencil, Repeat, Upload, Search, X, ArrowUp, ArrowDown, TriangleAlert } from 'lucide-react'
+import { Plus, Trash2, Pencil, Repeat, Upload, Search, X, ArrowUp, ArrowDown, TriangleAlert, Camera } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -15,6 +15,7 @@ import api from '../../api.js'
 import AddExpenseForm from '../widgets/AddExpenseForm.jsx'
 import AddIncomeForm from '../widgets/AddIncomeForm.jsx'
 import ImportDialog from '../dialogs/ImportDialog.jsx'
+import ReceiptScanDialog from '../dialogs/ReceiptScanDialog.jsx'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import { useC } from '../../colors'
 import { useTutorial } from '../../TutorialContext.jsx'
@@ -99,6 +100,8 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
   const [editingExpense, setEditingExpense] = useState(null)
   const [editingIncome, setEditingIncome] = useState(null)
   const [showImport, setShowImport] = useState(false)
+  const [showReceiptScan, setShowReceiptScan] = useState(false)
+  const [receiptPrefill, setReceiptPrefill] = useState(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [detailItem, setDetailItem] = useState(null)
   const [detailIsIncome, setDetailIsIncome] = useState(false)
@@ -180,6 +183,13 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
   })
   const expenses = expensesResult?.expenses ?? []
 
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const aiEnabled = settings?.ai_enabled ?? false
+
   useEffect(() => {
     if (activeType === 'Income' && incomesResult) setTotal(incomesResult.total)
     else if (activeType !== 'Income' && expensesResult) setTotal(expensesResult.total)
@@ -244,6 +254,13 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
           <Button variant="outline" size="sm" onClick={() => { setShowImport(true); suggestAdvancedTour() }} className="font-semibold" data-tour="import-btn">
             <Upload size={14} className="mr-1" />Import
           </Button>
+
+          {aiEnabled && !isIncome && (
+            <Button variant="outline" size="sm" onClick={() => setShowReceiptScan(true)} className="font-semibold" title="Scan receipt">
+              <Camera size={14} className="mr-1" />Scan
+            </Button>
+          )}
+
           {isIncome ? (
             <Button size="sm" className="font-semibold" onClick={() => setShowIncomeForm(true)}
               style={{ backgroundColor: C.income, color: '#000' }}>
@@ -265,12 +282,21 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
             <Trash2 size={16} />
           </button>
           <button type="button" title="Import" onClick={() => setShowImport(true)}
+            data-tour="import-btn-mobile"
             className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer"
             style={{ color: C.muted }}>
             <Upload size={16} />
           </button>
+          {aiEnabled && !isIncome && (
+            <button type="button" title="Scan receipt" onClick={() => setShowReceiptScan(true)}
+              className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer"
+              style={{ color: C.primary }}>
+              <Camera size={16} />
+            </button>
+          )}
           <button type="button" title={isIncome ? 'Add Income' : 'Add Expense'}
             onClick={() => isIncome ? setShowIncomeForm(true) : setShowExpenseForm(true)}
+            data-tour="add-expense-mobile"
             className="p-1.5 rounded-lg bg-transparent border-none cursor-pointer"
             style={{ color: isIncome ? C.income : C.primary }}>
             <Plus size={16} />
@@ -523,8 +549,14 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
       )}
 
       {/* Forms & dialogs */}
-      {showExpenseForm && <AddExpenseForm onClose={() => setShowExpenseForm(false)} onAdded={invalidateAll} />}
+      {showExpenseForm && <AddExpenseForm prefill={receiptPrefill} onClose={() => { setShowExpenseForm(false); setReceiptPrefill(null) }} onAdded={invalidateAll} />}
       {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} onAdded={invalidateAll} />}
+      {showReceiptScan && (
+        <ReceiptScanDialog
+          onAdd={prefill => { setReceiptPrefill(prefill); setShowReceiptScan(false); setShowExpenseForm(true) }}
+          onClose={() => setShowReceiptScan(false)}
+        />
+      )}
       {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={invalidateAll} />}
       {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={invalidateAll} />}
       {showImport && (

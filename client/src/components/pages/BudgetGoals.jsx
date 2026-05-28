@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Upload, BarChart2 } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, Pencil, Trash2, Upload, BarChart2, Sparkles, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from 'glasscn-ui'
 import api from '../../api.js'
@@ -10,6 +10,8 @@ import { useC } from '../../colors'
 import { useTutorial } from '../../TutorialContext.jsx'
 import { currentMonth } from '../../lib/budgetMonths.js'
 import AlertBox from '../ui/AlertBox.jsx'
+import AIBudgetRecsDialog from '../dialogs/AIBudgetRecsDialog.jsx'
+import { qk } from '../../queryKeys.js'
 import IconButton from '../ui/IconButton.jsx'
 import CategoryAnalysisDialog from '../dialogs/CategoryAnalysisDialog.jsx'
 import ImportBudgetsDialog from '../dialogs/ImportBudgetsDialog.jsx'
@@ -28,6 +30,9 @@ export default function BudgetGoals() {
   const queryClient = useQueryClient()
 
   useEffect(() => { suggestOnboardingTour?.() }, [])
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: () => api.get('/settings').then(r => r.data) })
+  const aiEnabled = settings?.ai_enabled ?? false
+
   const { expenseTypes, reloadTypes, macrocategories } = useExpenseTypes()
   const [limits, setLimits] = useState({})
   const [currentOverrides, setCurrentOverrides] = useState({})
@@ -40,6 +45,10 @@ export default function BudgetGoals() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
   const [analysisCategory, setAnalysisCategory] = useState(null)
+  const [aiRecsOpen, setAiRecsOpen] = useState(false)
+  const [aiRecs, setAiRecs] = useState([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
 
   const currentMonthShort = new Date().toLocaleString('en-US', { month: 'short' })
 
@@ -78,6 +87,25 @@ export default function BudgetGoals() {
     }
     catch { setSaveError('Failed to save. Please try again.') }
     finally { setSaving(false) }
+  }
+
+  async function handleAISuggest() {
+    setAiLoading(true); setAiError('')
+    try {
+      const res = await api.post('/ai/budget-recommendations')
+      setAiRecs(res.data)
+      setAiRecsOpen(true)
+    } catch (e) {
+      setAiError(e.response?.data?.detail || 'AI suggestions unavailable. Please try again.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function handleAiApply(limitsMap) {
+    setLimits(prev => ({ ...prev, ...Object.fromEntries(Object.entries(limitsMap).map(([k, v]) => [k, String(v)])) }))
+    setAiRecsOpen(false)
+    setSaved(false)
   }
 
   async function handleTypeSaved() {
@@ -204,6 +232,12 @@ export default function BudgetGoals() {
           <p className="text-sm" style={{ color: C.muted }}>Manage spending categories and budget limits.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {aiEnabled && (
+            <Button variant="outline" size="sm" onClick={handleAISuggest} disabled={aiLoading} className="font-semibold" style={{ color: C.primary, borderColor: C.primary + '50' }}>
+              {aiLoading ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Sparkles size={14} className="mr-1" />}
+              AI Suggest
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => { setImportOpen(true); suggestAdvancedTour() }} className="font-semibold" style={{ color: C.muted, borderColor: C.borderMed }} data-tour="import-categories-btn">
             <Upload size={14} className="mr-1" />Import
           </Button>
@@ -212,6 +246,8 @@ export default function BudgetGoals() {
           </Button>
         </div>
       </div>
+
+      {aiError && <AlertBox severity="error" className="mt-3">{aiError}</AlertBox>}
 
       <div className="h-px mt-4" style={{ backgroundColor: C.hoverStrong }} />
 
@@ -237,7 +273,7 @@ export default function BudgetGoals() {
       </CollapsibleSection>
 
       <div data-tour="budget-plan">
-        <BudgetPlan expenseTypes={expenseTypes} defaultLimits={limits} onAnalysis={setAnalysisCategory} onChanged={() => {
+        <BudgetPlan expenseTypes={expenseTypes} defaultLimits={limits} aiEnabled={aiEnabled} onAnalysis={setAnalysisCategory} onChanged={() => {
           setCurrentOverrides({})
           api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
             .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))
@@ -258,6 +294,13 @@ export default function BudgetGoals() {
       </div>
       <MacrocategoryManager />
 
+      {aiRecsOpen && aiRecs.length > 0 && (
+        <AIBudgetRecsDialog
+          recommendations={aiRecs}
+          onApply={handleAiApply}
+          onClose={() => setAiRecsOpen(false)}
+        />
+      )}
       {importOpen && (
         <ImportBudgetsDialog
           onClose={() => setImportOpen(false)}

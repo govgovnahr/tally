@@ -3,7 +3,20 @@ import { Send } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useC } from '../../colors'
-import api from '../../api.js'
+import { supabase } from '../../supabase'
+
+const TOOL_LABELS = {
+  semantic_search:            'Searched expenses',
+  sql_query:                  'Queried data',
+  savings_calculator:         'Savings calculator',
+  suggest_category:           'Categorized expense',
+  flag_anomalies:             'Checked for anomalies',
+  get_monthly_summary:        'Monthly summary',
+  get_category_breakdown:     'Category breakdown',
+  get_budget_status:          'Budget status',
+  get_savings_goals_status:   'Savings goals',
+  get_recurring_transactions: 'Recurring transactions',
+}
 
 const STARTER_PROMPTS = [
   'How much did I spend on food this month?',
@@ -16,32 +29,109 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [streamingTools, setStreamingTools] = useState([])
   const [history, setHistory] = useState([])
   const bottomRef = useRef(null)
+  const containerRef = useRef(null)
+  const streamingToolsRef = useRef([])
+  const userScrolledUp = useRef(false)
+  streamingToolsRef.current = streamingTools
+
+  // Detect intentional upward scroll — stop auto-scrolling until user returns to bottom
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      userScrolledUp.current = distFromBottom > 80
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
 
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    const lastMsg = messages[messages.length - 1]
+    const shouldScroll = lastMsg?.role === 'user' || !userScrolledUp.current
+    if (shouldScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
     }
-  }, [messages, loading])
+  }, [messages])
 
   async function sendMessage(text) {
     const trimmed = text.trim()
     if (!trimmed || loading) return
 
     setInput('')
+    userScrolledUp.current = false
     setMessages(prev => [...prev, { role: 'user', content: trimmed }])
     setLoading(true)
+    setStreamingTools([])
 
     try {
-      const res = await api.post('/chat', { message: trimmed, history })
-      setHistory(res.data.history)
-      setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }])
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const baseURL = import.meta.env.VITE_API_URL ?? ''
+
+      const res = await fetch(`${baseURL}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ message: trimmed, history }),
+      })
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = JSON.parse(line.slice(6))
+
+          if (data.type === 'tool_start') {
+            setStreamingTools(prev => [...prev, data.tool])
+          } else if (data.type === 'token') {
+            setMessages(prev => {
+              const last = prev[prev.length - 1]
+              if (last?.streaming) {
+                return [...prev.slice(0, -1), { ...last, content: last.content + data.content }]
+              }
+              return [...prev, {
+                role: 'assistant',
+                content: data.content,
+                tool_steps: [...streamingToolsRef.current],
+                streaming: true,
+              }]
+            })
+          } else if (data.type === 'done') {
+            setHistory(data.history)
+            setMessages(prev => {
+              const last = prev[prev.length - 1]
+              if (last?.streaming) {
+                return [...prev.slice(0, -1), { ...last, tool_steps: data.tool_steps, streaming: false }]
+              }
+              return prev
+            })
+            setStreamingTools([])
+          } else if (data.type === 'error') {
+            setMessages(prev => [...prev, { role: 'assistant', content: data.detail }])
+            setStreamingTools([])
+          }
+        }
+      }
     } catch {
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: 'Something went wrong. Please try again.' },
-      ])
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+      setStreamingTools([])
     } finally {
       setLoading(false)
     }
@@ -64,7 +154,7 @@ export default function ChatPage() {
     }}>
 
       {/* ── Message list ── */}
-      <div style={{
+      <div ref={containerRef} style={{
         flex: 1,
         overflowY: 'auto',
         padding: '16px 0',
@@ -127,11 +217,36 @@ export default function ChatPage() {
               wordBreak: 'break-word',
               backgroundColor: msg.role === 'user' ? C.primaryTint : C.surfaceAlt,
               color: C.warmText,
-              border: '1px solid ' + (msg.role === 'user' ? C.primary + '55' : C.borderMed),
             }}>
               {msg.role === 'user' ? (
                 <span style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</span>
               ) : (
+                <>
+                  {msg.tool_steps?.length > 0 && (
+                    <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid ' + C.borderSubtle }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>
+                        Tally checked
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {[...new Set(msg.tool_steps)].map((tool, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 500,
+                              padding: '3px 10px',
+                              borderRadius: 10,
+                              border: '1px solid ' + C.primary + '66',
+                              color: C.primary,
+                              backgroundColor: C.primaryTint,
+                            }}
+                          >
+                            {TOOL_LABELS[tool] ?? tool}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -151,35 +266,54 @@ export default function ChatPage() {
                 >
                   {msg.content}
                 </ReactMarkdown>
+                </>
               )}
             </div>
           </div>
         ))}
 
-        {loading && (
+        {loading && !messages.some(m => m.streaming) && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{
-              padding: '12px 16px',
+              padding: '10px 14px',
               borderRadius: 14,
               backgroundColor: C.surfaceAlt,
-              border: '1px solid ' + C.borderMed,
-              display: 'flex',
-              gap: 5,
-              alignItems: 'center',
+              minWidth: 120,
             }}>
-              {[0, 1, 2].map(dot => (
-                <div
-                  key={dot}
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    backgroundColor: C.muted,
-                    animation: 'pulse 1.2s ease-in-out infinite',
-                    animationDelay: (dot * 0.2) + 's',
-                  }}
-                />
-              ))}
+              {streamingTools.length === 0 ? (
+                <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                  {[0, 1, 2].map(dot => (
+                    <div key={dot} style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      backgroundColor: C.muted,
+                      animation: 'pulse 1.2s ease-in-out infinite',
+                      animationDelay: (dot * 0.2) + 's',
+                    }} />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>
+                    Checking…
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {streamingTools.map((tool, i) => (
+                      <span key={i} style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        padding: '3px 10px',
+                        borderRadius: 10,
+                        border: '1px solid ' + C.primary + '66',
+                        color: C.primary,
+                        backgroundColor: C.primaryTint,
+                        animation: i === streamingTools.length - 1 ? 'pulse 1s ease-in-out infinite' : 'none',
+                      }}>
+                        {TOOL_LABELS[tool] ?? tool}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

@@ -101,6 +101,17 @@ Supabase Auth. `auth.py` verifies Supabase JWTs (HS256, `aud=authenticated`) fro
 
 **Smoke test after deploy:** load app, sign up, add expense, add income, view analysis, check savings goals, import CSV, verify settings persist across page refresh
 
+## AI Features
+
+All AI calls go through `ai_router.py` using OpenAI. Gated on `settings.ai_enabled` per user.
+
+- **Proactive insights** — `GET /ai/insights`: 2-3 observations on dashboard load (`AIInsightsCard`)
+- **NL expense entry** — `POST /ai/parse-expense`: free-text → `{name, amount, date, type}` in `AddExpenseForm`
+- **Smart import categorization** — `POST /ai/classify-rows`: per-row type inference in `ImportDialog` review step
+- **AI budget recommendations** — `POST /ai/budget-recommendations`: 3-month history → per-category limits (`AIBudgetRecsDialog`)
+- **Receipt OCR** — `POST /ai/scan-receipt`: image upload → GPT-4o vision → `{name, amount, date, type_suggestion}`; camera button in `ExpenseList` toolbar opens `ReceiptScanDialog`, hands off prefill to `AddExpenseForm`
+  - Uses `%s` placeholders (Postgres) — don't use `?`
+
 ## Planned Features
 
 ### Bank linking (Plaid)
