@@ -1,0 +1,64 @@
+import os
+import sys
+import uuid
+import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from fastapi.testclient import TestClient
+from server import app
+from auth import get_current_user
+from database import get_connection
+
+TEST_USER = "test-user-00000000-0000-0000-0000-000000000099"
+
+_SEED_TYPES = [
+    ("Food",          "#e8a87c", "Restaurant",   0),
+    ("Transport",     "#82b4e0", "Commute",       1),
+    ("Housing",       "#c49ee8", "Home",          2),
+    ("Entertainment", "#f0c040", "Movie",         3),
+    ("Health",        "#80cbc4", "LocalHospital", 4),
+    ("Other",         "#a0a0a0", "Category",      5),
+]
+
+_CLEANUP_TABLES = [
+    "savings_contributions",
+    "savings_goals",
+    "expenses",
+    "incomes",
+    "budgets",
+    "monthly_budgets",
+    "expense_types",
+    "import_rules",
+    "macrocategories",
+    "user_settings",
+]
+
+
+@pytest.fixture(scope="session")
+def client():
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER
+
+    conn = get_connection()
+    for name, color, icon, sort_order in _SEED_TYPES:
+        conn.execute(
+            "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
+            (str(uuid.uuid4()), name, color, icon, sort_order, 1, TEST_USER),
+        )
+    conn.commit()
+    conn.close()
+
+    with TestClient(app) as c:
+        yield c
+
+    conn = get_connection()
+    for table in _CLEANUP_TABLES:
+        try:
+            conn.execute(f"DELETE FROM {table} WHERE user_id = %s", (TEST_USER,))
+        except Exception:
+            pass
+    conn.commit()
+    conn.close()
+
+    app.dependency_overrides.clear()

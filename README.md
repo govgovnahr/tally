@@ -15,6 +15,9 @@ A full-stack personal finance app with AI-powered insights. Track expenses and i
 - **Spending analysis** — budget pacing, category trends, z-score outlier detection, month-over-month summaries
 
 ### AI
+
+AI is woven into every major workflow — not a single bolted-on feature.
+
 - **Proactive insights** — observations surfaced on dashboard load from pacing data, outliers, and goal progress
 - **Natural language entry** — describe an expense in plain text and have it parsed into structured fields
 - **Receipt OCR** — photograph or upload a receipt; GPT-4o vision extracts merchant, amount, and date
@@ -23,6 +26,30 @@ A full-stack personal finance app with AI-powered insights. Track expenses and i
 - **Anomaly explainer** — expand any flagged outlier to understand whether it was a one-off event, a frequency spike, or a new habit forming
 - **Goal deadline coach** — at-risk savings goals surface 3 concrete options (cut a spending category, extend the deadline, reduce the target) grounded in real numbers
 - **AI chat** — conversational agent with tools: budget status, savings progress, category breakdown, outlier detection, semantic transaction search
+
+---
+
+## Running in Development
+
+```bash
+# Backend — http://localhost:3001
+cd server && pip install -r requirements.txt && python server.py
+
+# Frontend — http://localhost:5173
+cd client && npm install && npm run dev
+```
+
+## Tests
+
+Integration tests run against a real Postgres connection — no mocks. Set `DATABASE_URL` before running.
+
+```bash
+cd server
+pip install -r requirements-test.txt
+pytest
+```
+
+Tests use a dedicated test user ID and clean up all inserted data after the session.
 
 ---
 
