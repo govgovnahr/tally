@@ -76,6 +76,72 @@ def _parse_xlsx(content: bytes, sheet_name: Optional[str] = None) -> list[list[s
     return rows
 
 
+def _parse_pdf(content: bytes) -> list[list[str]]:
+    try:
+        import pdfplumber
+    except ImportError:
+        raise HTTPException(status_code=500, detail="PDF support not available on this server.")
+
+    try:
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            all_rows: list[list[str]] = []
+            for page in pdf.pages:
+                for table in (page.extract_tables() or []):
+                    for row in table:
+                        all_rows.append([str(c).strip() if c is not None else "" for c in row])
+            if all_rows:
+                return all_rows
+            full_text = "\n".join(p.extract_text() or "" for p in pdf.pages).strip()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        s = f"{type(exc).__name__} {exc}".lower()
+        if "password" in s or "encrypt" in s:
+            raise HTTPException(status_code=422, detail="This PDF is password-protected. Please unlock it before uploading.")
+        raise HTTPException(status_code=422, detail=f"Could not read PDF: {exc}")
+
+    if not full_text:
+        raise HTTPException(
+            status_code=422,
+            detail="This PDF appears to be scanned or image-only. Please upload a text-based bank statement.",
+        )
+
+    if os.environ.get("OPENAI_API_KEY"):
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                temperature=0,
+                max_tokens=2000,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Extract all transactions from this bank statement text. "
+                            "Return JSON: {\"rows\": [[\"Date\",\"Description\",\"Amount\"], ...]}. "
+                            "First row must be column headers. Use negative amounts for debits/charges, "
+                            "positive for credits/deposits. Include only transaction rows — no totals, "
+                            "summaries, or opening/closing balance lines."
+                        ),
+                    },
+                    {"role": "user", "content": full_text[:8000]},
+                ],
+            )
+            data = json.loads(resp.choices[0].message.content)
+            rows = [[str(c) for c in row] for row in data.get("rows", [])]
+            if rows:
+                return rows
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=422,
+        detail="Could not extract a transaction table from this PDF. Try exporting as CSV instead.",
+    )
+
+
 def _detect_header_row(rows: list[list[str]]) -> int:
     best_idx = 0
     best_score = -1
@@ -190,8 +256,10 @@ def _get_raw_rows(content: bytes, filename: str, sheet_name: Optional[str] = Non
         return _parse_csv(content)
     elif lower.endswith((".xlsx", ".xls")):
         return _parse_xlsx(content, sheet_name)
+    elif lower.endswith(".pdf"):
+        return _parse_pdf(content)
     else:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Upload a .csv or .xlsx file.")
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload a .csv, .xlsx, or .pdf file.")
 
 
 @router.get("/import/infer-type")

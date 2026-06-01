@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { startTransition } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { qk } from '../../queryKeys.js'
-import { TrendingUp, TrendingDown, Minus, TriangleAlert, ArrowUp, ArrowDown, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, TriangleAlert, ArrowUp, ArrowDown, X, Sparkles, Loader2 } from 'lucide-react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -308,9 +308,18 @@ function BudgetPerformanceSection({ months }) {
 
 // ─── Outlier Expanded Content ─────────────────────────────────────────────────
 
-function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, onClose }) {
+function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, onClose, aiEnabled }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
+
+  const [explainRequested, setExplainRequested] = useState(false)
+  const { data: explainData, isFetching: explainLoading } = useQuery({
+    queryKey: qk.aiExplainOutlier(expense.id),
+    queryFn: () => api.post('/ai/explain-outlier', { expense_id: expense.id }).then(r => r.data),
+    enabled: explainRequested,
+    staleTime: 30 * 60_000,
+    retry: false,
+  })
 
   const { data: recentData } = useQuery({
     queryKey: ['expenses', 'outlier-context', expense.id, expense.type],
@@ -379,6 +388,38 @@ function OutlierExpandedContent({ expense, onEdit, onDismiss, onShowInExpenses, 
             </div>
           ))}
         </div>
+
+        {/* AI Explain */}
+        {aiEnabled && (
+          explainData ? (
+            <div className="rounded-xl p-3 flex flex-col gap-2"
+              style={{ backgroundColor: `${C.primary}0f`, border: `1px solid ${C.primary}30` }}>
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={12} style={{ color: C.primary }} />
+                <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: C.primary }}>AI Analysis</span>
+              </div>
+              <p className="text-sm" style={{ color: C.warmText }}>{explainData.explanation}</p>
+              <p className="text-xs" style={{ color: C.muted }}><strong>Tip:</strong> {explainData.actionable}</p>
+            </div>
+          ) : explainLoading ? (
+            <div className="flex items-center gap-2" style={{ color: C.muted }}>
+              <Loader2 size={14} className="animate-spin" />
+              <span className="text-sm">Analyzing…</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setExplainRequested(true)}
+              className="self-start flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-transparent cursor-pointer transition-colors duration-150"
+              style={{ borderColor: C.primary, color: C.primary }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = `${C.primary}15` }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
+            >
+              <Sparkles size={12} />
+              AI Explain
+            </button>
+          )
+        )}
 
         {/* Recent in category */}
         <div>
@@ -450,6 +491,13 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
   const C = useC()
   const { typeMap } = useExpenseTypes()
   const [showAllOutliers, setShowAllOutliers] = useState(false)
+
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const aiEnabled = settings?.ai_enabled ?? true
   const [editingExpense, setEditingExpense] = useState(null)
   const [filterMonth, setFilterMonth] = useState(defaultMonth ?? '')
   const [sortBy, setSortBy] = useState('date')
@@ -636,6 +684,7 @@ function OutliersSection({ months, defaultMonth, onClearDefaultMonth, onShowInEx
                       onDismiss={handleDismiss}
                       onShowInExpenses={onShowInExpenses}
                       onClose={close}
+                      aiEnabled={aiEnabled}
                     />
                   )}
                 </ExpandableCard>

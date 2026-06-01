@@ -407,6 +407,230 @@ def get_budget_recommendations(months: int = Query(default=3, ge=1, le=12), excl
         raise HTTPException(status_code=500, detail="Could not generate recommendations. Please try again.")
 
 
+class ExplainOutlierRequest(BaseModel):
+    expense_id: str
+
+
+@router.post("/ai/explain-outlier")
+def explain_outlier(body: ExplainOutlierRequest, user_id: str = Depends(get_current_user)):
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="AI not available")
+
+    conn = get_connection()
+    try:
+        settings = get_user_settings(conn, user_id)
+        if not settings["ai_enabled"]:
+            raise HTTPException(status_code=403, detail="AI features are disabled.")
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, name, amount, type, date FROM expenses WHERE id = %s AND user_id = %s",
+            (body.expense_id, user_id),
+        )
+        expense = cursor.fetchone()
+        if not expense:
+            raise HTTPException(status_code=404, detail="Expense not found.")
+        expense = dict(expense)
+
+        six_months_ago = (date.today() - timedelta(days=182)).isoformat()
+        cursor.execute(
+            "SELECT name, amount, date FROM expenses "
+            "WHERE user_id = %s AND type = %s AND date >= %s "
+            "ORDER BY date DESC LIMIT 50",
+            (user_id, expense["type"], six_months_ago),
+        )
+        category_history = [dict(r) for r in cursor.fetchall()]
+
+        exp_date = date.fromisoformat(expense["date"])
+        window_start = (exp_date - timedelta(days=7)).isoformat()
+        window_end = (exp_date + timedelta(days=7)).isoformat()
+        cursor.execute(
+            "SELECT name, amount, type, date FROM expenses "
+            "WHERE user_id = %s AND date >= %s AND date <= %s AND id != %s "
+            "ORDER BY date ASC LIMIT 20",
+            (user_id, window_start, window_end, body.expense_id),
+        )
+        nearby = [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    amounts = [r["amount"] for r in category_history]
+    category_avg = round(sum(amounts) / len(amounts), 2) if amounts else 0.0
+    pct_above = round((expense["amount"] - category_avg) / category_avg * 100) if category_avg > 0 else 0
+
+    payload = {
+        "expense": {
+            "name": expense["name"],
+            "amount": expense["amount"],
+            "date": expense["date"],
+            "type": expense["type"],
+            "pct_above_avg": pct_above,
+        },
+        "category_history": [{"name": r["name"], "amount": r["amount"], "date": r["date"]} for r in category_history[:10]],
+        "nearby_transactions": nearby,
+    }
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=300,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a personal finance assistant. Given an unusual expense and context, "
+                        "explain concisely why it stands out and what the user might do.\n\n"
+                        "Return ONLY valid JSON:\n"
+                        "{\"explanation\": \"1-2 sentences grounded in the numbers\", "
+                        "\"pattern_type\": \"frequency|amount|one_off|new_habit\", "
+                        "\"actionable\": \"1 concrete suggestion\"}\n\n"
+                        "pattern_type definitions:\n"
+                        "- frequency: more transactions in this category than usual\n"
+                        "- amount: this specific charge is larger than typical\n"
+                        "- one_off: isolated event (travel, emergency, gift)\n"
+                        "- new_habit: category has been growing consistently over recent months"
+                    ),
+                },
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+        )
+        raw = json.loads(response.choices[0].message.content)
+        return {
+            "explanation": str(raw.get("explanation", "")),
+            "pattern_type": raw.get("pattern_type", "amount"),
+            "actionable": str(raw.get("actionable", "")),
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("explain-outlier failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Could not generate explanation.")
+
+
+def _months_between(ym_a: str, ym_b: str) -> int:
+    """Signed difference in months from ym_a to ym_b (positive = ym_b is later)."""
+    ya, ma = map(int, ym_a.split("-"))
+    yb, mb = map(int, ym_b.split("-"))
+    return (yb - ya) * 12 + (mb - ma)
+
+
+@router.get("/ai/goal-coach/{goal_id}")
+def goal_coach(goal_id: str, user_id: str = Depends(get_current_user)):
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="AI not available")
+
+    conn = get_connection()
+    try:
+        settings = get_user_settings(conn, user_id)
+        if not settings["ai_enabled"]:
+            raise HTTPException(status_code=403, detail="AI features are disabled.")
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Goal not found.")
+
+        from routers.savings_goals_router import _add_computed, _portfolio_avg_net
+        portfolio_avg = _portfolio_avg_net(conn, user_id)
+        goal = _add_computed(dict(row), conn, portfolio_avg)
+
+        budget_ctx = _gather_budget_context(conn, user_id, lookback=3)
+    finally:
+        conn.close()
+
+    if goal.get("goal_type") == "monthly":
+        return {"skip": True, "reason": "monthly_goal"}
+    if not goal.get("deadline"):
+        return {"skip": True, "reason": "no_deadline"}
+    if not goal.get("projected_completion"):
+        return {"skip": True, "reason": "no_projection"}
+
+    deadline_ym = goal["deadline"][:7]
+    projected_ym = goal["projected_completion"]
+    if projected_ym <= deadline_ym:
+        return {"skip": True, "reason": "on_track"}
+
+    today = date.today()
+    today_ym = f"{today.year}-{today.month:02d}"
+    months_behind = _months_between(deadline_ym, projected_ym)
+    months_to_deadline = _months_between(today_ym, deadline_ym)
+    remaining = goal["target"] - (goal.get("effective_progress") or 0.0)
+    current_rate = goal.get("effective_avg_monthly_net") or 0.0
+    required_rate = round(remaining / months_to_deadline, 2) if months_to_deadline > 0 else None
+    monthly_gap = round(required_rate - current_rate, 2) if required_rate is not None else None
+
+    goal_name_lower = (goal.get("name") or "").lower()
+    excluded = {"savings", "housing", goal_name_lower}
+    top_categories = [
+        {"category": t, "avg_monthly": v}
+        for t, v in sorted(budget_ctx["spending"].items(), key=lambda x: -x[1])
+        if t.lower() not in excluded
+    ][:5]
+
+    coach_payload = {
+        "goal": {
+            "name": goal.get("name"),
+            "target": goal.get("target"),
+            "progress": goal.get("effective_progress"),
+            "deadline": goal.get("deadline"),
+            "projected_completion": projected_ym,
+            "current_monthly_rate": current_rate,
+            "months_behind": months_behind,
+            "monthly_gap": monthly_gap,
+        },
+        "top_spending_categories": top_categories,
+    }
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=500,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a personal finance coach. Given a savings goal behind schedule and "
+                        "spending data, produce exactly 3 coaching options — one of each type.\n\n"
+                        "Return ONLY valid JSON:\n"
+                        "{\"summary\": \"1 sentence framing the gap with specific numbers\", \"options\": [\n"
+                        "  {\"type\": \"cut_spending\", \"label\": \"...\", \"description\": \"...\", \"category\": \"...\", \"monthly_delta\": <number>},\n"
+                        "  {\"type\": \"extend_deadline\", \"label\": \"...\", \"description\": \"...\", \"new_deadline\": \"YYYY-MM\"},\n"
+                        "  {\"type\": \"reduce_target\", \"label\": \"...\", \"description\": \"...\", \"new_target\": <number>}\n"
+                        "]}\n\n"
+                        "Rules:\n"
+                        "- cut_spending: pick the highest-discretionary category; monthly_delta closes the monthly_gap.\n"
+                        "- extend_deadline: YYYY-MM when current_monthly_rate reaches the target.\n"
+                        "- reduce_target: target that current_monthly_rate reaches by the existing deadline.\n"
+                        "All numbers must come from the provided data. Do not invent figures."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(coach_payload)},
+            ],
+        )
+        raw = json.loads(response.choices[0].message.content)
+        options = raw.get("options", [])
+        if len(options) != 3:
+            raise ValueError("Expected exactly 3 options")
+        return {
+            "summary": str(raw.get("summary", "")),
+            "options": options,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("goal-coach failed for user %s goal %s", user_id, goal_id)
+        raise HTTPException(status_code=500, detail="Could not generate coaching advice.")
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(body: ChatRequest, user_id: str = Depends(get_current_user)):
     conn = get_connection()

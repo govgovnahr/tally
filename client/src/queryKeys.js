@@ -24,4 +24,6 @@ export const qk = {
   analysisAvgMonthlyExpenses: () => ['analysis', 'avg-monthly-expenses'],
   settings: () => ['settings'],
   aiInsights: () => ['ai', 'insights'],
+  aiExplainOutlier: (expenseId) => ['ai', 'explain-outlier', expenseId],
+  aiGoalCoach: (goalId) => ['ai', 'goal-coach', goalId],
 }

@@ -1,55 +1,38 @@
 # Tally
 
-Personal budgeting app. Track expenses and income, set category budgets, monitor savings goals. Deployable to Render or runnable as a local desktop app.
+A full-stack personal finance app with AI-powered insights. Track expenses and income, set category budgets, monitor savings goals, and get proactive financial coaching.
+
+---
 
 ## Features
 
-- **User auth** — email/password registration and login; JWT cookie sessions; per-user data isolation
-- **Expense & income tracking** — add, edit, delete, import from CSV/Excel; recurring entries seed future months automatically
-- **Categories** — custom expense types (color + icon) grouped into macrocategories with optional group budget limits
+### Core
+- **Expense & income tracking** — add, edit, delete; recurring entries seed future months automatically
+- **Import** — CSV, Excel, and PDF bank statements with smart auto-categorization
+- **Custom categories** — expense types with color + icon, grouped into macrocategories with optional group budget limits
 - **Budgets** — per-category monthly limits with per-month overrides; two-tone progress bars show actual vs projected spend
-- **Auto-categorization** — learned import rules match transaction names to categories; rules apply retroactively
-- **Savings goals** — monthly contribution target + one-time goals + emergency fund; projected completion, allocation (% slice or priority cascade), pause/resume
-- **Spending analysis** — budget pacing (historical daily rate projection), over-budget frequency, z-score outlier detection, month-over-month trends
-- **Monthly trends** — stacked bar chart by category + income line over 6 months; future months dimmed
+- **Savings goals** — monthly targets, one-time goals, and emergency fund; projected completion, allocation by % slice or priority cascade, pause/resume
+- **Spending analysis** — budget pacing, category trends, z-score outlier detection, month-over-month summaries
 
-## Deploying to Render
+### AI
+- **Proactive insights** — observations surfaced on dashboard load from pacing data, outliers, and goal progress
+- **Natural language entry** — describe an expense in plain text and have it parsed into structured fields
+- **Receipt OCR** — photograph or upload a receipt; GPT-4o vision extracts merchant, amount, and date
+- **Smart import categorization** — AI classifies uncategorized rows during import
+- **Budget recommendations** — 3-month spending history → suggested per-category limits with rationale
+- **Anomaly explainer** — expand any flagged outlier to understand whether it was a one-off event, a frequency spike, or a new habit forming
+- **Goal deadline coach** — at-risk savings goals surface 3 concrete options (cut a spending category, extend the deadline, reduce the target) grounded in real numbers
+- **AI chat** — conversational agent with tools: budget status, savings progress, category breakdown, outlier detection, semantic transaction search
 
-`render.yaml` is pre-configured with a persistent disk, auto-generated secret key, and correct build/start commands.
-
-1. Push repo to GitHub
-2. Render dashboard → **New → Blueprint** → connect repo
-3. Click **Apply** — Render reads `render.yaml` and provisions everything (~3–5 min build)
-4. Visit the service URL and register your account
-5. Render dashboard → your service → **Environment** → set `REGISTRATION_OPEN` to `"false"`
-6. Optionally set `ALLOWED_ORIGINS` to `https://your-app.onrender.com`
-
-Data persists at `/data/budget.db` on a 1 GB Render disk (survives redeploys).
-
-## Running in Development
-
-```bash
-# Backend — http://localhost:3001
-cd server && pip install -r requirements.txt && python server.py
-
-# Frontend — http://localhost:5173
-cd client && npm install && npm run dev
-```
-
-## Building for Desktop Distribution
-
-```bash
-./build.sh
-```
-
-React build → `client/dist/` → `server/static/` → PyInstaller → `server/dist/BudgetTracker/`. CI/CD on push to `master` produces macOS and Windows builds. Data stored at `~/.budget_app/budget.db` (persists across updates).
+---
 
 ## Stack
 
-React 19 + Vite + MUI v7 + Recharts (frontend) · FastAPI + SQLite + JWT/bcrypt (backend) · PyInstaller + GitHub Actions (desktop packaging/CI)
-
-## Docs
-
-- [ARCH.md](./ARCH.md) — component map, database schema, state flow
-- [API.md](./API.md) — full endpoint reference
-- [CLAUDE.md](./CLAUDE.md) — dev notes and gotchas
+| Layer | Tech |
+|---|---|
+| Frontend | React 19 · Vite · Tailwind CSS · Recharts · TanStack Query |
+| Backend | FastAPI · Python |
+| Auth | Supabase Auth (email/password + Google OAuth) |
+| AI | OpenAI gpt-4o / gpt-4o-mini · LangGraph |
+| Import | pdfplumber · openpyxl |
+| Desktop | PyInstaller · GitHub Actions (macOS + Windows builds) |

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, PiggyBank, Pause, Play, Receipt, CheckCircle, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, PiggyBank, Pause, Play, Receipt, CheckCircle, ChevronDown, Sparkles, Loader2 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -104,11 +104,20 @@ function MonthlyGoalCard({ goal, onEdit, onDelete, onPause, onContribute }) {
   )
 }
 
-function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onContribute }) {
+function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onContribute, aiEnabled }) {
   const C = useC()
   const color = C.adaptColor(rawColor)
   const pct = goal.progress_pct
   const met = pct >= 100
+
+  const [coachOpen, setCoachOpen] = useState(false)
+  const { data: coachData, isFetching: coachLoading } = useQuery({
+    queryKey: qk.aiGoalCoach(goal.id),
+    queryFn: () => api.get(`/ai/goal-coach/${goal.id}`).then(r => r.data),
+    enabled: coachOpen,
+    staleTime: 60 * 60_000,
+    retry: false,
+  })
 
   return (
     <Card className="rounded-xl p-4 sm:p-5" style={{
@@ -130,10 +139,25 @@ function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onC
               if (!status) return null
               const isOnTrack = status === 'on_track'
               return (
-                <span className="text-[11px] px-1.5 py-0.5 rounded-full border font-medium"
-                  style={{ color: isOnTrack ? C.onTrack : C.overBudget, borderColor: isOnTrack ? C.onTrack : C.overBudget }}>
-                  {isOnTrack ? 'On track' : 'At risk'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full border font-medium"
+                    style={{ color: isOnTrack ? C.onTrack : C.overBudget, borderColor: isOnTrack ? C.onTrack : C.overBudget }}>
+                    {isOnTrack ? 'On track' : 'At risk'}
+                  </span>
+                  {!isOnTrack && aiEnabled && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setCoachOpen(o => !o) }}
+                      className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-transparent cursor-pointer transition-colors duration-150"
+                      style={{ borderColor: C.primary, color: C.primary }}
+                      onMouseEnter={ev => { ev.currentTarget.style.backgroundColor = `${C.primary}15` }}
+                      onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = 'transparent' }}
+                    >
+                      <Sparkles size={10} />
+                      Get advice
+                    </button>
+                  )}
+                </div>
               )
             })()}
           </div>
@@ -145,6 +169,32 @@ function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onC
         <span className="text-sm" style={{ color: C.muted }}>/ ${goal.target.toFixed(2)}</span>
       </div>
       <div className="mb-3"><ProgressBar value={pct} color={met ? C.primary : color} /></div>
+      {coachOpen && (
+        <div className="mb-3 rounded-xl overflow-hidden"
+          style={{ border: `1px solid ${C.primary}30`, backgroundColor: `${C.primary}08` }}>
+          {coachLoading ? (
+            <div className="flex items-center gap-2 p-3" style={{ color: C.muted }}>
+              <Loader2 size={14} className="animate-spin" />
+              <span className="text-sm">Building your plan…</span>
+            </div>
+          ) : coachData?.skip ? (
+            <p className="text-sm p-3" style={{ color: C.muted }}>Not enough data to coach this goal yet. Log more contributions first.</p>
+          ) : coachData ? (
+            <div className="p-3 flex flex-col gap-3">
+              <p className="text-sm font-medium" style={{ color: C.warmText }}>{coachData.summary}</p>
+              <div className="flex flex-col gap-2">
+                {coachData.options?.map(opt => (
+                  <div key={opt.type} className="rounded-lg p-2.5"
+                    style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
+                    <p className="text-xs font-semibold mb-0.5" style={{ color: C.warmText }}>{opt.label}</p>
+                    <p className="text-xs" style={{ color: C.muted }}>{opt.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="flex items-end justify-between gap-2">
         <div>
           {met ? (
@@ -527,6 +577,13 @@ export default function SavingsPage() {
     staleTime: 2 * 60_000,
   })
 
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const aiEnabled = settings?.ai_enabled ?? true
+
   const { data: monthlyGoalData } = useQuery({
     queryKey: qk.savingsGoalsMonthlyGoal(),
     queryFn: () => api.get('/savings-goals/monthly-goal').then(r => r.data),
@@ -590,6 +647,7 @@ export default function SavingsPage() {
               onDelete: () => setDeletingGoal(goal),
               onPause: () => handlePause(goal.id),
               onContribute: () => setContributingToGoalId(goal.id),
+              aiEnabled,
             }
             return goal.goal_type === 'emergency_fund'
               ? <EmergencyFundGoalCard key={goal.id} {...commonProps} />

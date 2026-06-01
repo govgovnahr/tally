@@ -182,13 +182,13 @@ export default function ImportDialog({ onClose, onImported }) {
             >
               <Upload size={40} style={{ color: C.muted }} />
               <span className="text-sm" style={{ color: C.muted }}>
-                Click to upload a <strong>.csv</strong> or <strong>.xlsx</strong> file
+                Click to upload a <strong>.csv</strong>, <strong>.xlsx</strong>, or <strong>.pdf</strong> file
               </span>
               <input
                 id="import-file"
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx,.xls,.pdf"
                 className="hidden"
                 onChange={handleFileChange}
               />
