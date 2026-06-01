@@ -1,4 +1,4 @@
-# Budget Tracker
+# Tally
 
 Personal budgeting app. Track expenses and income, set category budgets, monitor savings goals. Deployable to Render or runnable as a local desktop app.
 
