@@ -3,6 +3,7 @@ import os
 import time
 import logging
 import threading
+from collections import defaultdict
 from dotenv import load_dotenv
 
 # Walk up from the server/ directory to find the project-root .env
@@ -17,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-from limiter import limiter
+from limiter import limiter, get_user_id_key
 from database import get_connection, init_db, apply_recurring_expenses, apply_recurring_incomes
 from routers.auth_router import router as auth_router
 from routers.ai_router import router as ai_router
@@ -60,6 +61,85 @@ async def _cache_hashed_assets(request: Request, call_next):
     if request.url.path.startswith("/assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
+
+_ip_fail_times: dict = defaultdict(list)
+_ip_blocked_until: dict = {}
+_IP_BLOCK_WINDOW = 300      # 5-minute sliding window
+_IP_BLOCK_THRESHOLD = 5
+_IP_BLOCK_DURATION = 300    # block length in seconds
+
+
+@app.middleware("http")
+async def _track_auth_failures(request: Request, call_next):
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+
+    unblock_at = _ip_blocked_until.get(ip)
+    if unblock_at:
+        if now < unblock_at:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many failed authentication attempts. Try again later."},
+                headers={"Retry-After": str(int(unblock_at - now))},
+            )
+        del _ip_blocked_until[ip]
+        _ip_fail_times.pop(ip, None)
+
+    response = await call_next(request)
+
+    if response.status_code == 401:
+        window_start = now - _IP_BLOCK_WINDOW
+        _ip_fail_times[ip] = [t for t in _ip_fail_times[ip] if t > window_start]
+        _ip_fail_times[ip].append(now)
+        if len(_ip_fail_times[ip]) >= _IP_BLOCK_THRESHOLD:
+            _ip_blocked_until[ip] = now + _IP_BLOCK_DURATION
+            logger.warning(
+                "IP %s blocked for %ds after %d auth failures",
+                ip, _IP_BLOCK_DURATION, _IP_BLOCK_THRESHOLD,
+            )
+
+    return response
+
+
+_rate_buckets: dict = {}
+_last_prune_window: list = [0]
+_GET_LIMIT = 300
+_WRITE_LIMIT = 100
+_RATE_EXEMPT_PATHS = {"/health"}
+_RATE_EXEMPT_PREFIXES = ("/assets/", "/docs", "/openapi", "/redoc")
+
+
+def _check_rate(key: str, limit: int) -> bool:
+    """Fixed-window counter. Returns True if the request is within limit."""
+    window = int(time.time() // 60)
+    bucket = f"{key}:{window}"
+    count = _rate_buckets.get(bucket, 0) + 1
+    _rate_buckets[bucket] = count
+    if window != _last_prune_window[0]:
+        _last_prune_window[0] = window
+        for k in [k for k in list(_rate_buckets) if not k.endswith(f":{window}")]:
+            del _rate_buckets[k]
+    return count <= limit
+
+
+@app.middleware("http")
+async def _global_rate_limit(request: Request, call_next):
+    path = request.url.path
+    if path in _RATE_EXEMPT_PATHS or any(path.startswith(p) for p in _RATE_EXEMPT_PREFIXES):
+        return await call_next(request)
+
+    key = get_user_id_key(request)
+    limit = _GET_LIMIT if request.method == "GET" else _WRITE_LIMIT
+
+    if not _check_rate(key, limit):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Rate limit exceeded. Max {limit} requests per minute."},
+            headers={"Retry-After": str(60 - int(time.time() % 60))},
+        )
+
+    return await call_next(request)
 
 
 @app.middleware("http")
