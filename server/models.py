@@ -19,6 +19,12 @@ def _valid_color(v: Optional[str]) -> Optional[str]:
     return v
 
 
+def _valid_cycle_day(v: Optional[int]) -> Optional[int]:
+    if v is not None and not (1 <= v <= 31):
+        raise ValueError("cycle_start_day must be between 1 and 31")
+    return v
+
+
 @dataclass
 class Expense:
     id: str
@@ -199,3 +205,10 @@ class ChatResponse(BaseModel):
     reply: str
     history: List[ChatMessage]
     tool_steps: List[str] = Field(default_factory=list)
+
+
+class SettingsUpdate(BaseModel):
+    ai_enabled: Optional[bool] = None
+    cycle_start_day: Optional[int] = None
+
+    _vcycle = field_validator("cycle_start_day")(_valid_cycle_day)

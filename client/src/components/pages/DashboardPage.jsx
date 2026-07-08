@@ -62,12 +62,20 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
   const [activeMacro, setActiveMacro] = useState(null)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
 
+  const { data: periodBounds } = useQuery({
+    queryKey: qk.periodBounds(selectedMonth),
+    queryFn: () => api.get('/settings/period-bounds', { params: { month: selectedMonth } }).then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
   const { data: outliersData = [] } = useQuery({
     queryKey: qk.analysisOutliers(12),
     queryFn: () => api.get('/analysis/outliers', { params: { months: 12 } }).then(r => r.data),
     staleTime: 3 * 60_000,
   })
-  const outliers = outliersData.filter(e => e.date.startsWith(selectedMonth))
+  const outliers = periodBounds
+    ? outliersData.filter(e => e.date >= periodBounds.period_start && e.date < periodBounds.period_end)
+    : []
 
   const { data: goals = [] } = useQuery({
     queryKey: qk.savingsGoals(),
@@ -76,9 +84,10 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
   })
 
   const { data: summary = [] } = useQuery({
-    queryKey: qk.expensesSummary(selectedMonth),
-    queryFn: () => api.get('/expenses/summary', { params: { month: selectedMonth } }).then(r => r.data),
+    queryKey: qk.expensesSummary(periodBounds?.period_start, periodBounds?.period_end),
+    queryFn: () => api.get('/expenses/summary', { params: { period_start: periodBounds.period_start, period_end: periodBounds.period_end } }).then(r => r.data),
     staleTime: 60_000,
+    enabled: !!periodBounds,
   })
 
   const { data: budgetsEffective = [] } = useQuery({
@@ -89,9 +98,10 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
   const budgets = Object.fromEntries(budgetsEffective.map(b => [b.type, b.monthly_limit]))
 
   const { data: incomeSummary } = useQuery({
-    queryKey: qk.incomesSummary(selectedMonth),
-    queryFn: () => api.get('/incomes/summary', { params: { month: selectedMonth } }).then(r => r.data),
+    queryKey: qk.incomesSummary(periodBounds?.period_start, periodBounds?.period_end),
+    queryFn: () => api.get('/incomes/summary', { params: { period_start: periodBounds.period_start, period_end: periodBounds.period_end } }).then(r => r.data),
     staleTime: 60_000,
+    enabled: !!periodBounds,
   })
   const totalIncome = incomeSummary?.total ?? 0
 
@@ -104,9 +114,10 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
   const isCurrentMonth = pacingData?.is_current_month ?? true
 
   const { data: macroSummary = [] } = useQuery({
-    queryKey: qk.macrocategoriesSummary(selectedMonth),
-    queryFn: () => api.get('/macrocategories/summary', { params: { month: selectedMonth } }).then(r => r.data),
+    queryKey: qk.macrocategoriesSummary(periodBounds?.period_start, periodBounds?.period_end),
+    queryFn: () => api.get('/macrocategories/summary', { params: { period_start: periodBounds.period_start, period_end: periodBounds.period_end } }).then(r => r.data),
     staleTime: 60_000,
+    enabled: !!periodBounds,
   })
 
   const totalSpent = summary.reduce((s, x) => s + x.total, 0)
@@ -118,9 +129,8 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
     ? pacingCats.reduce((s, c) => s + (c.projected_spend ?? c.spent ?? 0), 0)
     : null
 
-  const [yr, mo] = selectedMonth.split('-').map(Number)
-  const daysInMonth = new Date(yr, mo, 0).getDate()
-  const daysElapsed = isCurrentMonth ? Math.max(new Date().getDate(), 1) : daysInMonth
+  const daysInMonth = pacingData?.days_in_month ?? 30
+  const daysElapsed = pacingData?.days_elapsed ?? daysInMonth
   const dailyRate = daysElapsed > 0 ? totalSpent / daysElapsed : 0
   const targetDailyRate = totalBudget > 0 ? totalBudget / daysInMonth : null
 

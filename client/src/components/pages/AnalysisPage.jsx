@@ -779,6 +779,18 @@ function MonthOverMonthSection({ months }) {
 export default function AnalysisPage({ outlierMonth, onClearOutlierMonth, onShowInExpenses }) {
   const C = useC()
   const [pacingMonth, setPacingMonth] = useState(currentMonth())
+  const pacingMonthInitialized = useRef(false)
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  useEffect(() => {
+    if (settings?.current_period?.period_label && !pacingMonthInitialized.current) {
+      setPacingMonth(settings.current_period.period_label)
+      pacingMonthInitialized.current = true
+    }
+  }, [settings])
   const [historyMonths, setHistoryMonths] = useState(() => {
     const saved = parseInt(localStorage.getItem('budget_history_months'), 10)
     return isNaN(saved) ? 6 : saved

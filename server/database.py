@@ -4,7 +4,7 @@ import psycopg2.extras
 import uuid
 import os
 import calendar
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -80,6 +80,9 @@ class _Connection:
 
     def commit(self):
         self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
 
     def close(self):
         self._conn.close()
@@ -223,6 +226,17 @@ def init_db():
     """)
 
     for sql in [
+        "ALTER TABLE user_settings ADD COLUMN cycle_start_day INTEGER NOT NULL DEFAULT 1",
+    ]:
+        try:
+            conn.execute(sql)
+        except Exception:
+            # Postgres aborts the whole transaction on a DDL error (e.g. column
+            # already exists on restart) — roll back or every later statement
+            # in this same init_db() transaction would fail too.
+            conn.rollback()
+
+    for sql in [
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)",
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_type ON expenses(user_id, type)",
         "CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)",
@@ -270,21 +284,29 @@ def init_db():
 
 def get_user_settings(conn, user_id: str) -> dict:
     row = conn.execute(
-        "SELECT ai_enabled FROM user_settings WHERE user_id = %s", (user_id,)
+        "SELECT ai_enabled, cycle_start_day FROM user_settings WHERE user_id = %s", (user_id,)
     ).fetchone()
-    if row is None:
-        return {"ai_enabled": True}
-    return {"ai_enabled": bool(row["ai_enabled"])}
+    cycle_start_day = row["cycle_start_day"] if row else 1
+    period_start, period_end, period_label = cycle_period_for_date(date.today(), cycle_start_day)
+    return {
+        "ai_enabled": bool(row["ai_enabled"]) if row else True,
+        "cycle_start_day": cycle_start_day,
+        "current_period": {
+            "period_start": period_start,
+            "period_end": period_end,
+            "period_label": period_label,
+        },
+    }
 
 
-def save_user_settings(conn, user_id: str, ai_enabled: bool):
+def save_user_settings(conn, user_id: str, ai_enabled: bool, cycle_start_day: int = 1):
     conn.execute(
         """
-        INSERT INTO user_settings (user_id, ai_enabled)
-        VALUES (%s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET ai_enabled = EXCLUDED.ai_enabled
+        INSERT INTO user_settings (user_id, ai_enabled, cycle_start_day)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET ai_enabled = EXCLUDED.ai_enabled, cycle_start_day = EXCLUDED.cycle_start_day
         """,
-        (user_id, ai_enabled),
+        (user_id, ai_enabled, cycle_start_day),
     )
     conn.commit()
 
@@ -497,9 +519,62 @@ def month_start(months_back: int) -> str:
     return f"{total // 12}-{total % 12 + 1:02d}-01"
 
 
-def _fast_totals_by_type(conn, month: str, user_id: str) -> dict:
+def _clamp_day(year: int, month: int, day: int) -> int:
+    """Clamp a day-of-month to the last valid day of (year, month), e.g. day=30
+    in February -> 28 (or 29 in a leap year) — mirrors how a credit-card
+    statement date behaves in short months."""
+    return min(day, calendar.monthrange(year, month)[1])
+
+
+def cycle_period_for_date(ref_date: date, cycle_start_day: int) -> tuple:
+    """Return (period_start, period_end_exclusive, period_label) for the
+    billing-cycle period containing ref_date, given a user's cycle_start_day
+    (1-31; 1 = classic calendar month). period_start/period_end_exclusive are
+    'YYYY-MM-DD' strings usable in `date >= period_start AND date < period_end`.
+    period_label is the 'YYYY-MM' of the period's last inclusive day (end-month
+    labeling) — e.g. a Jun 23-Jul 22 period labels as "2026-07", the month it
+    concludes in. At cycle_start_day=1 this reduces to today's exact convention:
+    period_start is the 1st of ref_date's month, period_label is that same month."""
+    y, m = ref_date.year, ref_date.month
+    start_day_this_month = _clamp_day(y, m, cycle_start_day)
+
+    if ref_date.day >= start_day_this_month:
+        start_y, start_m = y, m
+    else:
+        start_y, start_m = (y - 1, 12) if m == 1 else (y, m - 1)
+
+    end_y, end_m = (start_y + 1, 1) if start_m == 12 else (start_y, start_m + 1)
+    period_start = f"{start_y}-{start_m:02d}-{_clamp_day(start_y, start_m, cycle_start_day):02d}"
+    period_end_exclusive = f"{end_y}-{end_m:02d}-{_clamp_day(end_y, end_m, cycle_start_day):02d}"
+
+    label_date = date.fromisoformat(period_end_exclusive) - timedelta(days=1)
+    period_label = f"{label_date.year}-{label_date.month:02d}"
+
+    return period_start, period_end_exclusive, period_label
+
+
+def cycle_bounds(period_label: str, cycle_start_day: int) -> tuple:
+    """Inverse of cycle_period_for_date's label direction: given a period_label
+    ('YYYY-MM', as produced by cycle_period_for_date or persisted in
+    monthly_budgets.month) and the same cycle_start_day, return (period_start,
+    period_end_exclusive). At cycle_start_day=1 this is exactly _month_bounds —
+    do not apply the general formula in that case, it's off by one month."""
+    if cycle_start_day == 1:
+        return _month_bounds(period_label)
+
+    label_y, label_m = map(int, period_label.split("-"))
+    period_end_exclusive = f"{label_y}-{label_m:02d}-{_clamp_day(label_y, label_m, cycle_start_day):02d}"
+
+    total = label_y * 12 + (label_m - 1) - 1
+    start_y, start_m = total // 12, total % 12 + 1
+    period_start = f"{start_y}-{start_m:02d}-{_clamp_day(start_y, start_m, cycle_start_day):02d}"
+
+    return period_start, period_end_exclusive
+
+
+def _fast_totals_by_type(conn, month: str, user_id: str, cycle_start_day: int = 1) -> dict:
     """SQL-aggregate totals per type for a past month — no row scanning in Python."""
-    start, end = _month_bounds(month)
+    start, end = _month_bounds(month) if cycle_start_day == 1 else cycle_bounds(month, cycle_start_day)
     cursor = conn.cursor()
     cursor.execute(
         "SELECT type, SUM(amount) as total FROM expenses "
@@ -519,46 +594,171 @@ def _fast_totals_by_type(conn, month: str, user_id: str) -> dict:
     return totals
 
 
-def compute_budget_pacing(conn, month: str, lookback_months: int = 3, user_id: str = None) -> list:
+def _outlier_filtered_totals_by_cycle(conn, periods: list, by_type: bool = False, user_id: str = None) -> dict:
+    """Same z-score-outlier-filtering + credit-netting logic as _outlier_filtered_totals,
+    but buckets rows into caller-supplied cycle periods (which may span two calendar
+    months) instead of grouping by SQL LEFT(date,7). `periods` is a list of
+    (period_start, period_end_exclusive, period_label) tuples; issues one range
+    query spanning all of them, then buckets rows into periods in Python."""
+    if not periods:
+        return {}
+    range_start = min(p[0] for p in periods)
+    range_end = max(p[1] for p in periods)
+    cursor = conn.cursor()
+
+    uid_clause = "AND user_id = %s" if user_id else ""
+    uid_params = [user_id] if user_id else []
+
+    def label_for(d: str):
+        for p_start, p_end, p_label in periods:
+            if p_start <= d < p_end:
+                return p_label
+        return None
+
+    cursor.execute(
+        f"SELECT type, amount, date FROM expenses "
+        f"WHERE date >= %s AND date < %s {uid_clause}",
+        [range_start, range_end] + uid_params,
+    )
+    rows = [{**r, "mo": label_for(r["date"])} for r in cursor.fetchall()]
+    rows = [r for r in rows if r["mo"] is not None]
+
+    cat_amounts: dict[str, list[float]] = {}
+    for r in rows:
+        cat_amounts.setdefault(r["type"], []).append(r["amount"])
+
+    cat_stats: dict[str, tuple[float, float]] = {}
+    for t, amounts in cat_amounts.items():
+        if len(amounts) < 3:
+            continue
+        mean = sum(amounts) / len(amounts)
+        std = math.sqrt(sum((a - mean) ** 2 for a in amounts) / len(amounts))
+        cat_stats[t] = (mean, std)
+
+    cursor.execute(
+        f"SELECT credit_type, amount, date FROM incomes "
+        f"WHERE credit_type IS NOT NULL AND date >= %s AND date < %s {uid_clause}",
+        [range_start, range_end] + uid_params,
+    )
+    credit_rows = [{**r, "mo": label_for(r["date"])} for r in cursor.fetchall()]
+    credit_totals: dict = {}
+    for r in credit_rows:
+        if r["mo"] is None:
+            continue
+        key = (r["credit_type"], r["mo"])
+        credit_totals[key] = credit_totals.get(key, 0.0) + r["amount"]
+
+    if by_type:
+        result: dict = {}
+        for r in rows:
+            stats = cat_stats.get(r["type"])
+            if stats and stats[1] > 0 and abs(r["amount"] - stats[0]) / stats[1] >= 1.5:
+                continue
+            result.setdefault(r["type"], {}).setdefault(r["mo"], 0.0)
+            result[r["type"]][r["mo"]] += r["amount"]
+        for (t, mo), total in credit_totals.items():
+            if t in result and mo in result[t]:
+                result[t][mo] = max(0.0, result[t][mo] - total)
+        return result
+    else:
+        totals: dict[str, float] = {}
+        for r in rows:
+            stats = cat_stats.get(r["type"])
+            if stats and stats[1] > 0 and abs(r["amount"] - stats[0]) / stats[1] >= 1.5:
+                continue
+            totals[r["mo"]] = totals.get(r["mo"], 0.0) + r["amount"]
+        for (t, mo), total in credit_totals.items():
+            totals[mo] = max(0.0, totals.get(mo, 0.0) - total)
+        return totals
+
+
+def compute_budget_pacing(conn, month: str, lookback_months: int = 3, user_id: str = None, cycle_start_day: int = 1) -> list:
     today = date.today()
-    cur_month = f"{today.year}-{today.month:02d}"
 
-    if month > cur_month:
-        return []
+    if cycle_start_day == 1:
+        cur_month = f"{today.year}-{today.month:02d}"
 
-    y, m = map(int, month.split("-"))
-    days_in_month = calendar.monthrange(y, m)[1]
-    is_current = month == cur_month
-    days_elapsed = today.day if is_current else days_in_month
+        if month > cur_month:
+            return []
 
-    if not is_current:
-        month_spending = _fast_totals_by_type(conn, month, user_id)
-        return [
-            {"type": t, "spent": s, "projected_spend": None,
-             "days_elapsed": days_elapsed, "days_in_month": days_in_month}
-            for t, s in month_spending.items()
-        ]
+        y, m = map(int, month.split("-"))
+        days_in_month = calendar.monthrange(y, m)[1]
+        is_current = month == cur_month
+        days_elapsed = today.day if is_current else days_in_month
 
-    raw_month = _outlier_filtered_totals(conn, [month], by_type=True, user_id=user_id)
-    month_spending = {t: round(sum(mo_totals.values()), 2) for t, mo_totals in raw_month.items()}
+        if not is_current:
+            month_spending = _fast_totals_by_type(conn, month, user_id)
+            return [
+                {"type": t, "spent": s, "projected_spend": None,
+                 "days_elapsed": days_elapsed, "days_in_month": days_in_month}
+                for t, s in month_spending.items()
+            ]
 
-    past_months = []
-    for i in range(lookback_months, 0, -1):
-        py, pm = today.year, today.month - i
-        while pm <= 0:
-            pm += 12
-            py -= 1
-        past_months.append(f"{py}-{pm:02d}")
+        raw_month = _outlier_filtered_totals(conn, [month], by_type=True, user_id=user_id)
+        month_spending = {t: round(sum(mo_totals.values()), 2) for t, mo_totals in raw_month.items()}
 
-    historical_daily: dict[str, float] = {}
-    if past_months:
-        by_type = _outlier_filtered_totals(conn, past_months, by_type=True, user_id=user_id)
-        for t, month_totals in by_type.items():
-            total_days = sum(calendar.monthrange(*map(int, mo.split("-")))[1] for mo in past_months)
-            total_spent = sum(month_totals.get(mo, 0.0) for mo in past_months)
-            historical_daily[t] = total_spent / total_days if total_days > 0 else 0.0
+        past_months = []
+        for i in range(lookback_months, 0, -1):
+            py, pm = today.year, today.month - i
+            while pm <= 0:
+                pm += 12
+                py -= 1
+            past_months.append(f"{py}-{pm:02d}")
 
-    remaining_days = days_in_month - days_elapsed
+        historical_daily: dict[str, float] = {}
+        if past_months:
+            by_type = _outlier_filtered_totals(conn, past_months, by_type=True, user_id=user_id)
+            for t, month_totals in by_type.items():
+                total_days = sum(calendar.monthrange(*map(int, mo.split("-")))[1] for mo in past_months)
+                total_spent = sum(month_totals.get(mo, 0.0) for mo in past_months)
+                historical_daily[t] = total_spent / total_days if total_days > 0 else 0.0
+
+        remaining_days = days_in_month - days_elapsed
+    else:
+        cur_start, cur_end, cur_label = cycle_period_for_date(today, cycle_start_day)
+
+        if month > cur_label:
+            return []
+
+        period_start, period_end = cycle_bounds(month, cycle_start_day)
+        days_in_month = (date.fromisoformat(period_end) - date.fromisoformat(period_start)).days
+        is_current = month == cur_label
+        days_elapsed = (today - date.fromisoformat(period_start)).days + 1 if is_current else days_in_month
+
+        if not is_current:
+            month_spending = _fast_totals_by_type(conn, month, user_id, cycle_start_day)
+            return [
+                {"type": t, "spent": s, "projected_spend": None,
+                 "days_elapsed": days_elapsed, "days_in_month": days_in_month}
+                for t, s in month_spending.items()
+            ]
+
+        cur_period = (period_start, period_end, month)
+        raw_month = _outlier_filtered_totals_by_cycle(conn, [cur_period], by_type=True, user_id=user_id)
+        month_spending = {t: round(sum(mo_totals.values()), 2) for t, mo_totals in raw_month.items()}
+
+        past_periods = []
+        walk_ref = date.fromisoformat(period_start) - timedelta(days=1)
+        for _ in range(lookback_months):
+            p_start, p_end, p_label = cycle_period_for_date(walk_ref, cycle_start_day)
+            past_periods.append((p_start, p_end, p_label))
+            walk_ref = date.fromisoformat(p_start) - timedelta(days=1)
+        past_periods.reverse()
+        past_months = [p[2] for p in past_periods]
+
+        historical_daily: dict[str, float] = {}
+        if past_periods:
+            by_type = _outlier_filtered_totals_by_cycle(conn, past_periods, by_type=True, user_id=user_id)
+            total_days = sum(
+                (date.fromisoformat(p_end) - date.fromisoformat(p_start)).days
+                for p_start, p_end, _ in past_periods
+            )
+            for t, month_totals in by_type.items():
+                total_spent = sum(month_totals.get(mo, 0.0) for mo in past_months)
+                historical_daily[t] = total_spent / total_days if total_days > 0 else 0.0
+
+        remaining_days = days_in_month - days_elapsed
+
     all_types = set(month_spending.keys()) | set(historical_daily.keys())
 
     result = []

@@ -37,14 +37,26 @@ def create_macrocategory(body: NewMacrocategory, user_id: str = Depends(get_curr
 
 
 @router.get("/macrocategories/summary")
-def get_macrocategory_summary(month: Optional[str] = Query(None), user_id: str = Depends(get_current_user)):
+def get_macrocategory_summary(
+    month: Optional[str] = Query(None), period_start: Optional[str] = Query(None), period_end: Optional[str] = Query(None),
+    user_id: str = Depends(get_current_user),
+):
     conn = get_connection()
     macros = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM macrocategories WHERE user_id = %s", (user_id,)).fetchall()}
     if not macros:
         conn.close()
         return []
 
-    if month:
+    if period_start and period_end:
+        rows = conn.execute("""
+            SELECT et.macrocategory_id, SUM(e.amount) as total, COUNT(*) as count
+            FROM expenses e
+            JOIN expense_types et ON e.type = et.name
+            WHERE e.user_id = %s AND et.user_id = %s AND et.macrocategory_id IS NOT NULL
+              AND e.date >= %s AND e.date < %s
+            GROUP BY et.macrocategory_id
+        """, (user_id, user_id, period_start, period_end)).fetchall()
+    elif month:
         rows = conn.execute("""
             SELECT et.macrocategory_id, SUM(e.amount) as total, COUNT(*) as count
             FROM expenses e

@@ -50,6 +50,22 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
     staleTime: 5 * 60_000,
   })
 
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
+  // selectedMonth starts as a synchronous calendar-month guess (correct for the
+  // default cycle_start_day=1); once /settings resolves, correct it to the
+  // user's actual current billing period — but only if they haven't already
+  // navigated away from "today", so this doesn't clobber their navigation.
+  useEffect(() => {
+    if (settings?.current_period?.period_label) {
+      setSelectedMonth(prev => (prev === currentMonth() ? settings.current_period.period_label : prev))
+    }
+  }, [settings])
+
   // Give the tutorial context access to navigation and track current page
   useEffect(() => { registerNavigate(pg => setPage(pg)) }, [])
   useEffect(() => { trackPage(page) }, [page])

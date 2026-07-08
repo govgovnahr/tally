@@ -43,10 +43,19 @@ def get_incomes(
 
 
 @router.get("/incomes/summary")
-def get_income_summary(month: Optional[str] = None, user_id: str = Depends(get_current_user)):
+def get_income_summary(
+    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
+    user_id: str = Depends(get_current_user),
+):
     conn = get_connection()
     cursor = conn.cursor()
-    if month:
+    if period_start and period_end:
+        cursor.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM incomes "
+            "WHERE user_id = %s AND date >= %s AND date < %s AND credit_type IS NULL",
+            (user_id, period_start, period_end),
+        )
+    elif month:
         cursor.execute(
             "SELECT COALESCE(SUM(amount), 0) as total FROM incomes "
             "WHERE user_id = %s AND LEFT(date, 7) = %s AND credit_type IS NULL",

@@ -16,7 +16,13 @@ export default function MonthSelector({ selectedMonth, onMonthChange, big }) {
   const C = useC()
   const [menuOpen, setMenuOpen] = useState(false)
   const dropdownRef = useRef(null)
-  const cur = currentMonth()
+
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const cur = settings?.current_period?.period_label ?? currentMonth()
 
   const { data: rawMonths = [] } = useQuery({
     queryKey: qk.expensesMonths(),
