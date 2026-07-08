@@ -180,7 +180,7 @@ def _apply_priority_cascade(goals: list, portfolio_avg: float) -> list:
     remainder = max(0.0, round(portfolio_avg * (1 - total_pct / 100), 2))
 
     priority_goals = sorted(
-        [g for g in goals if g.get("priority") is not None and not g.get("completed") and g["goal_type"] in ("one_time", "emergency_fund")],
+        [g for g in goals if g.get("priority") is not None and not g.get("completed") and not g.get("paused") and g["goal_type"] in ("one_time", "emergency_fund")],
         key=lambda g: g["priority"],
     )
 
