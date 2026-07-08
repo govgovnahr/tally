@@ -1,9 +1,11 @@
 import { useState, startTransition } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import api from '../../api.js'
 import { qk } from '../../queryKeys.js'
 import { useC } from '../../colors'
 import { Card } from 'glasscn-ui'
+import { Button } from '@/components/ui/button'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import MonthSelector from '../inputs/MonthSelector.jsx'
 import MonthlyTrendsChart from '../charts/MonthlyTrendsChart.jsx'
@@ -13,11 +15,12 @@ import OutlierAlert from '../charts/OutlierAlert.jsx'
 import SpendingDonut from '../charts/SpendingDonut.jsx'
 import SavingsGoalsMini from '../widgets/SavingsGoalsMini.jsx'
 import AIInsightsCard from '../widgets/AIInsightsCard.jsx'
+import AddIncomeForm from '../widgets/AddIncomeForm.jsx'
 import ColorDot from '../ui/ColorDot.jsx'
 
 function fmt(n) { return `$${n.toFixed(2)}` }
 
-function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, progress, progressColor }) {
+function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, progress, progressColor, action }) {
   const C = useC()
   return (
     <Card className='rounded-xl p-3.5 sm:p-5' style={{ minHeight: '6rem' }}>
@@ -30,6 +33,16 @@ function KPICard({ label, value, subtitle, subtitleColor, subtitle2, color, prog
       <p className="text-sm mt-0.5" style={{ color: subtitleColor ?? C.muted, visibility: subtitle ? 'visible' : 'hidden' }}>
         {subtitle ?? ' '}
       </p>
+      {action && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 mt-1.5 text-xs font-semibold"
+          onClick={action.onClick}
+        >
+          <Plus size={12} className="mr-1" />{action.label}
+        </Button>
+      )}
       {progress != null && (
         <div className="h-[3px] rounded-full mt-2.5" style={{ backgroundColor: C.hoverStrong }}>
           <div className="h-full rounded-full" style={{ width: `${progress}%`, backgroundColor: progressColor ?? C.primary }} />
@@ -47,6 +60,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
   const { typeMap } = useExpenseTypes()
   const [activeType, setActiveType] = useState('All')
   const [activeMacro, setActiveMacro] = useState(null)
+  const [showIncomeForm, setShowIncomeForm] = useState(false)
 
   const { data: outliersData = [] } = useQuery({
     queryKey: qk.analysisOutliers(12),
@@ -178,6 +192,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
           color={totalIncome > 0 ? C.income : C.muted}
           subtitle={totalIncome > 0 ? `Net ${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}` : 'add income to track'}
           subtitleColor={totalIncome > 0 ? netColor : undefined}
+          action={totalIncome === 0 ? { label: 'Add Income', onClick: () => setShowIncomeForm(true) } : undefined}
         />
         <KPICard
           label="Burn Rate"
@@ -313,6 +328,13 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
         activeMacro={activeMacro}
         onMacroChange={handleMacroChange}
       />
+
+      {showIncomeForm && (
+        <AddIncomeForm
+          onClose={() => setShowIncomeForm(false)}
+          onAdded={() => setShowIncomeForm(false)}
+        />
+      )}
     </div>
   )
 }
