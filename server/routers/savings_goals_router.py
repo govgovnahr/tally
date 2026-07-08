@@ -123,9 +123,8 @@ def _add_computed(goal: dict, conn, portfolio_avg: float = 0.0) -> dict:
         first_date = min(r["date"][:10] for r in contrib_rows)
         first_y, first_m = int(first_date[:4]), int(first_date[5:7])
         today = date.today()
-        months_elapsed = (today.year - first_y) * 12 + (today.month - first_m)
-        if months_elapsed > 0:
-            contribution_rate = round(total_contributions / months_elapsed, 2)
+        months_elapsed = max(1, (today.year - first_y) * 12 + (today.month - first_m))
+        contribution_rate = round(total_contributions / months_elapsed, 2)
 
     if allocation_pct is not None:
         effective_avg = max(0.0, round(portfolio_avg * (allocation_pct / 100), 2))
@@ -147,11 +146,14 @@ def _add_computed(goal: dict, conn, portfolio_avg: float = 0.0) -> dict:
 
     today_str = date.today().isoformat()
     deadline_passed = bool(goal.get("deadline")) and goal["deadline"][:10] < today_str
-    completed = (effective_progress >= goal["target"] and goal["target"] > 0) or deadline_passed
+    goal_met = effective_progress >= goal["target"] and goal["target"] > 0
+    expired = deadline_passed and not goal_met
+    completed = goal_met or expired
 
     return {
         **base,
         "completed": completed,
+        "expired": expired,
         "monthly_contributions": None,
         "effective_progress": effective_progress,
         "progress_pct": progress_pct,
@@ -170,11 +172,15 @@ def _apply_priority_cascade(goals: list, portfolio_avg: float) -> list:
             g["priority"] = None
             g["allocation_pct"] = None
 
-    total_pct = sum((g.get("allocation_pct") or 0.0) for g in goals if not g.get("completed"))
+    total_pct = sum(
+        (g.get("allocation_pct") or 0.0)
+        for g in goals
+        if not g.get("completed") and not g.get("paused")
+    )
     remainder = max(0.0, round(portfolio_avg * (1 - total_pct / 100), 2))
 
     priority_goals = sorted(
-        [g for g in goals if g.get("priority") is not None and not g.get("completed") and g["goal_type"] == "one_time"],
+        [g for g in goals if g.get("priority") is not None and not g.get("completed") and g["goal_type"] in ("one_time", "emergency_fund")],
         key=lambda g: g["priority"],
     )
 

@@ -109,6 +109,7 @@ function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onC
   const color = C.adaptColor(rawColor)
   const pct = goal.progress_pct
   const met = pct >= 100
+  const isUnallocated = !goal.allocation_pct && !goal.priority
 
   const [coachOpen, setCoachOpen] = useState(false)
   const { data: coachData, isFetching: coachLoading } = useQuery({
@@ -200,9 +201,11 @@ function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onC
           {met ? (
             <span className="text-sm" style={{ color: C.primary }}>Goal met!</span>
           ) : goal.projected_completion ? (
-            <span className="text-sm" style={{ color: C.muted }}>
-              Projected: {fmtMonth(goal.projected_completion)}
-              {goal.effective_avg_monthly_net > 0 && ` · at $${goal.effective_avg_monthly_net.toFixed(0)}/mo`}
+            <span className="text-sm" style={{ color: isUnallocated ? C.dimText : C.muted }}>
+              {isUnallocated
+                ? `~${fmtMonth(goal.projected_completion)} · estimated`
+                : `Projected: ${fmtMonth(goal.projected_completion)}${goal.effective_avg_monthly_net > 0 ? ` · at $${goal.effective_avg_monthly_net.toFixed(0)}/mo` : ''}`
+              }
             </span>
           ) : (
             <span className="text-sm" style={{ color: C.muted }}>Log contributions to see a projection</span>
@@ -218,11 +221,22 @@ function OneTimeGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onC
   )
 }
 
-function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onContribute }) {
+function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPause, onContribute, aiEnabled }) {
   const C = useC()
   const color = C.adaptColor(rawColor)
   const pct = goal.progress_pct
   const met = pct >= 100
+
+  const [coachOpen, setCoachOpen] = useState(false)
+  const { data: coachData, isFetching: coachLoading } = useQuery({
+    queryKey: qk.aiGoalCoach(goal.id),
+    queryFn: () => api.get(`/ai/goal-coach/${goal.id}`).then(r => r.data),
+    enabled: coachOpen,
+    staleTime: 60 * 60_000,
+    retry: false,
+  })
+
+  const isUnallocated = !goal.allocation_pct && !goal.priority
 
   return (
     <Card className="rounded-xl p-4 sm:p-5" style={{
@@ -237,7 +251,38 @@ function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPaus
           </div>
           <div className="flex gap-1.5 mt-1 flex-wrap">
             {goal.months_target && <span className="text-sm" style={{ color: C.muted }}>{goal.months_target} months of expenses</span>}
+            {goal.deadline && (
+              <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.muted, borderColor: C.borderMed }}>
+                Due {fmtDeadline(goal.deadline)}
+              </span>
+            )}
             {goal.paused && <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.dimText, borderColor: C.dimText }}>Paused</span>}
+            {(() => {
+              const status = trackingStatus(goal)
+              if (!status) return null
+              const isOnTrack = status === 'on_track'
+              return (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full border font-medium"
+                    style={{ color: isOnTrack ? C.onTrack : C.overBudget, borderColor: isOnTrack ? C.onTrack : C.overBudget }}>
+                    {isOnTrack ? 'On track' : 'At risk'}
+                  </span>
+                  {!isOnTrack && aiEnabled && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setCoachOpen(o => !o) }}
+                      className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-transparent cursor-pointer transition-colors duration-150"
+                      style={{ borderColor: C.primary, color: C.primary }}
+                      onMouseEnter={ev => { ev.currentTarget.style.backgroundColor = `${C.primary}15` }}
+                      onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = 'transparent' }}
+                    >
+                      <Sparkles size={10} />
+                      Get advice
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
         <CardActions goal={goal} onEdit={onEdit} onDelete={onDelete} onPause={onPause} />
@@ -247,12 +292,41 @@ function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPaus
         <span className="text-sm" style={{ color: C.muted }}>/ ${goal.target.toFixed(2)}</span>
       </div>
       <div className="mb-3"><ProgressBar value={pct} color={met ? C.primary : color} /></div>
+      {coachOpen && (
+        <div className="mb-3 rounded-xl overflow-hidden"
+          style={{ border: `1px solid ${C.primary}30`, backgroundColor: `${C.primary}08` }}>
+          {coachLoading ? (
+            <div className="flex items-center gap-2 p-3" style={{ color: C.muted }}>
+              <Loader2 size={14} className="animate-spin" />
+              <span className="text-sm">Building your plan…</span>
+            </div>
+          ) : coachData?.skip ? (
+            <p className="text-sm p-3" style={{ color: C.muted }}>Not enough data to coach this goal yet. Log more contributions first.</p>
+          ) : coachData ? (
+            <div className="p-3 flex flex-col gap-3">
+              <p className="text-sm font-medium" style={{ color: C.warmText }}>{coachData.summary}</p>
+              <div className="flex flex-col gap-2">
+                {coachData.options?.map(opt => (
+                  <div key={opt.type} className="rounded-lg p-2.5"
+                    style={{ backgroundColor: C.surface, border: `1px solid ${C.border}` }}>
+                    <p className="text-xs font-semibold mb-0.5" style={{ color: C.warmText }}>{opt.label}</p>
+                    <p className="text-xs" style={{ color: C.muted }}>{opt.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="flex items-end justify-between gap-2">
         <div>
           {met ? (
             <span className="text-sm" style={{ color: C.primary }}>Goal met!</span>
           ) : goal.projected_completion ? (
-            <span className="text-sm" style={{ color: C.muted }}>Projected: {fmtMonth(goal.projected_completion)}</span>
+            <span className="text-sm" style={{ color: isUnallocated ? C.dimText : C.muted }}>
+              {isUnallocated ? `~${fmtMonth(goal.projected_completion)} · estimated` : `Projected: ${fmtMonth(goal.projected_completion)}`}
+              {!isUnallocated && goal.effective_avg_monthly_net > 0 && ` · at $${goal.effective_avg_monthly_net.toFixed(0)}/mo`}
+            </span>
           ) : (
             <span className="text-sm" style={{ color: C.muted }}>Log contributions to see a projection</span>
           )}
@@ -269,7 +343,6 @@ function EmergencyFundGoalCard({ goal, color: rawColor, onEdit, onDelete, onPaus
 
 function CompletedGoalCard({ goal, color, onDelete }) {
   const C = useC()
-  const byDeadline = goal.deadline && goal.deadline < new Date().toISOString().slice(0, 10)
   const pct = goal.progress_pct
 
   return (
@@ -282,7 +355,7 @@ function CompletedGoalCard({ goal, color, onDelete }) {
         <div>
           <span className="text-sm font-semibold" style={{ color: C.warmText }}>{goal.name}</span>
           <div className="flex gap-1.5 mt-1">
-            {byDeadline && pct < 100 ? (
+            {goal.expired ? (
               <span className="text-[11px] px-1.5 py-0.5 rounded-full border" style={{ color: C.dimText, borderColor: C.dimText }}>Deadline passed</span>
             ) : (
               <span className="text-[11px] px-1.5 py-0.5 rounded-full border flex items-center gap-1" style={{ color: C.primary, borderColor: C.primary }}>
@@ -311,7 +384,12 @@ function ContributionDialog({ open, onClose, goal }) {
   const [contribDate, setContribDate] = useState(new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) { setError(''); setSuccess(false) }
+  }, [open])
 
   function invalidateSavings() {
     queryClient.invalidateQueries({ queryKey: ['savings-goals'] })
@@ -322,10 +400,13 @@ function ContributionDialog({ open, onClose, goal }) {
   async function handleAdd() {
     const a = parseFloat(amount)
     if (!a || a <= 0) { setError('Amount must be greater than 0'); return }
-    setSaving(true); setError('')
+    setSaving(true); setError(''); setSuccess(false)
     try {
       await api.post(`/savings-goals/${goal.id}/contributions`, { amount: a, date: contribDate, note: note.trim() || null })
-      setAmount(''); setNote(''); invalidateSavings()
+      setAmount(''); setNote('')
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 2500)
+      invalidateSavings()
     } catch (err) { setError(err.response?.data?.detail ?? 'Something went wrong') }
     finally { setSaving(false) }
   }
@@ -375,6 +456,7 @@ function ContributionDialog({ open, onClose, goal }) {
               </div>
             </div>
             {error && <div className="mt-2"><AlertBox severity="error">{error}</AlertBox></div>}
+            {success && <div className="mt-2"><AlertBox severity="success">Contribution added!</AlertBox></div>}
           </div>
         </div>
         <DialogFooter>
@@ -388,7 +470,7 @@ function ContributionDialog({ open, onClose, goal }) {
 
 // ─── Goal Dialog ──────────────────────────────────────────────────────────────
 
-function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal }) {
+function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, portfolioAvg = 0, usedPct = 0 }) {
   const C = useC()
   const isEdit = !!existing
   const [goalType, setGoalType] = useState('one_time')
@@ -398,6 +480,9 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal }) {
   const [color, setColor] = useState(GOAL_COLORS[0])
   const [monthsTarget, setMonthsTarget] = useState('3')
   const [avgExpenses, setAvgExpenses] = useState(null)
+  const [allocationMode, setAllocationMode] = useState('none')
+  const [allocationPct, setAllocationPct] = useState('')
+  const [allocationPriority, setAllocationPriority] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -409,6 +494,9 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal }) {
       setDeadline(existing?.deadline ?? '')
       setColor(existing?.color ?? GOAL_COLORS[0])
       setMonthsTarget(existing?.months_target?.toString() ?? '3')
+      setAllocationMode(existing?.allocation_pct != null ? 'pct' : existing?.priority != null ? 'priority' : 'none')
+      setAllocationPct(existing?.allocation_pct?.toString() ?? '')
+      setAllocationPriority(existing?.priority?.toString() ?? '')
       setError('')
     }
   }, [open, existing])
@@ -433,18 +521,20 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal }) {
     setSaving(true); setError('')
     try {
       const isOneTimeLike = goalType === 'one_time' || goalType === 'emergency_fund'
+      const resolvedAllocationPct = isOneTimeLike && allocationMode === 'pct' ? parseFloat(allocationPct) || null : null
+      const resolvedPriority = isOneTimeLike && allocationMode === 'priority' ? parseInt(allocationPriority) || null : null
       const body = {
         goal_type: goalType, name: name.trim(), target: t,
         deadline: isOneTimeLike && deadline ? deadline : null,
         color,
-        allocation_pct: null,
-        priority: null,
+        allocation_pct: resolvedAllocationPct,
+        priority: resolvedPriority,
         months_target: months_target_val,
       }
       if (isEdit) {
         await api.put(`/savings-goals/${existing.id}`, {
           name: body.name, target: body.target, deadline: body.deadline, color,
-          allocation_pct: null, priority: null,
+          allocation_pct: resolvedAllocationPct, priority: resolvedPriority,
           paused: existing.paused ?? false, months_target: body.months_target,
         })
       } else {
@@ -517,6 +607,74 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal }) {
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Deadline (optional)</label>
               <Input value={deadline} onChange={e => setDeadline(e.target.value)} type="date" />
+            </div>
+          )}
+
+          {(goalType === 'one_time' || goalType === 'emergency_fund') && (
+            <div>
+              <p className="text-xs mb-2" style={{ color: C.muted }}>Funding strategy</p>
+              <div className="flex flex-col gap-2">
+                {[
+                  { value: 'none', label: 'None' },
+                  { value: 'pct', label: '% of monthly net' },
+                  { value: 'priority', label: 'Priority queue' },
+                ].map(({ value, label }) => (
+                  <div key={value}>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="radio" value={value} checked={allocationMode === value}
+                        onChange={() => setAllocationMode(value)}
+                        className="accent-current" style={{ accentColor: C.primary }} />
+                      {label}
+                    </label>
+                    {allocationMode === 'none' && value === 'none' && (
+                      <p className="mt-1 ml-5 text-xs" style={{ color: C.dimText }}>
+                        Projection uses your full avg net — may be optimistic if you have multiple goals
+                      </p>
+                    )}
+                    {allocationMode === 'pct' && value === 'pct' && (
+                      <div className="mt-2 ml-5 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <Input value={allocationPct} onChange={e => setAllocationPct(e.target.value)}
+                            type="number" min="0.1" max="100" step="0.1"
+                            className="w-20 h-8 text-sm" placeholder="10" />
+                          <span className="text-sm" style={{ color: C.muted }}>%</span>
+                          {portfolioAvg > 0 && parseFloat(allocationPct) > 0 && (
+                            <span className="text-sm font-medium" style={{ color: C.warmText }}>
+                              ≈ ${(portfolioAvg * parseFloat(allocationPct) / 100).toFixed(0)}/mo
+                            </span>
+                          )}
+                        </div>
+                        {portfolioAvg > 0 && (
+                          <p className="text-xs" style={{
+                            color: usedPct + (parseFloat(allocationPct) || 0) > 100 ? C.overBudget : C.dimText,
+                          }}>
+                            {usedPct > 0
+                              ? `${usedPct.toFixed(0)}% already allocated · ${Math.max(0, 100 - usedPct).toFixed(0)}% remaining`
+                              : `Avg net $${portfolioAvg.toFixed(0)}/mo`}
+                            {usedPct + (parseFloat(allocationPct) || 0) > 100 && ' · priority goals may receive no funding'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {allocationMode === 'priority' && value === 'priority' && (
+                      <div className="mt-2 ml-5 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <Input value={allocationPriority} onChange={e => setAllocationPriority(e.target.value)}
+                            type="number" min="1" step="1"
+                            className="w-20 h-8 text-sm" placeholder="1" />
+                          <span className="text-sm" style={{ color: C.muted }}>rank</span>
+                        </div>
+                        <p className="text-xs" style={{ color: C.dimText }}>
+                          Lower rank fills first · draws from{' '}
+                          {usedPct > 0
+                            ? `~$${Math.max(0, portfolioAvg * (1 - usedPct / 100)).toFixed(0)}/mo after % goals`
+                            : `~$${portfolioAvg.toFixed(0)}/mo`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -598,10 +756,14 @@ export default function SavingsPage() {
   }
 
   const monthlyGoal = goals.find(g => g.goal_type === 'monthly') ?? null
-  const oneTimeGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && !g.completed)
-  const completedGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && g.completed)
+  const oneTimeGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && !g.completed && !g.expired)
+  const completedGoals = goals.filter(g => (g.goal_type === 'one_time' || g.goal_type === 'emergency_fund') && (g.completed || g.expired))
   const hasMonthlyGoal = !!monthlyGoal
   const activeContribGoal = contributingToGoalId ? goals.find(g => g.id === contributingToGoalId) ?? null : null
+  const portfolioAvg = goals.find(g => g.avg_monthly_net != null)?.avg_monthly_net ?? 0
+  const usedPct = goals
+    .filter(g => !g.completed && !g.expired && !g.paused && g.allocation_pct != null && g.id !== editingGoal?.id)
+    .reduce((s, g) => s + (g.allocation_pct ?? 0), 0)
 
   async function handleDelete() {
     if (!deletingGoal) return
@@ -693,6 +855,8 @@ export default function SavingsPage() {
         onSaved={() => { setDialogOpen(false); invalidateSavings() }}
         existing={editingGoal}
         hasMonthlyGoal={hasMonthlyGoal && !editingGoal}
+        portfolioAvg={portfolioAvg}
+        usedPct={usedPct}
       />
       <DeleteConfirmDialog open={!!deletingGoal} onClose={() => setDeletingGoal(null)} onConfirm={handleDelete} goalName={deletingGoal?.name ?? ''} />
       <ContributionDialog open={!!contributingToGoalId} onClose={() => setContributingToGoalId(null)} goal={activeContribGoal} />
