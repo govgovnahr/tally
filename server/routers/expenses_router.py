@@ -1,8 +1,9 @@
+import calendar
 import uuid
 from datetime import datetime, date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from database import get_connection, seed_recurring_forward, month_start
+from database import get_connection, seed_recurring_forward, month_start, get_user_settings, cycle_period_for_date
 from models import Expense, Expenses, NewExpense, TypeSummary
 from auth import get_current_user
 
@@ -21,6 +22,7 @@ def _valid_type_names(conn, user_id: str):
 @router.get("/expenses")
 def get_expenses(
     type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None,
+    period_start: Optional[str] = None, period_end: Optional[str] = None,
     page: int = 1, page_size: int = 50, search: Optional[str] = None,
     sort_by: str = "date", sort_dir: str = "desc",
     user_id: str = Depends(get_current_user),
@@ -37,7 +39,10 @@ def get_expenses(
     if macrocategory_id:
         conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = %s AND user_id = %s)")
         params.extend([macrocategory_id, user_id])
-    if month:
+    if period_start and period_end:
+        conditions.append("date >= %s AND date < %s")
+        params.extend([period_start, period_end])
+    elif month:
         conditions.append("LEFT(date, 7) = %s")
         params.append(month)
     if search:
@@ -95,21 +100,45 @@ def add_expense(new_expense: NewExpense, user_id: str = Depends(get_current_user
 @router.get("/expenses/months")
 def get_months(user_id: str = Depends(get_current_user)):
     conn = get_connection()
+    settings = get_user_settings(conn, user_id)
+    cycle_start_day = settings["cycle_start_day"]
     cursor = conn.cursor()
     cursor.execute(
         "SELECT DISTINCT LEFT(date, 7) as month FROM expenses WHERE user_id = %s ORDER BY month",
         (user_id,),
     )
-    months = [row["month"] for row in cursor.fetchall()]
+    calendar_months = [row["month"] for row in cursor.fetchall()]
     conn.close()
-    return months
+
+    if cycle_start_day == 1:
+        return calendar_months
+
+    # A populated calendar month may map to one or two cycle periods (a period
+    # can span two calendar months) — checking both the first and last day of
+    # each populated calendar month guarantees no period with data is missed.
+    labels = set()
+    for ym in calendar_months:
+        y, m = map(int, ym.split("-"))
+        first_day = date(y, m, 1)
+        last_day = date(y, m, calendar.monthrange(y, m)[1])
+        labels.add(cycle_period_for_date(first_day, cycle_start_day)[2])
+        labels.add(cycle_period_for_date(last_day, cycle_start_day)[2])
+    return sorted(labels)
 
 
 @router.get("/expenses/summary")
-def get_summary(month: Optional[str] = None, user_id: str = Depends(get_current_user)):
+def get_summary(
+    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
+    user_id: str = Depends(get_current_user),
+):
     conn = get_connection()
     cursor = conn.cursor()
-    if month:
+    if period_start and period_end:
+        cursor.execute(
+            "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = %s AND date >= %s AND date < %s GROUP BY type ORDER BY total DESC",
+            (user_id, period_start, period_end),
+        )
+    elif month:
         cursor.execute(
             "SELECT type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = %s AND LEFT(date, 7) = %s GROUP BY type ORDER BY total DESC",
             (user_id, month),
@@ -186,10 +215,16 @@ def update_expense(expense_id: str, updated: NewExpense, user_id: str = Depends(
 
 
 @router.delete("/transactions")
-def clear_transactions(month: Optional[str] = Query(None), user_id: str = Depends(get_current_user)):
+def clear_transactions(
+    month: Optional[str] = Query(None), period_start: Optional[str] = Query(None), period_end: Optional[str] = Query(None),
+    user_id: str = Depends(get_current_user),
+):
     conn = get_connection()
     cursor = conn.cursor()
-    if month:
+    if period_start and period_end:
+        cursor.execute("DELETE FROM expenses WHERE user_id = %s AND date >= %s AND date < %s", (user_id, period_start, period_end))
+        cursor.execute("DELETE FROM incomes WHERE user_id = %s AND date >= %s AND date < %s", (user_id, period_start, period_end))
+    elif month:
         cursor.execute("DELETE FROM expenses WHERE user_id = %s AND LEFT(date, 7) = %s", (user_id, month))
         cursor.execute("DELETE FROM incomes WHERE user_id = %s AND LEFT(date, 7) = %s", (user_id, month))
     else:

@@ -33,7 +33,7 @@ React build → `client/dist/` → `server/static/` → PyInstaller → `server/
 - Savings progress is contribution-based — `savings_contributions`, not income/expense data
 - Deleting a goal deletes contributions but NOT linked expenses (history preserved)
 - New routers need `--hidden-import` in build workflow (both platforms); `auth_router` and `auth` module both need entries
-- Budget pacing: past months return `projected_spend: null`; current month uses `spent + historical_daily_rate × remaining_days`; future months return empty categories
+- Budget pacing: past months return `projected_spend: null`; current month uses `spent + historical_daily_rate × remaining_days`; future months return empty categories. Under a custom billing cycle (`cycle_start_day != 1`), "month" means the user's cycle period — `days_elapsed`/`days_in_month` fields describe the period, not the calendar month; see "Custom Billing Cycle" below
 - Status chip "over budget" label uses `projected_spend - limit`, not `spent - limit` (spend may be under budget while projection is over)
 - `server/seed_demo.py` dates are hand-written against a fixed anchor month (`_ANCHOR_LAST_MONTH`) and shifted by `sd()` at seed time to land on the 5 real calendar months before whenever the script runs (current month stays empty) — if you edit the hand-written data's date range, update `_ANCHOR_LAST_MONTH` to match its new last month
 
@@ -65,11 +65,22 @@ Types: `monthly` (contributions this month vs target), `one_time` (cumulative to
 
 `analysis_router.py` — all endpoints under `/analysis/`. Logic helpers in `database.py`.
 
-- **Pacing**: `compute_budget_pacing(conn, month, lookback_months)` in `database.py`. Past → `projected_spend=None`. Current → historical daily rate × remaining days. Future → `[]`.
+- **Pacing**: `compute_budget_pacing(conn, month, lookback_months, cycle_start_day=1)` in `database.py`. Past → `projected_spend=None`. Current → historical daily rate × remaining days. Future → `[]`. See "Custom Billing Cycle" for the `cycle_start_day != 1` path.
 - **Category stats**: avg monthly, over-budget frequency, trend (up/down/flat ±5% vs avg), monthly breakdown.
 - **Outliers**: z-score ≥ 1.5 per category; requires ≥ 3 expenses; capped at 15. Computed in-request, not stored.
 - **Month-over-month**: total spent + income + net + MoM % change per month.
 - `_effective_budgets_map(conn, month)` is a local helper in `analysis_router.py` — not imported from `budgets_router` to avoid cross-package issues.
+
+## Custom Billing Cycle
+
+Per-user `cycle_start_day` setting (`user_settings.cycle_start_day`, 1-31, default 1) lets a user's "month" run e.g. 23rd→22nd instead of 1st→end-of-month (for lining up with a credit card statement date). `cycle_start_day=1` is byte-identical to the pre-existing calendar-month behavior — every touched function branches explicitly on `cycle_start_day == 1` to run the original, unmodified code path, so default users are unaffected.
+
+- **Core utility** (`database.py`): `cycle_period_for_date(ref_date, cycle_start_day)` → `(period_start, period_end_exclusive, period_label)`; `cycle_bounds(period_label, cycle_start_day)` is the inverse (label → bounds). `_clamp_day` clamps an out-of-range day (e.g. 30 in February) to that month's last valid day, mirroring real credit-card statement behavior — verified adjacent periods still line up exactly with no gap/overlap across a clamp boundary.
+- **Labeling convention**: a period is labeled by whichever month holds the majority of its days — `cycle_start_day` 1-15 labels by the *start* month (a Jun 9–Jul 8 period is mostly June, labels `"2026-06"`); `cycle_start_day` 16-31 labels by the *end* month (a Jun 23–Jul 22 period is mostly July, labels `"2026-07"`). At `cycle_start_day=1` this collapses to today's exact `YYYY-MM` labeling (the two rules agree trivially since there's no rollover). This is also what lets a `monthly_budgets` override (still keyed by a plain calendar-month string, unchanged) line up with a cycle period without either code path knowing about the other.
+- **Settings**: `GET /settings` returns `cycle_start_day` plus a computed `current_period: {period_start, period_end, period_label}` for today. `PUT /settings` is a merge-patch (`SettingsUpdate` fields are all `Optional`) — sending `{ai_enabled}` alone must not reset `cycle_start_day`, and vice versa.
+- **Rolled out to**: `compute_budget_pacing`/`_fast_totals_by_type` (database.py), `GET /analysis/pacing`, `GET /expenses/months`, and the Dashboard-only summary + list endpoints (`/expenses`, `/expenses/summary`, `/incomes`, `/incomes/summary`, `/macrocategories/summary`, `DELETE /transactions` — each also accepts optional `period_start`/`period_end`, preferred over `month` when present). Frontend: `MonthSelector`, `DashboardPage` (incl. its embedded `ExpenseList` and "Clear Month"), `AnalysisPage`'s pacing section, and `App.jsx`'s initial-month bootstrap all read period bounds from the server (`GET /settings/period-bounds?month=`, or `GET /settings/period-bounds-bulk?months=a,b,c` for showing several at once) rather than re-deriving cycle math client-side — `lib/budgetMonths.js` stays calendar-only on purpose.
+- **Month-selector range hints**: since `MonthlyOverrides.jsx`'s picker (Budgets page) is still calendar-labeled by design, it shows each option's actual cycle date range (e.g. `"July 2026 (Jun 23 – Jul 22)"`) via the bulk endpoint when a custom cycle is set, and its "(current)" marker compares against the real cycle period label, not calendar current-month. `MonthSelector.jsx` (Dashboard/Analysis) shows the same range as a subtitle/per-option hint. Both are no-ops (no extra fetch, no visible change) at `cycle_start_day=1`. `BudgetPlan.jsx`'s forward-planning picker is untouched — pure future calendar-month planning, not "what period is current."
+- **NOT cycle-aware yet** (still plain calendar month): month-over-month, category-stats/outliers trend views, savings goals (contributions/projections), the AI agent's tools, CSV/Excel import's month assignment, recurring-expense forward-seeding (still anchors to the 1st), `budgets_router.py`'s `effective-range` (feeds `MonthlyTrendsChart`), and `BudgetPlan.jsx`'s own forward-planning picker.
 
 ## Auth
 

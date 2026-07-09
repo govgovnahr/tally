@@ -283,7 +283,9 @@ export default function BudgetGoals() {
         }} />
       </div>
       <div data-tour="monthly-overrides">
-        <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits} onChanged={() => {
+        <MonthlyOverrides expenseTypes={expenseTypes} defaultLimits={limits}
+          cycleStartDay={settings?.cycle_start_day} currentPeriodLabel={settings?.current_period?.period_label}
+          onChanged={() => {
           setCurrentOverrides({})
           api.get('/budgets/monthly-overrides', { params: { month: currentMonth() } })
             .then(r => setCurrentOverrides(Object.fromEntries(r.data.map(b => [b.type, b.monthly_limit]))))

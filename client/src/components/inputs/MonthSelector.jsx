@@ -5,7 +5,7 @@ import api from '../../api.js'
 import { qk } from '../../queryKeys.js'
 import { useC } from '../../colors'
 import { currentMonth } from '../../lib/budgetMonths.js'
-import { formatMonthLabel } from '../../lib/format.js'
+import { formatMonthLabel, formatPeriodRange } from '../../lib/format.js'
 
 function shortMonth(m) {
   const [y, mo] = m.split('-').map(Number)
@@ -16,7 +16,15 @@ export default function MonthSelector({ selectedMonth, onMonthChange, big }) {
   const C = useC()
   const [menuOpen, setMenuOpen] = useState(false)
   const dropdownRef = useRef(null)
-  const cur = currentMonth()
+
+  const { data: settings } = useQuery({
+    queryKey: qk.settings(),
+    queryFn: () => api.get('/settings').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const cur = settings?.current_period?.period_label ?? currentMonth()
+  const cycleStartDay = settings?.cycle_start_day
+  const isCustomCycle = !!cycleStartDay && cycleStartDay !== 1
 
   const { data: rawMonths = [] } = useQuery({
     queryKey: qk.expensesMonths(),
@@ -24,6 +32,17 @@ export default function MonthSelector({ selectedMonth, onMonthChange, big }) {
     staleTime: 10 * 60_000,
   })
   const availableMonths = rawMonths.includes(cur) ? rawMonths : [...rawMonths, cur].sort()
+
+  // Non-default cycle: show each option's actual date range, since the labels
+  // alone ("July 2026") no longer map to the calendar month of that name.
+  const { data: boundsData } = useQuery({
+    queryKey: qk.periodBoundsBulk(availableMonths),
+    queryFn: () => api.get('/settings/period-bounds-bulk', { params: { months: availableMonths.join(',') } }).then(r => r.data),
+    enabled: isCustomCycle && availableMonths.length > 0,
+    staleTime: 10 * 60_000,
+  })
+  const rangeByMonth = Object.fromEntries((boundsData ?? []).map(b => [b.month, b]))
+  const curRange = rangeByMonth[cur]
 
   useEffect(() => {
     if (!menuOpen) return
@@ -70,10 +89,15 @@ export default function MonthSelector({ selectedMonth, onMonthChange, big }) {
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl transition-colors duration-150 cursor-pointer border-none min-w-[180px] justify-center"
             style={{ backgroundColor: menuOpen ? C.hover : 'transparent' }}
           >
-            <span
-              className={`${big ? 'text-2xl' : 'text-lg'} font-semibold leading-none`}
-            >
-              {formatMonthLabel(selectedMonth)}
+            <span className="flex flex-col items-start leading-tight">
+              <span className={`${big ? 'text-2xl' : 'text-lg'} font-semibold leading-none`}>
+                {formatMonthLabel(selectedMonth)}
+              </span>
+              {isCustomCycle && rangeByMonth[selectedMonth] && (
+                <span className="text-xs font-normal" style={{ color: C.dimText }}>
+                  {formatPeriodRange(rangeByMonth[selectedMonth].period_start, rangeByMonth[selectedMonth].period_end)}
+                </span>
+              )}
             </span>
             <ChevronDown size={16} style={{ color: C.dimText, marginTop: 1 }} />
           </button>
@@ -114,8 +138,13 @@ export default function MonthSelector({ selectedMonth, onMonthChange, big }) {
                         onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
                       >
                         {shortMonth(m)}
+                        {isCustomCycle && rangeByMonth[m] && (
+                          <span className="text-xs" style={{ color: C.dimText }}>
+                            {formatPeriodRange(rangeByMonth[m].period_start, rangeByMonth[m].period_end)}
+                          </span>
+                        )}
                         {m === cur && (
-                          <span className="text-xs" style={{ color: C.dimText }}>current</span>
+                          <span className="text-xs ml-auto" style={{ color: C.dimText }}>current</span>
                         )}
                       </button>
                     )

@@ -14,3 +14,11 @@ export function formatMonthLabel(m) {
   const [y, mo] = m.split('-').map(Number)
   return new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
+
+// periodEnd is exclusive (the day the next period starts) — display the last inclusive day.
+export function formatPeriodRange(periodStart, periodEnd) {
+  const [ey, em, ed] = periodEnd.split('-').map(Number)
+  const lastInclusive = new Date(ey, em - 1, ed - 1)
+  const lastInclusiveStr = `${lastInclusive.getFullYear()}-${String(lastInclusive.getMonth() + 1).padStart(2, '0')}-${String(lastInclusive.getDate()).padStart(2, '0')}`
+  return `${formatShortDate(periodStart)} – ${formatShortDate(lastInclusiveStr)}`
+}

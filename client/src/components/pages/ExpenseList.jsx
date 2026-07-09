@@ -49,7 +49,7 @@ function SortBtn({ col, sortBy, sortDir, onSort, children, className = '' }) {
   )
 }
 
-export default function ExpenseList({ month, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed }) {
+export default function ExpenseList({ month, periodStart, periodEnd, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed }) {
   const C = useC()
   const { suggestAdvancedTour } = useTutorial()
   const queryClient = useQueryClient()
@@ -150,18 +150,21 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
     }
   }
 
-  useEffect(() => { setPage(1) }, [activeType, activeMacro, effectiveMonth, search, sortBy, sortDir])
+  useEffect(() => { setPage(1) }, [activeType, activeMacro, effectiveMonth, periodStart, periodEnd, search, sortBy, sortDir])
+
+  const periodParams = periodStart && periodEnd ? { period_start: periodStart, period_end: periodEnd }
+    : effectiveMonth ? { month: effectiveMonth } : {}
 
   const incomeParams = activeType === 'Income' ? {
     page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
-    ...(effectiveMonth ? { month: effectiveMonth } : {}),
+    ...periodParams,
     ...(search ? { search } : {}),
   } : null
 
   const expenseParams = activeType !== 'Income' ? {
     page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
     ...(activeMacro ? { macrocategory_id: activeMacro } : activeType !== 'All' ? { type: activeType } : {}),
-    ...(effectiveMonth ? { month: effectiveMonth } : {}),
+    ...periodParams,
     ...(search ? { search } : {}),
   } : null
 
@@ -216,8 +219,7 @@ export default function ExpenseList({ month, activeType: propActiveType, onTypeC
   }
 
   async function handleClearAll() {
-    const params = effectiveMonth ? { month: effectiveMonth } : {}
-    await api.delete('/transactions', { params })
+    await api.delete('/transactions', { params: periodParams })
     setShowClearConfirm(false)
     invalidateAll()
   }

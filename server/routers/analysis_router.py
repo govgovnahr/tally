@@ -1,8 +1,7 @@
-import calendar
 import math
 from datetime import date
 from fastapi import APIRouter, Depends, Query
-from database import get_connection, get_avg_monthly_expenses, compute_budget_pacing
+from database import get_connection, get_avg_monthly_expenses, compute_budget_pacing, get_user_settings, cycle_bounds
 from auth import get_current_user
 
 router = APIRouter()
@@ -42,25 +41,33 @@ def get_pacing(
     user_id: str = Depends(get_current_user),
 ):
     today = date.today()
-    cur_month = _current_month()
-    y, m = map(int, month.split("-"))
-    days_in_month = calendar.monthrange(y, m)[1]
+    conn = get_connection()
+    settings = get_user_settings(conn, user_id)
+    cycle_start_day = settings["cycle_start_day"]
+    cur_label = settings["current_period"]["period_label"]
 
-    if month > cur_month:
+    period_start, period_end = cycle_bounds(month, cycle_start_day)
+    days_in_month = (date.fromisoformat(period_end) - date.fromisoformat(period_start)).days
+
+    if month > cur_label:
+        conn.close()
         return {
             "month": month,
             "days_elapsed": 0,
             "days_in_month": days_in_month,
             "is_current_month": False,
+            "period_start": period_start,
+            "period_end": period_end,
+            "period_label": month,
             "categories": [],
         }
 
-    conn = get_connection()
-    pacing_rows = compute_budget_pacing(conn, month, lookback_months=lookback_months, user_id=user_id)
+    pacing_rows = compute_budget_pacing(conn, month, lookback_months=lookback_months, user_id=user_id, cycle_start_day=cycle_start_day)
     budgets = _effective_budgets_map(conn, month, user_id)
     conn.close()
 
-    days_elapsed = today.day if month == cur_month else days_in_month
+    is_current = month == cur_label
+    days_elapsed = (today - date.fromisoformat(period_start)).days + 1 if is_current else days_in_month
 
     categories = []
     for row in pacing_rows:
@@ -98,7 +105,10 @@ def get_pacing(
         "month": month,
         "days_elapsed": days_elapsed,
         "days_in_month": days_in_month,
-        "is_current_month": month == cur_month,
+        "is_current_month": is_current,
+        "period_start": period_start,
+        "period_end": period_end,
+        "period_label": month,
         "categories": categories,
     }
 

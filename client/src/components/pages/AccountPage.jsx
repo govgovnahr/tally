@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { LogOut, KeyRound, User, Upload, Bot } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { LogOut, KeyRound, User, Upload, Bot, Calendar } from 'lucide-react'
 import ClearAllDialog from '../dialogs/ClearAllDialog.jsx'
 import { supabase } from '../../supabase.js'
 import { useC } from '../../colors'
@@ -10,6 +11,7 @@ import {
 
 export default function AccountPage({ user, onLogout }) {
   const C = useC()
+  const queryClient = useQueryClient()
 
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -23,9 +25,19 @@ export default function AccountPage({ user, onLogout }) {
   const [aiDataDeleting, setAiDataDeleting] = useState(false)
   const [aiDataMsg, setAiDataMsg] = useState(null)
 
+  const [cycleDayInput, setCycleDayInput] = useState('1')
+  const [cycleSaving, setCycleSaving] = useState(false)
+  const [cycleError, setCycleError] = useState(null)
+  const [cycleSaved, setCycleSaved] = useState(false)
+  const cycleDayTouched = useRef(false)
+
   useEffect(() => {
     api.get('/settings').then(r => {
       setAiEnabled(r.data.ai_enabled)
+      // Guard against a late-resolving fetch (StrictMode's double-invoked mount
+      // effect, or just a slow network) clobbering a value the user already
+      // started editing before this response came back.
+      if (!cycleDayTouched.current) setCycleDayInput(String(r.data.cycle_start_day))
       setAiSettingsLoading(false)
     }).catch(() => setAiSettingsLoading(false))
   }, [])
@@ -38,6 +50,22 @@ export default function AccountPage({ user, onLogout }) {
       else setAiDataMsg(null)
     } catch {
       setAiEnabled(!enabled)
+    }
+  }
+
+  const handleCycleDaySave = async () => {
+    const day = parseInt(cycleDayInput, 10)
+    if (!day || day < 1 || day > 31) { setCycleError('Enter a day between 1 and 31'); return }
+    setCycleSaving(true); setCycleError(null); setCycleSaved(false)
+    try {
+      await api.put('/settings', { cycle_start_day: day })
+      setCycleSaved(true)
+      queryClient.invalidateQueries()
+      setTimeout(() => setCycleSaved(false), 2500)
+    } catch (err) {
+      setCycleError(err.response?.data?.detail ?? 'Failed to save')
+    } finally {
+      setCycleSaving(false)
     }
   }
 
@@ -333,6 +361,50 @@ export default function AccountPage({ user, onLogout }) {
       </Dialog>
 
       <ClearAllDialog/>
+
+      {/* Billing Cycle */}
+      <div style={section}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <Calendar size={16} color={C.muted} />
+          <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>Billing Cycle</span>
+        </div>
+
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+          Set which day of the month your budgets and spending views reset — useful if you'd
+          rather track against a credit card statement date than the calendar month. If the
+          day doesn't exist in a given month (e.g. the 30th in February), it falls back to
+          that month's last day.
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: C.text }}>Month starts on day</span>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={cycleDayInput}
+            disabled={aiSettingsLoading || cycleSaving}
+            onChange={e => { cycleDayTouched.current = true; setCycleDayInput(e.target.value) }}
+            style={{ ...inputStyle, width: 70 }}
+          />
+          <button
+            type="button"
+            onClick={handleCycleDaySave}
+            disabled={aiSettingsLoading || cycleSaving}
+            style={{
+              padding: '7px 16px', borderRadius: 8, border: 'none',
+              background: C.primary, color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: cycleSaving ? 'not-allowed' : 'pointer',
+              opacity: cycleSaving ? 0.6 : 1, fontFamily: 'inherit',
+            }}
+          >
+            {cycleSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+
+        {cycleError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#e57373' }}>{cycleError}</p>}
+        {cycleSaved && <p style={{ margin: '8px 0 0', fontSize: 12, color: C.primary }}>Saved.</p>}
+      </div>
 
       {/* AI & Privacy */}
       <div style={section} data-tour="ai-privacy">
