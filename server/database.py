@@ -531,9 +531,12 @@ def cycle_period_for_date(ref_date: date, cycle_start_day: int) -> tuple:
     billing-cycle period containing ref_date, given a user's cycle_start_day
     (1-31; 1 = classic calendar month). period_start/period_end_exclusive are
     'YYYY-MM-DD' strings usable in `date >= period_start AND date < period_end`.
-    period_label is the 'YYYY-MM' of the period's last inclusive day (end-month
-    labeling) — e.g. a Jun 23-Jul 22 period labels as "2026-07", the month it
-    concludes in. At cycle_start_day=1 this reduces to today's exact convention:
+
+    period_label is 'YYYY-MM', chosen by which month holds the majority of the
+    period's days: cycle_start_day 1-15 labels by the start month (e.g. a
+    Jun 9-Jul 8 period is mostly June, labels "2026-06"); cycle_start_day 16-31
+    labels by the end month (e.g. a Jun 23-Jul 22 period is mostly July, labels
+    "2026-07"). At cycle_start_day=1 this reduces to today's exact convention:
     period_start is the 1st of ref_date's month, period_label is that same month."""
     y, m = ref_date.year, ref_date.month
     start_day_this_month = _clamp_day(y, m, cycle_start_day)
@@ -547,8 +550,11 @@ def cycle_period_for_date(ref_date: date, cycle_start_day: int) -> tuple:
     period_start = f"{start_y}-{start_m:02d}-{_clamp_day(start_y, start_m, cycle_start_day):02d}"
     period_end_exclusive = f"{end_y}-{end_m:02d}-{_clamp_day(end_y, end_m, cycle_start_day):02d}"
 
-    label_date = date.fromisoformat(period_end_exclusive) - timedelta(days=1)
-    period_label = f"{label_date.year}-{label_date.month:02d}"
+    if cycle_start_day >= 16:
+        label_date = date.fromisoformat(period_end_exclusive) - timedelta(days=1)
+        period_label = f"{label_date.year}-{label_date.month:02d}"
+    else:
+        period_label = f"{start_y}-{start_m:02d}"
 
     return period_start, period_end_exclusive, period_label
 
@@ -563,11 +569,19 @@ def cycle_bounds(period_label: str, cycle_start_day: int) -> tuple:
         return _month_bounds(period_label)
 
     label_y, label_m = map(int, period_label.split("-"))
-    period_end_exclusive = f"{label_y}-{label_m:02d}-{_clamp_day(label_y, label_m, cycle_start_day):02d}"
 
-    total = label_y * 12 + (label_m - 1) - 1
-    start_y, start_m = total // 12, total % 12 + 1
-    period_start = f"{start_y}-{start_m:02d}-{_clamp_day(start_y, start_m, cycle_start_day):02d}"
+    if cycle_start_day >= 16:
+        # end-month labeling: the label's month is the period's end month
+        period_end_exclusive = f"{label_y}-{label_m:02d}-{_clamp_day(label_y, label_m, cycle_start_day):02d}"
+        total = label_y * 12 + (label_m - 1) - 1
+        start_y, start_m = total // 12, total % 12 + 1
+        period_start = f"{start_y}-{start_m:02d}-{_clamp_day(start_y, start_m, cycle_start_day):02d}"
+    else:
+        # start-month labeling: the label's month is the period's start month
+        period_start = f"{label_y}-{label_m:02d}-{_clamp_day(label_y, label_m, cycle_start_day):02d}"
+        total = label_y * 12 + (label_m - 1) + 1
+        end_y, end_m = total // 12, total % 12 + 1
+        period_end_exclusive = f"{end_y}-{end_m:02d}-{_clamp_day(end_y, end_m, cycle_start_day):02d}"
 
     return period_start, period_end_exclusive
 
