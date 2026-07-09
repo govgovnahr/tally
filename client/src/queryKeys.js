@@ -11,6 +11,7 @@ export const qk = {
   expensesMonthlyByType: (months) => ['expenses', 'monthly-by-type', months],
   expensesMonths: () => ['expenses', 'months'],
   periodBounds: (month) => ['period-bounds', month],
+  periodBoundsBulk: (months) => ['period-bounds-bulk', months],
   incomes: (params) => ['incomes', params],
   incomesSummary: (periodStart, periodEnd) => ['incomes', 'summary', periodStart, periodEnd],
   incomesMonthlyTotals: (months) => ['incomes', 'monthly-totals', months],

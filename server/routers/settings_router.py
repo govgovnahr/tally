@@ -1,6 +1,6 @@
 import logging
 import threading
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from database import get_connection, get_user_settings, save_user_settings, cycle_bounds
 from models import SettingsUpdate
 from auth import get_current_user
@@ -27,6 +27,20 @@ def get_period_bounds(month: str, user_id: str = Depends(get_current_user)):
         conn.close()
     period_start, period_end = cycle_bounds(month, cycle_start_day)
     return {"month": month, "period_start": period_start, "period_end": period_end, "period_label": month}
+
+
+@router.get("/settings/period-bounds-bulk")
+def get_period_bounds_bulk(months: str = Query(...), user_id: str = Depends(get_current_user)):
+    conn = get_connection()
+    try:
+        cycle_start_day = get_user_settings(conn, user_id)["cycle_start_day"]
+    finally:
+        conn.close()
+    return [
+        {"month": m, "period_start": ps, "period_end": pe}
+        for m in months.split(",")
+        for ps, pe in [cycle_bounds(m, cycle_start_day)]
+    ]
 
 
 @router.put("/settings")

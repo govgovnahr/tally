@@ -1,18 +1,45 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import api from '../../api.js'
+import { qk } from '../../queryKeys.js'
 import { useC } from '../../colors'
 import { ICON_REGISTRY } from '../../expenseTypes.js'
 import AlertBox from '../ui/AlertBox.jsx'
 import { currentMonth, nextMonth, lastMonth, OVERRIDE_MONTH_OPTIONS } from '../../lib/budgetMonths.js'
+import { formatPeriodRange } from '../../lib/format.js'
 import CollapsibleSection from '../ui/CollapsibleSection.jsx'
 import ColorDot from '../ui/ColorDot.jsx'
 import DollarInput from '../inputs/DollarInput.jsx'
 
-export default function MonthlyOverrides({ expenseTypes, defaultLimits, onChanged }) {
+const OVERRIDE_MONTH_KEYS = OVERRIDE_MONTH_OPTIONS.map(o => o.key)
+
+export default function MonthlyOverrides({ expenseTypes, defaultLimits, cycleStartDay, currentPeriodLabel, onChanged }) {
   const C = useC()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const selectedMonthInitialized = useRef(false)
+
+  // Non-default cycle: this widget's picker is still calendar-labeled (a
+  // deliberate "later" simplification — see CLAUDE.md), so show each option's
+  // actual cycle date range for clarity, and fix "(current)" to the real
+  // current period instead of the calendar month.
+  const isCustomCycle = !!cycleStartDay && cycleStartDay !== 1
+  const { data: boundsData } = useQuery({
+    queryKey: qk.periodBoundsBulk(OVERRIDE_MONTH_KEYS),
+    queryFn: () => api.get('/settings/period-bounds-bulk', { params: { months: OVERRIDE_MONTH_KEYS.join(',') } }).then(r => r.data),
+    enabled: isCustomCycle,
+    staleTime: 10 * 60_000,
+  })
+  const rangeByMonth = Object.fromEntries((boundsData ?? []).map(b => [b.month, b]))
+  const currentLabel = currentPeriodLabel ?? currentMonth()
+
+  useEffect(() => {
+    if (currentPeriodLabel && !selectedMonthInitialized.current) {
+      setSelectedMonth(prev => (prev === currentMonth() ? currentPeriodLabel : prev))
+      selectedMonthInitialized.current = true
+    }
+  }, [currentPeriodLabel])
 
   const [enabled, setEnabled] = useState({})
   const [overrideLimits, setOverrideLimits] = useState({})
@@ -63,7 +90,7 @@ export default function MonthlyOverrides({ expenseTypes, defaultLimits, onChange
     }).catch(() => {})
   }, [isNextMonth, avgMonths, excludeOutliers])
 
-  const otherMonths = overrideMonths.filter(m => m !== selectedMonth && m <= currentMonth()).sort((a, b) => b.localeCompare(a))
+  const otherMonths = overrideMonths.filter(m => m !== selectedMonth && m <= currentLabel).sort((a, b) => b.localeCompare(a))
 
   function expandPastMonth(month) {
     if (expandedPastMonth === month) { setExpandedPastMonth(null); return }
@@ -133,11 +160,16 @@ export default function MonthlyOverrides({ expenseTypes, defaultLimits, onChange
               className="h-9 rounded-lg border px-3 text-sm bg-transparent"
               style={{ borderColor: C.borderLight, color: C.warmText, minWidth: 200 }}
             >
-              {OVERRIDE_MONTH_OPTIONS.map(({ key, label }) => (
-                <option key={key} value={key}>
-                  {overrideMonths.includes(key) ? '● ' : ''}{label}{key === currentMonth() ? ' (current)' : ''}
-                </option>
-              ))}
+              {OVERRIDE_MONTH_OPTIONS.map(({ key, label }) => {
+                const range = rangeByMonth[key]
+                return (
+                  <option key={key} value={key}>
+                    {overrideMonths.includes(key) ? '● ' : ''}{label}
+                    {range ? ` (${formatPeriodRange(range.period_start, range.period_end)})` : ''}
+                    {key === currentLabel ? ' (current)' : ''}
+                  </option>
+                )
+              })}
             </select>
             {isNextMonth && (
               <>
