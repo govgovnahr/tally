@@ -104,6 +104,11 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
   const isPillMonth = PLAN_MONTH_OPTIONS.slice(0, 3).some(o => o.key === selectedMonth)
   const selectedLabel = PLAN_MONTH_OPTIONS.find(o => o.key === selectedMonth)?.label ?? ''
 
+  const totalPlanned = expenseTypes.reduce((sum, t) => sum + (Number(planLimits[t.name]) || 0), 0)
+  const totalPrevGoal = Object.values(prevGoals).reduce((sum, v) => sum + (Number(v) || 0), 0)
+  const totalAvgSpend = Object.values(catStats).reduce((sum, s) => sum + (s?.avg || 0), 0)
+  const totalDelta = totalPrevGoal > 0 ? totalPlanned - totalPrevGoal : null
+
   const extra = plannedMonths.length > 0 && (
     <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: C.hoverStrong, color: C.muted }}>
       {plannedMonths.length} month{plannedMonths.length !== 1 ? 's' : ''} planned
@@ -178,6 +183,28 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
             </div>
             Exclude outliers
           </label>
+        </div>
+
+        {/* Total budget summary */}
+        <div className="flex items-center gap-5 flex-wrap px-1">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] leading-none" style={{ color: C.dimText }}>Total planned</span>
+            <span className="text-lg font-bold leading-tight" style={{ color: C.warmText }}>${totalPlanned.toFixed(0)}</span>
+          </div>
+          {totalDelta !== null && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] leading-none" style={{ color: C.dimText }}>vs last month</span>
+              <span className="text-sm font-semibold" style={{ color: totalDelta > 0 ? C.overBudget : totalDelta < 0 ? C.primary : C.muted }}>
+                {totalDelta === 0 ? 'Same' : `${totalDelta > 0 ? '+' : '-'}$${Math.abs(totalDelta).toFixed(0)}`}
+              </span>
+            </div>
+          )}
+          {totalAvgSpend > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] leading-none" style={{ color: C.dimText }}>{avgMonths}-mo avg spend</span>
+              <span className="text-sm font-semibold" style={{ color: C.warmText }}>${totalAvgSpend.toFixed(0)}</span>
+            </div>
+          )}
         </div>
 
         {/* Category cards */}
