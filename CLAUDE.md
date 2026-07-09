@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Full-stack single-page budgeting app. No test suite. See [ARCH.md](./ARCH.md) for architecture, [API.md](./API.md) for endpoints.
+Full-stack single-page budgeting app. No test suite. See [ARCH.md](./ARCH.md) for architecture, [API.md](./API.md) for endpoints. See [DEMO.md](./DEMO.md) for setting up a demo/test account and seeding it with data — useful for local QA without touching real account data.
 
 ## Running
 
@@ -35,6 +35,7 @@ React build → `client/dist/` → `server/static/` → PyInstaller → `server/
 - New routers need `--hidden-import` in build workflow (both platforms); `auth_router` and `auth` module both need entries
 - Budget pacing: past months return `projected_spend: null`; current month uses `spent + historical_daily_rate × remaining_days`; future months return empty categories. Under a custom billing cycle (`cycle_start_day != 1`), "month" means the user's cycle period — `days_elapsed`/`days_in_month` fields describe the period, not the calendar month; see "Custom Billing Cycle" below
 - Status chip "over budget" label uses `projected_spend - limit`, not `spent - limit` (spend may be under budget while projection is over)
+- `server/seed_demo.py` dates are hand-written against a fixed anchor month (`_ANCHOR_LAST_MONTH`) and shifted by `sd()` at seed time to land on the 5 real calendar months before whenever the script runs (current month stays empty) — if you edit the hand-written data's date range, update `_ANCHOR_LAST_MONTH` to match its new last month
 
 ## Savings Goals
 

@@ -5,12 +5,15 @@ Usage:
     DEMO_USER_ID=<supabase-user-uuid> python seed_demo.py
 
 Creates ~5 months of realistic expenses/income, savings goals with contributions,
-budgets, and import rules. Includes deliberate outliers and an at-risk savings goal
-for portfolio demo purposes.
+budgets, and import rules, dated relative to whenever the script is run — the 5
+full calendar months immediately preceding the current one (current month is left
+empty, e.g. for testing zero-income/zero-spend states). Includes deliberate
+outliers and an at-risk savings goal for portfolio demo purposes.
 
 Run again with --clear to wipe existing demo data before re-seeding.
 """
 
+import calendar
 import os
 import sys
 import uuid
@@ -37,6 +40,39 @@ def uid():
 
 def ts(d: str) -> str:
     return f"{d}T09:00:00"
+
+
+# All dates below are hand-written against this anchor month (the original data's
+# last seeded month). `sd()` shifts every date by the same month-delta so the 5
+# seeded months are always "the 5 full calendar months before whenever this script
+# runs", leaving the current month empty — e.g. for testing zero-income states.
+_ANCHOR_LAST_MONTH = (2026, 5)
+
+
+def _months_before(y: int, m: int, n: int) -> tuple:
+    total = y * 12 + (m - 1) - n
+    return total // 12, total % 12 + 1
+
+
+def _delta_months() -> int:
+    today = date.today()
+    target_y, target_m = _months_before(today.year, today.month, 1)
+    target_total = target_y * 12 + (target_m - 1)
+    anchor_total = _ANCHOR_LAST_MONTH[0] * 12 + (_ANCHOR_LAST_MONTH[1] - 1)
+    return target_total - anchor_total
+
+
+DELTA_MONTHS = _delta_months()
+
+
+def sd(d: str) -> str:
+    """Shift a hand-written 'YYYY-MM-DD' date by DELTA_MONTHS, clamping the day
+    to the shifted month's length (e.g. day 31 shifted into a 30-day month)."""
+    y, m, day = (int(x) for x in d.split("-"))
+    total = y * 12 + (m - 1) + DELTA_MONTHS
+    ny, nm = total // 12, total % 12 + 1
+    nday = min(day, calendar.monthrange(ny, nm)[1])
+    return f"{ny}-{nm:02d}-{nday:02d}"
 
 
 # ─── Expense types ────────────────────────────────────────────────────────────
@@ -289,6 +325,7 @@ def seed():
     # Expenses
     print(f"Seeding {len(EXPENSES)} expenses…")
     for name, amount, expense_type, exp_date in EXPENSES:
+        exp_date = sd(exp_date)
         conn.execute(
             "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -298,6 +335,7 @@ def seed():
     # Incomes
     print(f"Seeding {len(INCOMES)} income records…")
     for name, amount, inc_date in INCOMES:
+        inc_date = sd(inc_date)
         conn.execute(
             "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s)",
@@ -313,18 +351,20 @@ def seed():
         if goal["goal_type"] == "emergency_fund" and target == 0:
             target = 7500.00  # ~3 months × avg expenses; server will recompute
 
+        deadline = sd(goal["deadline"]) if goal["deadline"] else None
         conn.execute(
             "INSERT INTO savings_goals "
             "(id, goal_type, name, target, deadline, created_at, color, allocation_pct, priority, months_target, user_id) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 goal_id, goal["goal_type"], goal["name"], target,
-                goal["deadline"], now, goal["color"],
+                deadline, now, goal["color"],
                 None, None, goal["months_target"], DEMO_USER_ID,
             ),
         )
 
         for amount, contrib_date in goal["contributions"]:
+            contrib_date = sd(contrib_date)
             # Insert a linked Savings expense
             expense_id = uid()
             conn.execute(
@@ -356,12 +396,16 @@ def seed():
     print(f"  {len(GOALS)} savings goals ({sum(len(g['contributions']) for g in GOALS)} contributions)")
     print(f"  {len(BUDGETS)} budget limits")
     print(f"  {len(IMPORT_RULES)} import rules")
+    def month_of(d: str) -> str:
+        return datetime.strptime(sd(d), "%Y-%m-%d").strftime("%b")
+
     print("\nOutliers seeded:")
-    print("  Jan — Urgent Care $185 (Health, ~3× avg)")
-    print("  Feb — Uber $280 (Transport, ~12× avg)")
-    print("  Mar — Nobu Restaurant $340 (Food, ~5× avg)")
-    print("  Apr — Concert Tickets $220 (Entertainment, ~3× avg)")
-    print("\nAt-risk goal: Europe Trip ($500 saved of $3,000, deadline Sep 2026)")
+    print(f"  {month_of('2026-01-14')} — Urgent Care $185 (Health, ~3× avg)")
+    print(f"  {month_of('2026-02-11')} — Uber $280 (Transport, ~12× avg)")
+    print(f"  {month_of('2026-03-19')} — Nobu Restaurant $340 (Food, ~5× avg)")
+    print(f"  {month_of('2026-04-16')} — Concert Tickets $220 (Entertainment, ~3× avg)")
+    deadline_label = datetime.strptime(sd("2026-09-01"), "%Y-%m-%d").strftime("%b %Y")
+    print(f"\nAt-risk goal: Europe Trip ($500 saved of $3,000, deadline {deadline_label})")
 
 
 if __name__ == "__main__":
