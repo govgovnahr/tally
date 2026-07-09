@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { BarChart2, Loader2 } from 'lucide-react'
+import { BarChart2, Loader2, Sparkles } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import api from '../../api.js'
@@ -10,6 +10,7 @@ import IconButton from '../ui/IconButton.jsx'
 import { currentMonth, addMonths, PLAN_MONTH_OPTIONS } from '../../lib/budgetMonths.js'
 import CollapsibleSection from '../ui/CollapsibleSection.jsx'
 import DollarInput from '../inputs/DollarInput.jsx'
+import AIBudgetRecsDialog from '../dialogs/AIBudgetRecsDialog.jsx'
 
 export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = false, onChanged, onAnalysis }) {
   const C = useC()
@@ -26,6 +27,7 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
   const [saveError, setSaveError] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState({})
   const [aiLoading, setAiLoading] = useState(false)
+  const [reduceOpen, setReduceOpen] = useState(false)
   const aiCache = useRef({})
 
   useEffect(() => {
@@ -101,6 +103,12 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
     finally { setSaving(false) }
   }
 
+  function handleReduceApply(limitsMap) {
+    setPlanLimits(prev => ({ ...prev, ...Object.fromEntries(Object.entries(limitsMap).map(([k, v]) => [k, String(v)])) }))
+    setReduceOpen(false)
+    setSaved(false)
+  }
+
   const isPillMonth = PLAN_MONTH_OPTIONS.slice(0, 3).some(o => o.key === selectedMonth)
   const selectedLabel = PLAN_MONTH_OPTIONS.find(o => o.key === selectedMonth)?.label ?? ''
 
@@ -108,6 +116,16 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
   const totalPrevGoal = Object.values(prevGoals).reduce((sum, v) => sum + (Number(v) || 0), 0)
   const totalAvgSpend = Object.values(catStats).reduce((sum, s) => sum + (s?.avg || 0), 0)
   const totalDelta = totalPrevGoal > 0 ? totalPlanned - totalPrevGoal : null
+
+  const reduceCandidates = expenseTypes
+    .map(t => {
+      const rec = aiSuggestions[t.name]
+      const current = Number(planLimits[t.name])
+      if (!rec || !(current > 0)) return null
+      if (rec.recommended_limit > current * 0.95 || current - rec.recommended_limit < 5) return null
+      return { ...rec, type: t.name, current_limit: current }
+    })
+    .filter(Boolean)
 
   const extra = plannedMonths.length > 0 && (
     <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: C.hoverStrong, color: C.muted }}>
@@ -205,6 +223,15 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
               <span className="text-sm font-semibold" style={{ color: C.warmText }}>${totalAvgSpend.toFixed(0)}</span>
             </div>
           )}
+          {aiEnabled && reduceCandidates.length > 0 && (
+            <Button
+              variant="outline" size="sm" onClick={() => setReduceOpen(true)}
+              className="font-semibold" style={{ color: C.primary, borderColor: C.primary + '50' }}
+            >
+              <Sparkles size={14} className="mr-1" />
+              Reduce via AI ({reduceCandidates.length})
+            </Button>
+          )}
         </div>
 
         {/* Category cards */}
@@ -293,6 +320,17 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
         </div>
 
       </div>
+
+      {reduceOpen && (
+        <AIBudgetRecsDialog
+          recommendations={reduceCandidates}
+          onApply={handleReduceApply}
+          onClose={() => setReduceOpen(false)}
+          title="Reduce Budget"
+          subtitle="These categories are regularly under budget — consider lowering their limits."
+          baseTotal={totalPlanned}
+        />
+      )}
     </CollapsibleSection>
   )
 }

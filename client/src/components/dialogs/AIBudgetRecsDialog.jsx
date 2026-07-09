@@ -6,7 +6,12 @@ import { useC } from '../../colors'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../../expenseTypes.js'
 
-export default function AIBudgetRecsDialog({ recommendations, onApply, onClose }) {
+export default function AIBudgetRecsDialog({
+  recommendations, onApply, onClose,
+  title = 'AI Budget Recommendations',
+  subtitle = 'Based on your last 3 months of spending. Uncheck any to skip.',
+  baseTotal = null,
+}) {
   const C = useC()
   const { expenseTypes } = useExpenseTypes()
   const [selected, setSelected] = useState(() => new Set(recommendations.map(r => r.type)))
@@ -30,6 +35,9 @@ export default function AIBudgetRecsDialog({ recommendations, onApply, onClose }
   }
 
   const count = selected.size
+  const projectedTotal = baseTotal != null
+    ? baseTotal - recommendations.reduce((sum, r) => sum + (selected.has(r.type) ? r.current_limit - r.recommended_limit : 0), 0)
+    : null
 
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
@@ -37,10 +45,10 @@ export default function AIBudgetRecsDialog({ recommendations, onApply, onClose }
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2" style={{ color: C.warmText }}>
             <Sparkles size={15} style={{ color: C.primary }} />
-            AI Budget Recommendations
+            {title}
           </DialogTitle>
           <p className="text-xs mt-1" style={{ color: C.muted }}>
-            Based on your last 3 months of spending. Uncheck any to skip.
+            {subtitle}
           </p>
         </DialogHeader>
 
@@ -98,6 +106,12 @@ export default function AIBudgetRecsDialog({ recommendations, onApply, onClose }
             )
           })}
         </div>
+
+        {projectedTotal != null && (
+          <div className="text-xs px-1" style={{ color: C.primary }}>
+            New total: ${projectedTotal.toFixed(0)}
+          </div>
+        )}
 
         <DialogFooter className="mt-3 gap-2">
           <Button variant="outline" size="sm" onClick={onClose} style={{ color: C.muted, borderColor: C.borderMed }}>
