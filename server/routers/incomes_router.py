@@ -13,7 +13,8 @@ _ALLOWED_SORT = {"name", "date", "amount"}
 
 @router.get("/incomes")
 def get_incomes(
-    month: Optional[str] = None, page: int = 1, page_size: int = 50,
+    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
+    page: int = 1, page_size: int = 50,
     search: Optional[str] = None, sort_by: str = "date", sort_dir: str = "desc",
     user_id: str = Depends(get_current_user),
 ):
@@ -23,7 +24,10 @@ def get_incomes(
     cursor = conn.cursor()
     conditions = ["user_id = %s"]
     params = [user_id]
-    if month:
+    if period_start and period_end:
+        conditions.append("date >= %s AND date < %s")
+        params.extend([period_start, period_end])
+    elif month:
         conditions.append("LEFT(date, 7) = %s")
         params.append(month)
     if search:

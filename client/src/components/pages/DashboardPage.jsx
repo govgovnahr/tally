@@ -333,6 +333,8 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
       {/* Expense List for current month */}
       <ExpenseList
         month={selectedMonth}
+        periodStart={periodBounds?.period_start}
+        periodEnd={periodBounds?.period_end}
         activeType={activeType}
         onTypeChange={handleTypeChange}
         activeMacro={activeMacro}

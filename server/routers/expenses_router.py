@@ -22,6 +22,7 @@ def _valid_type_names(conn, user_id: str):
 @router.get("/expenses")
 def get_expenses(
     type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None,
+    period_start: Optional[str] = None, period_end: Optional[str] = None,
     page: int = 1, page_size: int = 50, search: Optional[str] = None,
     sort_by: str = "date", sort_dir: str = "desc",
     user_id: str = Depends(get_current_user),
@@ -38,7 +39,10 @@ def get_expenses(
     if macrocategory_id:
         conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = %s AND user_id = %s)")
         params.extend([macrocategory_id, user_id])
-    if month:
+    if period_start and period_end:
+        conditions.append("date >= %s AND date < %s")
+        params.extend([period_start, period_end])
+    elif month:
         conditions.append("LEFT(date, 7) = %s")
         params.append(month)
     if search:
@@ -211,10 +215,16 @@ def update_expense(expense_id: str, updated: NewExpense, user_id: str = Depends(
 
 
 @router.delete("/transactions")
-def clear_transactions(month: Optional[str] = Query(None), user_id: str = Depends(get_current_user)):
+def clear_transactions(
+    month: Optional[str] = Query(None), period_start: Optional[str] = Query(None), period_end: Optional[str] = Query(None),
+    user_id: str = Depends(get_current_user),
+):
     conn = get_connection()
     cursor = conn.cursor()
-    if month:
+    if period_start and period_end:
+        cursor.execute("DELETE FROM expenses WHERE user_id = %s AND date >= %s AND date < %s", (user_id, period_start, period_end))
+        cursor.execute("DELETE FROM incomes WHERE user_id = %s AND date >= %s AND date < %s", (user_id, period_start, period_end))
+    elif month:
         cursor.execute("DELETE FROM expenses WHERE user_id = %s AND LEFT(date, 7) = %s", (user_id, month))
         cursor.execute("DELETE FROM incomes WHERE user_id = %s AND LEFT(date, 7) = %s", (user_id, month))
     else:

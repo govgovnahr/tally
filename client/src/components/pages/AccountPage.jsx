@@ -29,11 +29,15 @@ export default function AccountPage({ user, onLogout }) {
   const [cycleSaving, setCycleSaving] = useState(false)
   const [cycleError, setCycleError] = useState(null)
   const [cycleSaved, setCycleSaved] = useState(false)
+  const cycleDayTouched = useRef(false)
 
   useEffect(() => {
     api.get('/settings').then(r => {
       setAiEnabled(r.data.ai_enabled)
-      setCycleDayInput(String(r.data.cycle_start_day))
+      // Guard against a late-resolving fetch (StrictMode's double-invoked mount
+      // effect, or just a slow network) clobbering a value the user already
+      // started editing before this response came back.
+      if (!cycleDayTouched.current) setCycleDayInput(String(r.data.cycle_start_day))
       setAiSettingsLoading(false)
     }).catch(() => setAiSettingsLoading(false))
   }, [])
@@ -380,7 +384,7 @@ export default function AccountPage({ user, onLogout }) {
             max={31}
             value={cycleDayInput}
             disabled={aiSettingsLoading || cycleSaving}
-            onChange={e => setCycleDayInput(e.target.value)}
+            onChange={e => { cycleDayTouched.current = true; setCycleDayInput(e.target.value) }}
             style={{ ...inputStyle, width: 70 }}
           />
           <button
