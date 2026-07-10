@@ -15,6 +15,7 @@ import AIBudgetRecsDialog from '../dialogs/AIBudgetRecsDialog.jsx'
 export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = false, onChanged, onAnalysis }) {
   const C = useC()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const [monthlyIncome, setMonthlyIncome] = useState(0)
   const [planLimits, setPlanLimits] = useState({})
   const [existingOverrides, setExistingOverrides] = useState(new Set())
   const [catStats, setCatStats] = useState({})
@@ -53,6 +54,12 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
       setPrevGoals(goalsMap)
     }).catch(() => {})
   }, [expenseTypes, selectedMonth, defaultLimits])
+
+  useEffect(() => {
+    api.get('/incomes/summary', { params: { month: selectedMonth } })
+      .then(r => setMonthlyIncome(r.data.total ?? 0))
+      .catch(() => setMonthlyIncome(0))
+  }, [selectedMonth])
 
   useEffect(() => {
     api.get('/analysis/category-stats', { params: { months: avgMonths, exclude_outliers: excludeOutliers } })
@@ -116,6 +123,7 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
   const totalPrevGoal = Object.values(prevGoals).reduce((sum, v) => sum + (Number(v) || 0), 0)
   const totalAvgSpend = Object.values(catStats).reduce((sum, s) => sum + (s?.avg || 0), 0)
   const totalDelta = totalPrevGoal > 0 ? totalPlanned - totalPrevGoal : null
+  const net = monthlyIncome - totalPlanned
 
   const reduceCandidates = expenseTypes
     .map(t => {
@@ -208,6 +216,16 @@ export default function BudgetPlan({ expenseTypes, defaultLimits, aiEnabled = fa
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] leading-none" style={{ color: C.dimText }}>Total planned</span>
             <span className="text-lg font-bold leading-tight" style={{ color: C.warmText }}>${totalPlanned.toFixed(0)}</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] leading-none" style={{ color: C.dimText }}>Monthly income</span>
+            <span className="text-sm font-semibold" style={{ color: C.warmText }}>${monthlyIncome.toFixed(0)}</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] leading-none" style={{ color: C.dimText }}>Net</span>
+            <span className="text-sm font-semibold" style={{ color: net >= 0 ? C.primary : C.overBudget }}>
+              {net >= 0 ? '+' : '-'}${Math.abs(net).toFixed(0)}
+            </span>
           </div>
           {totalDelta !== null && (
             <div className="flex flex-col gap-0.5">
