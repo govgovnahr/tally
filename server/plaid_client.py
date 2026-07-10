@@ -11,16 +11,22 @@ def get_client() -> plaid_api.PlaidApi:
     when PLAID_CLIENT_ID/PLAID_SECRET are unset — e.g. the desktop/PyInstaller
     build, which has no Plaid config at all.
 
-    Sandbox only for v1 — Production support is out of scope until Plaid
-    application review happens.
+    Host is driven by PLAID_ENV ("sandbox" default, or "production") so the same
+    code path works for local Sandbox dev and a Plaid-approved production deploy —
+    just point each environment's PLAID_CLIENT_ID/PLAID_SECRET/PLAID_ENV at the
+    matching Plaid Dashboard project. Plaid's SDK has no separate "development"
+    host anymore (merged into production).
     """
     client_id = os.environ.get("PLAID_CLIENT_ID")
     secret = os.environ.get("PLAID_SECRET")
     if not client_id or not secret:
         raise RuntimeError("PLAID_CLIENT_ID / PLAID_SECRET are not set.")
 
+    env = os.environ.get("PLAID_ENV", "sandbox").lower()
+    host = plaid.Environment.Production if env == "production" else plaid.Environment.Sandbox
+
     configuration = plaid.Configuration(
-        host=plaid.Environment.Sandbox,
+        host=host,
         api_key={"clientId": client_id, "secret": secret},
     )
     return plaid_api.PlaidApi(plaid.ApiClient(configuration))
