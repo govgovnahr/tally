@@ -261,7 +261,13 @@ export default function ChatPage() {
                     table:  ({ children }) => <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 8, fontSize: 13 }}>{children}</table>,
                     th:     ({ children }) => <th style={{ textAlign: 'left', padding: '4px 10px', borderBottom: '1px solid ' + C.borderMed, fontWeight: 600 }}>{children}</th>,
                     td:     ({ children }) => <td style={{ padding: '4px 10px', borderBottom: '1px solid ' + C.border }}>{children}</td>,
-                    a:      ({ href, children }) => <a href={href} style={{ color: C.primary, textDecoration: 'underline' }} target="_blank" rel="noreferrer">{children}</a>,
+                    a:      ({ href, children }) => {
+                      // react-markdown doesn't strip javascript:/data: URIs on its own — if the
+                      // model ever echoes a link with a dangerous scheme (e.g. reflecting an
+                      // injected expense name back verbatim), only allow safe schemes through.
+                      const safeHref = /^(https?:|mailto:)/i.test(href ?? '') ? href : undefined
+                      return <a href={safeHref} style={{ color: C.primary, textDecoration: 'underline' }} target="_blank" rel="noreferrer">{children}</a>
+                    },
                   }}
                 >
                   {msg.content}

@@ -122,25 +122,60 @@ _FORBIDDEN_KEYWORDS = [
     "truncate", "create", "replace",
 ]
 
+_TABLE_REF_RE = re.compile(r'\b(?:from|join)\s+"?([A-Za-z_][A-Za-z0-9_]*)"?', re.IGNORECASE)
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
 
 def _validate_sql(sql_str):
-    lower = sql_str.lower()
+    stripped = sql_str.strip()
+    lower = stripped.lower()
+
+    if not lower.startswith("select"):
+        return False, "Only SELECT queries are allowed."
+    # A semicolon anywhere but a single trailing one means statements are being
+    # stacked (e.g. "SELECT 1; SELECT pg_sleep(10)") — refuse rather than risk
+    # executing more than the one intended SELECT.
+    if ";" in stripped.rstrip(";"):
+        return False, "Multiple statements are not allowed."
     for kw in _FORBIDDEN_KEYWORDS:
         if kw in lower:
             return False, "Write operations are not allowed. Use SELECT queries only."
+
+    referenced = {m.lower() for m in _TABLE_REF_RE.findall(stripped)}
+    disallowed = referenced - _ALLOWED_TABLES
+    if disallowed:
+        return False, (
+            "Query references disallowed table(s): " + ", ".join(sorted(disallowed))
+            + ". Allowed tables: " + ", ".join(sorted(_ALLOWED_TABLES)) + "."
+        )
     return True, None
 
 
 def _inject_user_id(sql_str, user_id):
     """
-    Belt-and-suspenders user isolation: if the LLM forgot to filter by user_id,
-    we wrap the query and add the filter ourselves.  We never rely on the LLM
-    alone to enforce data isolation.
+    User isolation: always wrap the LLM's query in an outer filter — never trust
+    the LLM to have filtered by user_id itself. The previous version only wrapped
+    when the substring "user_id" was absent from the query, which is trivially
+    bypassable (a comment, alias, or unrelated column mentioning "user_id" would
+    skip the wrap and run completely unfiltered across every user's rows). Always
+    wrapping is safe even if the inner query already filters — redundant AND is a
+    no-op — and fails closed (query errors out) rather than leaking rows if the
+    inner query's projection doesn't include a user_id column at all.
+
+    user_id is embedded as a quoted literal rather than passed as a psycopg2 %s
+    parameter, because the LLM's own SQL text can legitimately contain a literal
+    "%" (e.g. a LIKE pattern like '%coffee%'), and psycopg2 scans the *entire*
+    query string for %-style placeholders once any parameters are passed — mixing
+    LLM-authored text with parameter substitution would misfire on those. Instead
+    user_id is validated as UUID-shaped (it always is — it comes from a verified
+    Supabase JWT's `sub` claim) before being embedded, which makes the literal
+    provably safe: a UUID-shaped string can't contain a quote or any other
+    SQL-breaking character.
     """
-    if "user_id" not in sql_str.lower():
-        inner = sql_str.rstrip("; ")
-        return "SELECT * FROM (" + inner + ") AS _q WHERE user_id = '" + user_id + "'"
-    return sql_str
+    if not _UUID_RE.match(user_id):
+        raise ValueError("user_id is not UUID-shaped — refusing to embed in SQL")
+    inner = sql_str.rstrip("; ")
+    return "SELECT * FROM (" + inner + ") AS _q WHERE user_id = '" + user_id + "'"
 
 
 class AgentState(TypedDict):
@@ -172,7 +207,11 @@ def _build_tools(user_id):
         if not valid:
             return [{"error": err}]
 
-        safe_sql = _inject_user_id(sql, user_id)
+        try:
+            safe_sql = _inject_user_id(sql, user_id)
+        except ValueError as e:
+            logger.error("sql_query tool: %s", e)
+            return [{"error": "Query could not be executed."}]
         # Cap rows to avoid overwhelming the LLM context window
         capped = "SELECT * FROM (" + safe_sql.rstrip("; ") + ") AS _cap LIMIT 50"
 

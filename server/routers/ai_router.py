@@ -306,6 +306,13 @@ async def scan_receipt(request: Request, file: UploadFile = File(...), user_id: 
     if len(image_bytes) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image too large. Please use an image under 10MB.")
 
+    # content_type is a client-supplied header and trivially spoofable — check the
+    # actual bytes before forwarding to OpenAI under that content-type label.
+    _IMAGE_MAGIC_BYTES = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF87a", b"GIF89a")
+    is_webp = image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP"
+    if not is_webp and not any(image_bytes.startswith(sig) for sig in _IMAGE_MAGIC_BYTES):
+        raise HTTPException(status_code=400, detail="File does not appear to be a valid image.")
+
     b64 = base64.b64encode(image_bytes).decode()
     system_prompt = (
         "You are a receipt parser. Extract key information from the receipt image.\n\n"

@@ -43,7 +43,7 @@ class Expenses:
 
 class NewExpense(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    amount: float = Field(gt=0)
+    amount: float = Field(gt=0, le=100_000_000)
     type: str = Field(min_length=1, max_length=100)
     date: str
     is_recurring: int = Field(0, ge=0, le=1)
@@ -66,7 +66,7 @@ class Budget:
 
 class NewBudget(BaseModel):
     type: str = Field(min_length=1, max_length=100)
-    monthly_limit: float = Field(ge=0)
+    monthly_limit: float = Field(ge=0, le=100_000_000)
 
 
 @dataclass
@@ -83,7 +83,7 @@ class Income:
 
 class NewIncome(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    amount: float = Field(gt=0)
+    amount: float = Field(gt=0, le=100_000_000)
     date: str
     is_recurring: int = Field(0, ge=0, le=1)
     credit_type: Optional[str] = Field(None, max_length=100)
@@ -114,7 +114,7 @@ class NewExpenseType(BaseModel):
 class NewMacrocategory(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     color: str = '#a0a0a0'
-    budget_limit: Optional[float] = Field(None, ge=0)
+    budget_limit: Optional[float] = Field(None, ge=0, le=100_000_000)
 
     _vcolor = field_validator("color")(_valid_color)
 
@@ -157,7 +157,7 @@ class SavingsContribution:
 class NewSavingsGoal(BaseModel):
     goal_type: Literal['monthly', 'one_time', 'emergency_fund']
     name: str = Field(min_length=1, max_length=200)
-    target: Optional[float] = Field(None, gt=0)
+    target: Optional[float] = Field(None, gt=0, le=100_000_000)
     deadline: Optional[str] = None
     color: Optional[str] = None
     allocation_pct: Optional[float] = Field(None, gt=0, le=100)
@@ -170,7 +170,7 @@ class NewSavingsGoal(BaseModel):
 
 class UpdateSavingsGoal(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    target: Optional[float] = Field(None, gt=0)
+    target: Optional[float] = Field(None, gt=0, le=100_000_000)
     deadline: Optional[str] = None
     color: Optional[str] = None
     allocation_pct: Optional[float] = Field(None, gt=0, le=100)
@@ -183,7 +183,7 @@ class UpdateSavingsGoal(BaseModel):
 
 
 class NewContribution(BaseModel):
-    amount: float = Field(gt=0)
+    amount: float = Field(gt=0, le=100_000_000)
     date: str
     note: Optional[str] = Field(None, max_length=500)
     expense_id: Optional[str] = None
@@ -193,7 +193,7 @@ class NewContribution(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=10_000)
 
 
 class ChatRequest(BaseModel):

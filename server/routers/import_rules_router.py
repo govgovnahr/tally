@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from database import get_connection
 from auth import get_current_user
 
@@ -9,8 +9,8 @@ router = APIRouter()
 
 
 class NewImportRule(BaseModel):
-    pattern: str
-    expense_type: str
+    pattern: str = Field(min_length=1, max_length=200)
+    expense_type: str = Field(min_length=1, max_length=100)
 
 
 @router.get("/import-rules")

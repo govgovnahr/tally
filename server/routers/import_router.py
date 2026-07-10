@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import math
 import os
 import sqlite3 as _sqlite3
 import tempfile
@@ -8,9 +9,10 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from database import get_connection
 from auth import get_current_user
+from limiter import user_limiter
 
 
 def _get_ai_categorizer():
@@ -250,6 +252,14 @@ def _determine_record_type(amount_raw: float, record_type_col_val: str) -> str:
     return "expense" if amount_raw < 0 else "income"
 
 
+_MAX_IMPORT_FILE_SIZE = 25 * 1024 * 1024
+
+
+def _check_file_size(content: bytes):
+    if len(content) > _MAX_IMPORT_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Please use a file under 25MB.")
+
+
 def _get_raw_rows(content: bytes, filename: str, sheet_name: Optional[str] = None) -> list[list[str]]:
     lower = filename.lower()
     if lower.endswith(".csv"):
@@ -280,7 +290,9 @@ def infer_type_endpoint(
 
 
 @router.post("/import/suggest")
+@user_limiter.limit("10/hour")
 async def suggest_import_categories(
+    request: Request,
     file: UploadFile = File(...),
     mapping: str = Form(...),
     header_row: int = Form(...),
@@ -294,6 +306,7 @@ async def suggest_import_categories(
         raise HTTPException(status_code=400, detail="Invalid mapping JSON")
 
     content = await file.read()
+    _check_file_size(content)
     raw_rows = _get_raw_rows(content, file.filename, sheet_name)
     _, data_rows = _rows_to_dicts(raw_rows, header_row)
 
@@ -322,7 +335,10 @@ async def suggest_import_categories(
                 continue
             raw_amt = row.get(col_map.get("amount", ""), "")
             amount_float = float(str(raw_amt).replace(",", "").replace("$", "").replace("(", "-").replace(")", "").strip())
-            if amount_float == 0:
+            # float("nan")/float("inf") parse without raising ValueError, and NaN
+            # fails every comparison (including == 0), so both would otherwise slip
+            # past the zero-check below and corrupt SUM() aggregates downstream.
+            if not math.isfinite(amount_float) or amount_float == 0 or abs(amount_float) > 100_000_000:
                 continue
             amount = round(abs(amount_float), 2)
             raw_date = row.get(col_map.get("date", ""), "").strip()
@@ -405,6 +421,7 @@ async def import_budgets(
     month_col = mapping_dict.get("month", "")
 
     content = await file.read()
+    _check_file_size(content)
     raw_rows = _get_raw_rows(content, file.filename, sheet_name)
     _, data_rows = _rows_to_dicts(raw_rows, header_row)
 
@@ -425,6 +442,11 @@ async def import_budgets(
 
         try:
             limit_val = float(limit_raw)
+            # float("nan")/float("inf") parse without raising — NaN in particular
+            # would poison every later row's running total once summed together
+            # in `aggregated`, not just this one row.
+            if not math.isfinite(limit_val) or limit_val > 100_000_000:
+                raise ValueError("out of range")
         except ValueError:
             errors.append({"row": i, "reason": f"Invalid amount: '{row.get(limit_col, '')}'"})
             skipped += 1
@@ -493,6 +515,7 @@ async def preview_import(
     sheet_name: Optional[str] = Form(None),
 ):
     content = await file.read()
+    _check_file_size(content)
     lower = file.filename.lower()
 
     sheet_names = []
@@ -526,6 +549,7 @@ async def import_records(
         raise HTTPException(status_code=400, detail="Invalid mapping JSON")
 
     content = await file.read()
+    _check_file_size(content)
     raw_rows = _get_raw_rows(content, file.filename, sheet_name)
     headers, data_rows = _rows_to_dicts(raw_rows, header_row)
 
@@ -553,8 +577,15 @@ async def import_records(
 
             raw_amt = row.get(col_map.get("amount", ""), "")
             amount_float = float(str(raw_amt).replace(",", "").replace("$", "").replace("(", "-").replace(")", "").strip())
+            # float("nan")/float("inf") parse without raising ValueError, and NaN
+            # fails every comparison (including == 0), so both would otherwise slip
+            # past the zero-check below and corrupt SUM() aggregates downstream.
+            if not math.isfinite(amount_float):
+                raise ValueError("Amount is not a valid number")
             if amount_float == 0:
                 raise ValueError("Amount is zero")
+            if abs(amount_float) > 100_000_000:
+                raise ValueError("Amount is unreasonably large")
             amount = round(abs(amount_float), 2)
 
             raw_date = row.get(col_map.get("date", ""), "").strip()
@@ -640,6 +671,7 @@ async def import_legacy_db(
         raise HTTPException(status_code=400, detail="File must be a .db SQLite database")
 
     content = await file.read()
+    _check_file_size(content)
 
     def _col(row, key, default=None):
         try:
