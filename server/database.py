@@ -238,6 +238,7 @@ def init_db():
 
     for sql in [
         "ALTER TABLE user_settings ADD COLUMN cycle_start_day INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE user_settings ADD COLUMN seen_category_migration_notice BOOLEAN NOT NULL DEFAULT FALSE",
     ]:
         try:
             conn.execute(sql)
@@ -295,13 +296,15 @@ def init_db():
 
 def get_user_settings(conn, user_id: str) -> dict:
     row = conn.execute(
-        "SELECT ai_enabled, cycle_start_day FROM user_settings WHERE user_id = %s", (user_id,)
+        "SELECT ai_enabled, cycle_start_day, seen_category_migration_notice FROM user_settings WHERE user_id = %s",
+        (user_id,),
     ).fetchone()
     cycle_start_day = row["cycle_start_day"] if row else 1
     period_start, period_end, period_label = cycle_period_for_date(date.today(), cycle_start_day)
     return {
         "ai_enabled": bool(row["ai_enabled"]) if row else True,
         "cycle_start_day": cycle_start_day,
+        "seen_category_migration_notice": bool(row["seen_category_migration_notice"]) if row else False,
         "current_period": {
             "period_start": period_start,
             "period_end": period_end,
@@ -310,14 +313,16 @@ def get_user_settings(conn, user_id: str) -> dict:
     }
 
 
-def save_user_settings(conn, user_id: str, ai_enabled: bool, cycle_start_day: int = 1):
+def save_user_settings(conn, user_id: str, ai_enabled: bool, cycle_start_day: int = 1,
+                        seen_category_migration_notice: bool = False):
     conn.execute(
         """
-        INSERT INTO user_settings (user_id, ai_enabled, cycle_start_day)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET ai_enabled = EXCLUDED.ai_enabled, cycle_start_day = EXCLUDED.cycle_start_day
+        INSERT INTO user_settings (user_id, ai_enabled, cycle_start_day, seen_category_migration_notice)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET ai_enabled = EXCLUDED.ai_enabled, cycle_start_day = EXCLUDED.cycle_start_day,
+            seen_category_migration_notice = EXCLUDED.seen_category_migration_notice
         """,
-        (user_id, ai_enabled, cycle_start_day),
+        (user_id, ai_enabled, cycle_start_day, seen_category_migration_notice),
     )
     conn.commit()
 

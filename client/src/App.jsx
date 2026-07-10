@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { Home, BarChart2, PiggyBank, Landmark, Receipt, Sun, Moon, UserCircle, HelpCircle, MessageCircle } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { TallyLogo } from './components/ui/TallyLogo.jsx'
 import api from './api.js'
 import { supabase } from './supabase.js'
@@ -12,6 +12,7 @@ import { qk } from './queryKeys.js'
 import ExpenseList from './components/pages/ExpenseList.jsx'
 import DashboardPage from './components/pages/DashboardPage.jsx'
 import AuthPage from './components/pages/AuthPage.jsx'
+import CategoryMigrationNoticeDialog from './components/dialogs/CategoryMigrationNoticeDialog.jsx'
 
 const BudgetGoals  = lazy(() => import('./components/pages/BudgetGoals.jsx'))
 const SavingsPage  = lazy(() => import('./components/pages/SavingsPage.jsx'))
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
 
 function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
+  const queryClient = useQueryClient()
   const { loading: typesLoading } = useExpenseTypes()
   const { registerNavigate, trackPage, start: startTour, suggestOnboardingTour } = useTutorial()
   const [page, setPage] = useState('home')
@@ -55,6 +57,13 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
     queryFn: () => api.get('/settings').then(r => r.data),
     staleTime: 5 * 60_000,
   })
+
+  const dismissCategoryMigrationNotice = () => {
+    queryClient.setQueryData(qk.settings(), prev => prev && { ...prev, seen_category_migration_notice: true })
+    api.put('/settings', { seen_category_migration_notice: true }).catch(() => {
+      queryClient.invalidateQueries({ queryKey: qk.settings() })
+    })
+  }
 
   // selectedMonth starts as a synchronous calendar-month guess (correct for the
   // default cycle_start_day=1); once /settings resolves, correct it to the
@@ -316,6 +325,10 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
           />
         )}
       </main>
+
+      {settings?.seen_category_migration_notice === false && (
+        <CategoryMigrationNoticeDialog onDismiss={dismissCategoryMigrationNotice} />
+      )}
     </div>
   )
 }

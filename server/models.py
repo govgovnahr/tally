@@ -210,5 +210,6 @@ class ChatResponse(BaseModel):
 class SettingsUpdate(BaseModel):
     ai_enabled: Optional[bool] = None
     cycle_start_day: Optional[int] = None
+    seen_category_migration_notice: Optional[bool] = None
 
     _vcycle = field_validator("cycle_start_day")(_valid_cycle_day)
