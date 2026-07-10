@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogOut, KeyRound, User, Upload, Bot, Calendar } from 'lucide-react'
+import { LogOut, KeyRound, User, Upload, Bot, Calendar, Building2, RefreshCw, Unlink } from 'lucide-react'
 import ClearAllDialog from '../dialogs/ClearAllDialog.jsx'
+import PlaidLinkButton from '../dialogs/PlaidLinkButton.jsx'
+import PlaidReviewDialog from '../dialogs/PlaidReviewDialog.jsx'
 import { supabase } from '../../supabase.js'
 import { useC } from '../../colors'
 import api from '../../api.js'
@@ -41,6 +43,59 @@ export default function AccountPage({ user, onLogout }) {
       setAiSettingsLoading(false)
     }).catch(() => setAiSettingsLoading(false))
   }, [])
+
+  const [plaidItems, setPlaidItems] = useState([])
+  const [plaidLoading, setPlaidLoading] = useState(true)
+  const [plaidSyncingId, setPlaidSyncingId] = useState(null)
+  const [plaidUnlinkTarget, setPlaidUnlinkTarget] = useState(null)
+  const [plaidReviewItemId, setPlaidReviewItemId] = useState(null)
+  const [plaidMsg, setPlaidMsg] = useState(null)
+
+  const refreshPlaidItems = useCallback(() => {
+    setPlaidLoading(true)
+    api.get('/plaid/items').then(r => setPlaidItems(r.data)).finally(() => setPlaidLoading(false))
+  }, [])
+
+  useEffect(() => { refreshPlaidItems() }, [refreshPlaidItems])
+
+  const handlePlaidLinked = (result) => {
+    refreshPlaidItems()
+    if (result.mode === 'review' && result.pending_count > 0) {
+      setPlaidReviewItemId(result.item_id)
+    } else {
+      setPlaidMsg('Account linked — no new transactions to review.')
+    }
+  }
+
+  const handlePlaidReviewCommitted = (result) => {
+    setPlaidReviewItemId(null)
+    setPlaidMsg(`Imported ${result.committed} transaction${result.committed !== 1 ? 's' : ''}.`)
+  }
+
+  const handlePlaidSync = async (itemId) => {
+    setPlaidSyncingId(itemId)
+    setPlaidMsg(null)
+    try {
+      const { data } = await api.post(`/plaid/items/${itemId}/sync`)
+      if (data.mode === 'committed') {
+        setPlaidMsg(`Synced — ${data.committed_count} new transaction${data.committed_count !== 1 ? 's' : ''}.`)
+      } else if (data.mode === 'error') {
+        setPlaidMsg('This connection needs to be reconnected.')
+      }
+      refreshPlaidItems()
+    } catch {
+      setPlaidMsg('Sync failed.')
+    } finally {
+      setPlaidSyncingId(null)
+    }
+  }
+
+  const handlePlaidUnlink = async () => {
+    const itemId = plaidUnlinkTarget
+    setPlaidUnlinkTarget(null)
+    await api.delete(`/plaid/items/${itemId}`)
+    refreshPlaidItems()
+  }
 
   const handleAiToggle = async (enabled) => {
     setAiEnabled(enabled)
@@ -361,6 +416,129 @@ export default function AccountPage({ user, onLogout }) {
       </Dialog>
 
       <ClearAllDialog/>
+
+      {/* Linked Accounts (Plaid) */}
+      <div style={section}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <Building2 size={16} color={C.muted} />
+          <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>Linked Accounts</span>
+        </div>
+
+        {plaidLoading ? (
+          <p style={{ margin: 0, fontSize: 13, color: C.muted }}>Loading…</p>
+        ) : plaidItems.length === 0 ? (
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+            Connect a bank account to automatically import transactions.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+            {plaidItems.map(item => (
+              <div
+                key={item.item_id}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 10, padding: '10px 12px', borderRadius: 10,
+                  border: `1px solid ${C.border}`, flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: C.text }}>
+                    {item.institution_name || 'Bank account'}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: C.muted }}>
+                    {item.accounts.map(a => a.mask ? `••${a.mask}` : a.name).join(', ') || 'No accounts'}
+                    {item.last_synced_at && ` · Last synced ${new Date(item.last_synced_at).toLocaleString()}`}
+                  </p>
+                  {item.status === 'relink_required' && (
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#e5a545', fontWeight: 600 }}>
+                      Needs reconnecting
+                    </p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePlaidSync(item.item_id)}
+                    disabled={plaidSyncingId === item.item_id}
+                    title="Sync now"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 10px', borderRadius: 7, border: `1px solid ${C.border}`,
+                      background: 'transparent', color: C.text, fontSize: 12, fontWeight: 600,
+                      cursor: plaidSyncingId === item.item_id ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    <RefreshCw size={12} className={plaidSyncingId === item.item_id ? 'animate-spin' : ''} />
+                    Sync
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlaidUnlinkTarget(item.item_id)}
+                    title="Unlink"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 10px', borderRadius: 7,
+                      border: '1px solid rgba(229,115,115,0.4)',
+                      background: 'rgba(229,115,115,0.08)',
+                      color: '#e57373', fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    <Unlink size={12} />
+                    Unlink
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <PlaidLinkButton onLinked={handlePlaidLinked} />
+        {plaidMsg && <p style={{ margin: '10px 0 0', fontSize: 12, color: C.muted }}>{plaidMsg}</p>}
+      </div>
+
+      {plaidReviewItemId && (
+        <PlaidReviewDialog
+          itemId={plaidReviewItemId}
+          onClose={() => setPlaidReviewItemId(null)}
+          onCommitted={handlePlaidReviewCommitted}
+        />
+      )}
+
+      <Dialog open={!!plaidUnlinkTarget} onOpenChange={v => { if (!v) setPlaidUnlinkTarget(null) }}>
+        <DialogContent style={{ maxWidth: 360 }}>
+          <DialogHeader>
+            <DialogTitle>Unlink this account?</DialogTitle>
+          </DialogHeader>
+          <p style={{ margin: 0, fontSize: 14, color: C.muted }}>
+            This stops syncing new transactions. Transactions already imported will stay in your history.
+          </p>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setPlaidUnlinkTarget(null)}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
+                background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handlePlaidUnlink}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Unlink
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Billing Cycle */}
       <div style={section}>

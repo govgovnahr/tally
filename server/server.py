@@ -32,6 +32,7 @@ from routers.macrocategories_router import router as macrocategories_router
 from routers.savings_goals_router import router as savings_goals_router
 from routers.analysis_router import router as analysis_router
 from routers.settings_router import router as settings_router
+from routers.plaid_router import router as plaid_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,15 +45,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @app.middleware("http")
@@ -155,6 +147,20 @@ async def _log_requests(request: Request, call_next):
     logger.log(level, "%s %s %s %dms", request.method, request.url.path, response.status_code, ms)
     return response
 
+# Added last (== outermost, wraps every middleware above it, including
+# _log_requests' hand-built 500 responses) so CORS headers land on every
+# response, not just ones that made it past all custom middleware unmodified.
+# Starlette's add_middleware prepends internally, so registration order here
+# is reverse-execution-order: last added = first to run = outermost wrapper.
+_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth_router)
 app.include_router(ai_router)
 app.include_router(expenses_router)
@@ -167,6 +173,7 @@ app.include_router(macrocategories_router)
 app.include_router(savings_goals_router)
 app.include_router(analysis_router)
 app.include_router(settings_router)
+app.include_router(plaid_router)
 
 
 @app.get("/health")

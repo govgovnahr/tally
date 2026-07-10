@@ -227,6 +227,7 @@ def init_db():
 
     for sql in [
         "ALTER TABLE user_settings ADD COLUMN cycle_start_day INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE incomes ADD COLUMN plaid_transaction_id TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -235,6 +236,59 @@ def init_db():
             # already exists on restart) — roll back or every later statement
             # in this same init_db() transaction would fail too.
             conn.rollback()
+
+    # New CREATE TABLE statements must come AFTER the ALTER-loop above, not before:
+    # cycle_start_day's ALTER fails (and rolls back the whole transaction) on every
+    # restart after the first, since the column already exists. Anything created
+    # earlier in the same uncommitted transaction would be wiped out by that
+    # rollback before ever reaching conn.commit().
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plaid_items (
+            id                TEXT PRIMARY KEY,
+            user_id           TEXT NOT NULL,
+            item_id           TEXT NOT NULL UNIQUE,
+            access_token      TEXT NOT NULL,
+            institution_id    TEXT,
+            institution_name  TEXT,
+            cursor            TEXT,
+            status            TEXT NOT NULL DEFAULT 'active',
+            created_at        TEXT NOT NULL,
+            last_synced_at    TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plaid_accounts (
+            id         TEXT PRIMARY KEY,
+            item_id    TEXT NOT NULL,
+            account_id TEXT NOT NULL UNIQUE,
+            user_id    TEXT NOT NULL,
+            name       TEXT NOT NULL,
+            mask       TEXT,
+            type       TEXT,
+            subtype    TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plaid_pending_transactions (
+            id                     TEXT PRIMARY KEY,
+            item_id                TEXT NOT NULL,
+            user_id                TEXT NOT NULL,
+            plaid_transaction_id   TEXT NOT NULL UNIQUE,
+            account_id             TEXT,
+            name                   TEXT NOT NULL,
+            merchant_name          TEXT,
+            amount                 DOUBLE PRECISION NOT NULL,
+            date                   TEXT NOT NULL,
+            record_type            TEXT NOT NULL,
+            suggested_type         TEXT,
+            source                 TEXT,
+            plaid_category_primary TEXT,
+            pending                INTEGER NOT NULL DEFAULT 0,
+            created_at             TEXT NOT NULL
+        )
+    """)
 
     for sql in [
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)",
@@ -246,6 +300,11 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_import_rules_user ON import_rules(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_macrocategories_user ON macrocategories(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_budgets_user ON budgets(user_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_plaid_txn ON expenses(plaid_transaction_id) WHERE plaid_transaction_id IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_incomes_plaid_txn ON incomes(plaid_transaction_id) WHERE plaid_transaction_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_plaid_items_user ON plaid_items(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_plaid_accounts_item ON plaid_accounts(item_id)",
+        "CREATE INDEX IF NOT EXISTS idx_plaid_pending_item ON plaid_pending_transactions(item_id)",
     ]:
         cursor.execute(sql)
 

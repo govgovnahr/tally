@@ -212,3 +212,14 @@ class SettingsUpdate(BaseModel):
     cycle_start_day: Optional[int] = None
 
     _vcycle = field_validator("cycle_start_day")(_valid_cycle_day)
+
+
+class PlaidExchangeRequest(BaseModel):
+    public_token: str = Field(min_length=1)
+    institution_id: Optional[str] = None
+    institution_name: Optional[str] = None
+    force: bool = False
+
+
+class PlaidCommitReview(BaseModel):
+    confirmed_types: dict[str, str] = Field(default_factory=dict)

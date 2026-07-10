@@ -1,561 +1,64 @@
-# Tally — Plaid Integration Plan
+# Plaid Bank Linking
 
-## Overview
-Full production Plaid integration: multi-user bank linking, auto-import of
-transactions, real-time balance sync, background auto-sync + manual refresh,
-Plaid-first categorization with Tally fallback, and duplicate detection across
-Plaid + manual/CSV imports.
-
----
+Built on `feature/plaid-integration`. Sandbox only for v1 — see "Non-goals" below for what's deliberately deferred. This file describes what's actually implemented; supersedes an earlier draft (production-focused, no review queue, unencrypted tokens, polling instead of webhooks) that predated these decisions.
 
 ## Architecture
 
-```
-User browser
-  └── Plaid Link (JS SDK) → Plaid API
-        └── public_token → FastAPI /plaid/exchange
-              └── access_token stored in DB (per user)
+- `server/plaid_client.py` — lazy Plaid client construction (`get_client()`), Sandbox-only. Raises `RuntimeError` if `PLAID_CLIENT_ID`/`PLAID_SECRET` are unset, checked at call time so the app still boots and non-Plaid routes work fine without them (e.g. the desktop/PyInstaller build). Also holds `PLAID_CATEGORY_HINTS`, the Plaid `personal_finance_category.primary` → friendly-name map.
+- `server/crypto_utils.py` — `encrypt_token`/`decrypt_token`, Fernet symmetric encryption keyed by `PLAID_ENCRYPTION_KEY`. Fails closed (raises `RuntimeError`) if the key is missing or not valid Fernet format, checked lazily at first use.
+- `server/plaid_sync.py` — `sync_plaid_item(conn, item_id)`, the core sync engine. Pages through `/transactions/sync` until `has_more` is false, categorizes each transaction, and either stages it for review (first sync) or auto-commits it (every sync after).
+- `server/routers/plaid_router.py` — all `/plaid/*` endpoints.
 
-Background job (APScheduler in FastAPI)
-  └── every 6 hours: fetch new transactions for all linked users
-        └── deduplicate → categorize → insert into expenses table
+## Database
 
-Webhook (Plaid → FastAPI /plaid/webhook)
-  └── TRANSACTIONS_INITIAL_UPDATE → trigger immediate sync
-  └── TRANSACTIONS_DEFAULT_UPDATE → trigger sync for affected user
-```
+- `plaid_items` — one row per linked bank login (Plaid "Item"): encrypted `access_token`, `cursor` (NULL until first sync), `status` (`active`/`relink_required`/`error`).
+- `plaid_accounts` — accounts within an Item.
+- `plaid_pending_transactions` — first-sync review staging, cleared on commit.
+- `expenses.plaid_transaction_id` / `incomes.plaid_transaction_id` — unique partial indexes, the dedup key for `ON CONFLICT` upserts.
 
----
+New tables are created **after** the `ALTER TABLE` migration loop in `init_db()`, not before — the loop's `conn.rollback()` (needed because `cycle_start_day`'s `ALTER` fails on every restart after the first) wipes out anything created earlier in the same uncommitted transaction. This bit us once already; see git history on this file's introduction.
 
-## Database changes
+## Sync engine behavior (`plaid_sync.py`)
 
-### New table: `plaid_items`
-Stores one row per user per linked bank (Plaid calls this an "Item").
+- **Sign convention**: Plaid's `amount` is positive for money out (expense), negative for money in (income) — the *opposite* of CSV import's `_determine_record_type()`. `_plaid_record_type()` handles this; CSV's helper is never reused here.
+- **Categorization priority**: `import_rules` (explicit user rule, always wins) → Plaid's category (source of truth — mapped via `PLAID_CATEGORY_HINTS`, auto-creates the `expense_type` if none matches, same pattern as `/import/budgets`' auto-create) → existing `_infer_type_with_source()` keyword/AI pipeline (only for Plaid categories that map to `None` — transfers, general services, etc.). Accepted trade-off: a user with custom-named categories may get a near-duplicate category rather than a merge.
+- **First sync vs. every sync after**: no stored `cursor` means first sync — rows land in `plaid_pending_transactions` for review (`mode: "review"`). Once a cursor exists, every sync auto-commits directly into `expenses`/`incomes` via `INSERT ... ON CONFLICT (plaid_transaction_id) DO UPDATE SET amount/date/name` (updates on Plaid's "modified" events, never touches `type` so a user's manual recategorization survives). `removed` transactions are deleted from both tables and the pending queue.
+- **Dedup is exact-match only** (`plaid_transaction_id`). No fuzzy manual-vs-Plaid matching — deferred, see non-goals.
 
-```sql
-CREATE TABLE IF NOT EXISTS plaid_items (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    access_token TEXT NOT NULL,
-    item_id TEXT NOT NULL UNIQUE,
-    institution_name TEXT,
-    institution_id TEXT,
-    cursor TEXT,                    -- Plaid transactions cursor for incremental sync
-    last_synced_at TEXT,
-    created_at TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active'  -- active | error | relink_required
-);
-```
+## Endpoints (`plaid_router.py`)
 
-### New table: `plaid_accounts`
-Stores individual accounts within a linked item (checking, savings, credit).
+`POST /plaid/link-token` · `POST /plaid/exchange-token` (runs the first sync synchronously) · `GET /plaid/items` · `POST /plaid/items/{id}/sync` · `DELETE /plaid/items/{id}` (calls Plaid's `item_remove`, does not delete already-committed expenses/incomes) · `GET /plaid/items/{id}/pending-review` · `POST /plaid/items/{id}/commit-review` · `POST /plaid/webhook`.
 
-```sql
-CREATE TABLE IF NOT EXISTS plaid_accounts (
-    id TEXT PRIMARY KEY,
-    plaid_item_id TEXT NOT NULL REFERENCES plaid_items(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL,
-    account_id TEXT NOT NULL UNIQUE,   -- Plaid's account_id
-    name TEXT NOT NULL,
-    official_name TEXT,
-    type TEXT NOT NULL,                -- depository | credit | loan | investment
-    subtype TEXT,                      -- checking | savings | credit card | etc
-    current_balance REAL,
-    available_balance REAL,
-    currency TEXT DEFAULT 'USD',
-    last_balance_update TEXT
-);
-```
+**Webhook verification**: Plaid signs webhooks with an ES256 JWT (`Plaid-Verification` header). `_verify_plaid_webhook()` fetches the signing key by `kid` via `client.webhook_verification_key_get` (cached in-process by `kid`), verifies the signature with `python-jose` (already a dependency via `python-jose[cryptography]` — no new JWT library needed), rejects tokens older than 5 minutes, and confirms the claimed `request_body_sha256` matches the actual raw body. Failures raise `HTTPException(400)`, **never 401** — `server.py`'s `_track_auth_failures` IP-blocking middleware only counts 401s, and a misconfigured/retrying webhook shouldn't get an IP blocked.
 
-### Modify `expenses` table
-Add columns to track Plaid-sourced transactions and enable duplicate detection.
+**Webhook URL is optional**: derived from `APP_URL` (`{APP_URL}/plaid/webhook`) if set, omitted from the Link token request otherwise. `APP_URL` is set in `render.yaml` for the Render deployment; unset locally and in the desktop/PyInstaller build, which have no public URL for Plaid to reach — those rely entirely on the manual `POST /plaid/items/{id}/sync` button.
 
-```sql
-ALTER TABLE expenses ADD COLUMN plaid_transaction_id TEXT UNIQUE;
-ALTER TABLE expenses ADD COLUMN plaid_account_id TEXT;
-ALTER TABLE expenses ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
--- source: 'manual' | 'plaid' | 'csv'
-ALTER TABLE expenses ADD COLUMN plaid_category TEXT;
-ALTER TABLE expenses ADD COLUMN pending INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE expenses ADD COLUMN merchant_name TEXT;
-```
+## Frontend
 
-Add index for duplicate detection performance:
-```sql
-CREATE INDEX IF NOT EXISTS idx_expenses_plaid_txn ON expenses(plaid_transaction_id);
-CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date);
-CREATE INDEX IF NOT EXISTS idx_expenses_amount_date ON expenses(amount, date, user_id);
-```
+- `components/dialogs/PlaidLinkButton.jsx` — wraps `react-plaid-link`'s `usePlaidLink`; fetches the link token via the existing `api` axios instance (bearer token auto-attaches), exchanges on success.
+- `components/dialogs/PlaidReviewDialog.jsx` — first-sync review, built on the shared `components/shared/ReviewTable.jsx` (extracted from `ImportDialog.jsx`'s former inline `ReviewStep`, which both CSV import and Plaid review now use — rows just need a stable `id`, `name`, `amount`, `date`, `suggested_type`, `source`).
+- `components/pages/AccountPage.jsx` — "Linked Accounts" section: institution list, status badges, per-item Sync/Unlink, the Link button, wired to open the review dialog when a first sync produces pending rows.
+- `InferenceBadge.jsx` gained a `plaid_category` source variant.
 
----
+## Config
 
-## Phase 1: Plaid credentials + environment setup
+- Backend env: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox`, `PLAID_ENCRYPTION_KEY` (generate via `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` — must be manually generated, not Render's `generateValue`, which won't produce valid Fernet format).
+- `render.yaml` already has `PLAID_CLIENT_ID`/`PLAID_SECRET`/`PLAID_ENV` stubs plus the new `PLAID_ENCRYPTION_KEY` (`sync: false` — set manually in the Render dashboard).
+- `server/requirements.txt`: `plaid-python`. `client/package.json`: `react-plaid-link`.
+- `.github/workflows/build.yml`: `--hidden-import "routers.plaid_router"` added to both the macOS and Windows PyInstaller blocks. (Aside, pre-existing and not fixed as part of this work: `auth_router`, `ai_router`, and `settings_router` are also missing from that hidden-import list — worth a follow-up.)
 
-### 1.1 Plaid dashboard setup
-1. Go to dashboard.plaid.com → create a production app
-2. Under Products, enable: **Transactions**, **Balance**
-3. Under Redirect URIs, add:
-   - `https://budget-app-qv32.onrender.com`
-   - `http://localhost:5173` (for dev)
-4. Copy Client ID and Production Secret
+## Non-goals for v1
 
-### 1.2 Environment variables
-Add to Render dashboard and local `.env`:
-```
-PLAID_CLIENT_ID=your_client_id
-PLAID_SECRET=your_production_secret
-PLAID_ENV=production
-PLAID_WEBHOOK_URL=https://budget-app-qv32.onrender.com/plaid/webhook
-```
+- No Production/Development Plaid access — Sandbox only.
+- No per-connection "review every sync" toggle — only the first sync reviews.
+- No Plaid Link "update mode" re-link flow — `relink_required` status is surfaced on the item but not auto-resolved.
+- No balance/net-worth widget — Transactions product only.
+- No fuzzy manual-vs-Plaid duplicate detection — exact `plaid_transaction_id` match only.
+- Plaid transactions are **not** integrated with custom billing-cycle logic, recurring-expense forward-seeding, or the AI agent's tools — manual/CSV data only, consistent with this repo's other partial rollouts (see CLAUDE.md's "Custom Billing Cycle" section for the pattern).
+- **No per-account distinction or filtering** — every account Link returns (checking, savings, credit card, and even loan/investment accounts) gets stored in `plaid_accounts` and synced with no type filtering; all transactions land in the same undifferentiated `expenses`/`incomes` pool regardless of source account. A real institution rarely offers as many accounts as Plaid's Sandbox test institutions do, so this may be a non-issue in practice, but it's a known gap. Future direction (not started): treat each linked account as a first-class concept in Tally's own model — a `linked_account_id` on expenses/incomes, per-account sync toggle, per-account views — rather than a narrow Link-time type filter.
 
-### 1.3 Install Plaid Python SDK
-```bash
-pip install plaid-python
-```
-Add to `server/requirements.txt`.
+## Verified so far
 
-### 1.4 Plaid client singleton
-Create `server/plaid_client.py`:
-```python
-import plaid
-from plaid.api import plaid_api
-import os
+Backend boots cleanly with `plaid_router` registered; `/plaid/items` and `/plaid/link-token` return correct auth/config errors (401 unauthenticated, a clean 500 with `PLAID_CLIENT_ID`/`SECRET` unset — not a crash); `/plaid/webhook` returns 400 (not 401) on a missing/invalid signature. ES256/JWK verification mechanics tested in isolation against a locally-generated key pair. Frontend builds cleanly with the new components.
 
-configuration = plaid.Configuration(
-    host=plaid.Environment.Production if os.environ.get("PLAID_ENV") == "production"
-         else plaid.Environment.Sandbox,
-    api_key={
-        "clientId": os.environ["PLAID_CLIENT_ID"],
-        "secret": os.environ["PLAID_SECRET"],
-    }
-)
-
-api_client = plaid.ApiClient(configuration)
-client = plaid_api.PlaidApi(api_client)
-```
-
----
-
-## Phase 2: Plaid Link flow (frontend + backend)
-
-This is the OAuth-like flow that lets users connect their bank.
-
-### 2.1 Backend: create link token
-```
-POST /plaid/link-token
-```
-- Authenticated endpoint (requires user session)
-- Creates a Plaid link_token for the current user
-- Returns `{ link_token: "..." }`
-
-```python
-from plaid.model.link_token_create_request import LinkTokenCreateRequest
-from plaid.model.products import Products
-from plaid.model.country_code import CountryCode
-
-@app.post("/plaid/link-token")
-def create_link_token(user=Depends(get_current_user)):
-    request = LinkTokenCreateRequest(
-        products=[Products("transactions")],
-        client_name="Tally",
-        country_codes=[CountryCode("US")],
-        language="en",
-        user={"client_user_id": user["id"]},
-        webhook=os.environ["PLAID_WEBHOOK_URL"],
-    )
-    response = client.link_token_create(request)
-    return {"link_token": response["link_token"]}
-```
-
-### 2.2 Frontend: Plaid Link SDK
-Install:
-```bash
-npm install react-plaid-link
-```
-
-Create `client/src/components/PlaidLinkButton.jsx`:
-```jsx
-import { usePlaidLink } from 'react-plaid-link'
-import { useEffect, useState } from 'react'
-
-export function PlaidLinkButton({ onSuccess }) {
-  const [linkToken, setLinkToken] = useState(null)
-
-  useEffect(() => {
-    fetch('/plaid/link-token', { method: 'POST', credentials: 'include' })
-      .then(r => r.json())
-      .then(data => setLinkToken(data.link_token))
-  }, [])
-
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess: (publicToken, metadata) => {
-      fetch('/plaid/exchange', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_token: publicToken, metadata })
-      }).then(() => onSuccess())
-    },
-  })
-
-  return (
-    <button onClick={() => open()} disabled={!ready}>
-      Connect a bank account
-    </button>
-  )
-}
-```
-
-### 2.3 Backend: exchange public token
-```
-POST /plaid/exchange
-Body: { public_token, metadata }
-```
-- Exchanges public_token for permanent access_token
-- Stores access_token + item_id in `plaid_items`
-- Fetches accounts immediately and stores in `plaid_accounts`
-- Triggers initial transaction sync for this item
-- **Never expose access_token to the frontend**
-
-```python
-@app.post("/plaid/exchange")
-def exchange_token(body: dict, user=Depends(get_current_user)):
-    response = client.item_public_token_exchange({"public_token": body["public_token"]})
-    access_token = response["access_token"]
-    item_id = response["item_id"]
-
-    # Store in plaid_items
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO plaid_items (id, user_id, access_token, item_id, institution_name, created_at, status)
-        VALUES (%s, %s, %s, %s, %s, %s, 'active')
-    """, (str(uuid4()), user["id"], access_token, item_id,
-          body.get("metadata", {}).get("institution", {}).get("name"), now()))
-    conn.commit()
-
-    # Fetch and store accounts
-    sync_accounts(access_token, item_id, user["id"])
-
-    # Trigger initial transaction sync
-    sync_transactions_for_item(item_id)
-
-    return {"status": "ok"}
-```
-
----
-
-## Phase 3: Transaction sync
-
-### 3.1 Incremental sync using cursor
-Plaid's Transactions Sync API uses a cursor — store it per item, pass it on
-each call to get only new/modified/removed transactions since last sync.
-
-Create `server/plaid_sync.py`:
-
-```python
-def sync_transactions_for_item(item_id: str):
-    conn = get_connection()
-    cursor_conn = conn.cursor()
-
-    # Get item
-    cursor_conn.execute("SELECT * FROM plaid_items WHERE item_id = %s", (item_id,))
-    item = cursor_conn.fetchone()
-    if not item:
-        return
-
-    access_token = item["access_token"]
-    plaid_cursor = item["cursor"]  # None on first sync
-
-    added, modified, removed = [], [], []
-    has_more = True
-
-    while has_more:
-        request = TransactionsSyncRequest(
-            access_token=access_token,
-            cursor=plaid_cursor,
-            count=500,
-        )
-        response = client.transactions_sync(request)
-        added.extend(response["added"])
-        modified.extend(response["modified"])
-        removed.extend(response["removed"])
-        has_more = response["has_more"]
-        plaid_cursor = response["next_cursor"]
-
-    # Process
-    _upsert_transactions(added + modified, item["user_id"])
-    _remove_transactions(removed)
-
-    # Save updated cursor + last_synced_at
-    cursor_conn.execute("""
-        UPDATE plaid_items SET cursor = %s, last_synced_at = %s WHERE item_id = %s
-    """, (plaid_cursor, now(), item_id))
-    conn.commit()
-```
-
-### 3.2 Categorization logic
-Plaid-first, Tally fallback:
-
-```python
-def _resolve_category(plaid_category: list, name: str, existing_categories: list) -> str:
-    # Map Plaid's category hierarchy to Tally categories
-    PLAID_TO_TALLY = {
-        "Food and Drink": "Food",
-        "Shops": "Shopping",
-        "Recreation": "Hobby",
-        "Transfer": "Income",
-        "Travel": "Transportation",
-        "Healthcare": "Health",
-        "Service": "Personal",
-        "Community": "Personal",
-        "Payment": "Credit Card Payment",
-        "Bank Fees": "Personal",
-        "Cash Advance": "Personal",
-    }
-    if plaid_category:
-        top = plaid_category[0]
-        if top in PLAID_TO_TALLY:
-            mapped = PLAID_TO_TALLY[top]
-            if mapped in existing_categories:
-                return mapped
-
-    # Tally fallback: keyword matching (existing auto-categorization logic)
-    return tally_auto_categorize(name, existing_categories)
-```
-
-### 3.3 Duplicate detection
-Run before inserting any transaction:
-
-```python
-def _is_duplicate(cursor, user_id: str, plaid_txn_id: str, amount: float,
-                  date: str, name: str) -> bool:
-    # Check 1: exact Plaid transaction ID match (Plaid import vs Plaid import)
-    cursor.execute("""
-        SELECT id FROM expenses
-        WHERE plaid_transaction_id = %s
-    """, (plaid_txn_id,))
-    if cursor.fetchone():
-        return True
-
-    # Check 2: fuzzy match for manual/CSV vs Plaid
-    # Same user, same amount, same date, similar name (within 3 days window)
-    cursor.execute("""
-        SELECT id FROM expenses
-        WHERE user_id = %s
-          AND amount = %s
-          AND date BETWEEN %s::date - interval '3 days' AND %s::date + interval '3 days'
-          AND source != 'plaid'
-          AND plaid_transaction_id IS NULL
-    """, (user_id, amount, date, date))
-    rows = cursor.fetchall()
-    for row in rows:
-        # Optional: name similarity check using difflib
-        pass
-
-    return False
-```
-
-For the fuzzy name match, use Python's `difflib.SequenceMatcher`. If ratio > 0.7,
-flag as probable duplicate and surface it to the user rather than silently dropping.
-
----
-
-## Phase 4: Balance sync
-
-### 4.1 Fetch balances
-```
-GET /plaid/balances
-```
-Fetches current + available balances for all accounts for the current user.
-Updates `plaid_accounts` table.
-
-```python
-@app.get("/plaid/balances")
-def refresh_balances(user=Depends(get_current_user)):
-    items = get_user_plaid_items(user["id"])
-    for item in items:
-        response = client.accounts_balance_get({"access_token": item["access_token"]})
-        for account in response["accounts"]:
-            update_account_balance(account)
-    return {"status": "ok"}
-```
-
-### 4.2 Display balances in UI
-Add a "Linked Accounts" section to the Overview page showing:
-- Institution name + account name
-- Current balance
-- Available balance (for credit accounts: available credit)
-- Last updated timestamp
-
----
-
-## Phase 5: Webhook handler
-
-Plaid pushes updates to your server when new transactions are available,
-rather than you polling constantly.
-
-```
-POST /plaid/webhook
-```
-
-```python
-@app.post("/plaid/webhook")
-async def plaid_webhook(request: Request):
-    body = await request.json()
-    webhook_type = body.get("webhook_type")
-    webhook_code = body.get("webhook_code")
-    item_id = body.get("item_id")
-
-    if webhook_type == "TRANSACTIONS":
-        if webhook_code in ("INITIAL_UPDATE", "DEFAULT_UPDATE", "HISTORICAL_UPDATE"):
-            # Trigger sync for this item in background
-            background_tasks.add_task(sync_transactions_for_item, item_id)
-
-    elif webhook_type == "ITEM":
-        if webhook_code == "ERROR":
-            # Mark item as error, notify user to relink
-            mark_item_error(item_id)
-
-    return {"status": "ok"}
-```
-
-Note: Plaid webhooks don't work on localhost. Use ngrok for local webhook testing.
-
----
-
-## Phase 6: Background auto-sync
-
-Use APScheduler (already likely available, or add it) to run sync periodically.
-
-```bash
-pip install apscheduler
-```
-
-In `server/server.py`:
-```python
-from apscheduler.schedulers.background import BackgroundScheduler
-
-scheduler = BackgroundScheduler()
-
-def sync_all_users():
-    items = get_all_active_plaid_items()
-    for item in items:
-        try:
-            sync_transactions_for_item(item["item_id"])
-        except Exception as e:
-            print(f"Sync failed for item {item['item_id']}: {e}")
-
-scheduler.add_job(sync_all_users, 'interval', hours=6)
-scheduler.start()
-
-@app.on_event("shutdown")
-def shutdown_scheduler():
-    scheduler.shutdown()
-```
-
-### Manual refresh endpoint
-```
-POST /plaid/sync
-```
-- Authenticated, triggers sync for the current user's items immediately
-- Frontend "Refresh" button calls this
-
----
-
-## Phase 7: Re-link flow (token expiry)
-
-Plaid access tokens can expire or require re-authentication (e.g. user changes
-bank password). Handle gracefully:
-
-1. When sync returns `ITEM_LOGIN_REQUIRED` error → set `plaid_items.status = 'relink_required'`
-2. Frontend checks for items in `relink_required` state on load
-3. Show a banner: "Your [Bank Name] connection needs to be refreshed"
-4. Re-link uses Plaid Link with `access_token` mode (update mode), not a new link
-
-Backend endpoint for update mode link token:
-```
-POST /plaid/link-token/update
-Body: { item_id }
-```
-Same as link token creation but pass `access_token` to Plaid instead of products.
-
----
-
-## Phase 8: Frontend UI changes
-
-### Settings / Linked Accounts page
-New section in Settings (or dedicated page):
-- List of linked institutions with account names + balances
-- "Connect a bank" button → triggers Plaid Link
-- Per-item: "Sync now" button, "Disconnect" button
-- Status indicator: active (green) / error / relink required (amber)
-
-### Overview page additions
-- Linked account balances widget (net worth snapshot)
-- Last synced timestamp per institution
-- "Sync" button with loading state
-
-### Expenses table
-- Source badge on each row: `plaid` / `manual` / `csv`
-- Pending transaction indicator (Plaid marks pending txns)
-- Probable duplicate flagging UI: "This looks like a duplicate of [expense name] — keep both or merge?"
-
-### Import page
-- When user imports CSV, run duplicate check against recent Plaid transactions
-- Surface conflicts before committing import
-
----
-
-## Phase 9: Disconnect + data handling
-
-```
-DELETE /plaid/items/{item_id}
-```
-- Calls Plaid's `item_remove` endpoint
-- Deletes `plaid_items` and `plaid_accounts` rows
-- Does NOT delete expenses that were imported from this item
-  (user's financial history should persist even if they disconnect)
-
----
-
-## Plaid production checklist (before going live)
-
-- [ ] Apply for Production access in Plaid dashboard (requires brief description of use case)
-- [ ] Complete Plaid's onboarding questionnaire
-- [ ] Add Plaid's required privacy policy language to your app's privacy policy
-- [ ] Add "Powered by Plaid" logo in the linked accounts section (required by Plaid ToS)
-- [ ] Set up webhook URL in Plaid dashboard
-- [ ] Test with at least 2-3 real bank connections in production sandbox first
-- [ ] Implement proper error logging for failed syncs (don't lose errors silently)
-
----
-
-## Estimated complexity by phase
-
-| Phase | Effort | Notes |
-|---|---|---|
-| 1: Credentials + env | 30 min | Already stubbed in render.yaml |
-| 2: Link flow | 1 day | Frontend + backend, most user-facing work |
-| 3: Transaction sync | 1-2 days | Cursor logic + categorization + deduplication |
-| 4: Balance sync | 2-3 hours | Straightforward API call |
-| 5: Webhooks | 3-4 hours | Need ngrok for local testing |
-| 6: Auto-sync | 2-3 hours | APScheduler setup |
-| 7: Re-link flow | 3-4 hours | Edge case but important for production |
-| 8: Frontend UI | 1-2 days | Linked accounts page, badges, duplicate UI |
-| 9: Disconnect | 1-2 hours | Simple but important |
-
-Total: ~1 week of focused work. Recommend doing phases 1-4 first to get
-a working end-to-end flow, then 5-9 to harden it for production.
-
----
-
-## Notes
-- Never log or expose `access_token` — treat it like a password
-- Store access_token encrypted at rest if possible (Postgres pgcrypto or application-level AES)
-- Plaid's production pricing: charged per Item per month after free tier
-- The duplicate detection window (3 days) handles the common case where a
-  pending transaction appears in Plaid before the user manually enters it
-- APScheduler runs in-process — if Render restarts the service, the scheduler
-  restarts too. This is fine; worst case is a delayed sync, not data loss
+**Not yet verified**: an actual Plaid Sandbox Link flow end-to-end (needs real `PLAID_CLIENT_ID`/`PLAID_SECRET` sandbox credentials and a browser) — link a Sandbox test institution (e.g. `ins_109508` / "First Platypus Bank", `user_good`/`pass_good`), confirm the review queue populates and commits correctly, confirm a second sync auto-commits without review, and fire a test webhook via Plaid's `/sandbox/item/fire_webhook` to confirm the webhook path.

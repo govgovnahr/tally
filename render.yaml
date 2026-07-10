@@ -41,3 +41,5 @@ services:
         value: ""
       - key: PLAID_ENV
         value: "sandbox"
+      - key: PLAID_ENCRYPTION_KEY
+        sync: false
