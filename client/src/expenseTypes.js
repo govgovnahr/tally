@@ -2,7 +2,7 @@ import React from 'react'
 import {
   Utensils, Car, Home, Film, Hospital, LayoutGrid, ShoppingCart, Coffee,
   Plane, Dumbbell, PawPrint, GraduationCap, Wifi, Fuel, Smartphone, Baby,
-  PiggyBank, Wrench, Gift, Gamepad2,
+  PiggyBank, Wrench, Gift, Gamepad2, Landmark,
 } from 'lucide-react'
 
 // Shim: call sites use style={{ fontSize, color }} (MUI convention).
@@ -36,6 +36,7 @@ const SavingsIcon         = makeIcon(PiggyBank)
 const BuildIcon           = makeIcon(Wrench)
 const CardGiftcardIcon    = makeIcon(Gift)
 const SportsEsportsIcon   = makeIcon(Gamepad2)
+const LandmarkIcon        = makeIcon(Landmark)
 
 // Icon key → component. Keys match the `icon` field stored in the DB.
 export const ICON_REGISTRY = {
@@ -59,6 +60,7 @@ export const ICON_REGISTRY = {
   Build:           BuildIcon,
   CardGiftcard:    CardGiftcardIcon,
   SportsEsports:   SportsEsportsIcon,
+  Landmark:        LandmarkIcon,
 }
 
 // Ordered list for the icon picker UI
@@ -82,5 +84,6 @@ export const ICON_OPTIONS = [
   { key: 'Pets',            Icon: PetsIcon,            label: 'Pets' },
   { key: 'ChildCare',       Icon: ChildCareIcon,       label: 'Childcare' },
   { key: 'Savings',         Icon: SavingsIcon,         label: 'Savings' },
+  { key: 'Landmark',        Icon: LandmarkIcon,        label: 'Government' },
   { key: 'Category',        Icon: CategoryIcon,        label: 'Other' },
 ]

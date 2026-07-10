@@ -198,14 +198,14 @@ def _soft_match_type(raw: str, valid: list[str]) -> Optional[str]:
 
 
 KEYWORDS = {
-    "food": ["restaurant", "food", "grocery", "groceries", "cafe", "coffee", "lunch", "dinner",
-             "breakfast", "pizza", "burger", "sushi", "diner", "bakery", "donut", "sandwich"],
-    "transport": ["uber", "lyft", "gas", "fuel", "parking", "transit", "metro", "bus", "train",
-                  "airline", "flight", "taxi", "toll", "shell", "chevron", "bp", "car"],
-    "housing": ["rent", "mortgage", "electric", "electricity", "water", "internet", "cable",
-                "utilities", "utility", "hoa", "insurance"],
-    "health": ["pharmacy", "cvs", "walgreens", "doctor", "hospital", "medical", "dental",
-               "health", "gym", "fitness", "clinic", "optician"],
+    "food & drink": ["restaurant", "food", "grocery", "groceries", "cafe", "coffee", "lunch", "dinner",
+                     "breakfast", "pizza", "burger", "sushi", "diner", "bakery", "donut", "sandwich"],
+    "transportation": ["uber", "lyft", "gas", "fuel", "parking", "transit", "metro", "bus", "train",
+                        "airline", "flight", "taxi", "toll", "shell", "chevron", "bp", "car"],
+    "rent & utilities": ["rent", "mortgage", "electric", "electricity", "water", "internet", "cable",
+                          "utilities", "utility", "hoa", "insurance"],
+    "medical": ["pharmacy", "cvs", "walgreens", "doctor", "hospital", "medical", "dental",
+                "health", "gym", "fitness", "clinic", "optician"],
     "entertainment": ["netflix", "spotify", "hulu", "disney", "apple tv", "movie", "cinema",
                       "theater", "concert", "game", "steam", "xbox", "playstation"],
     "shopping": ["amazon", "walmart", "target", "costco", "store", "shop", "mall", "ebay"],

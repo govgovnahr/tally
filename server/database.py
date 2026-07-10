@@ -9,13 +9,24 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+
+# Aligned with Plaid's personal_finance_category.primary taxonomy (see
+# PLAID_CATEGORY_HINTS in server/plaid_client.py on feature/plaid-integration) so a
+# synced Plaid transaction lands in an existing default category instead of
+# triggering the auto-create-near-duplicate fallback. "Other" stays the catch-all
+# fallback _infer_type_with_source() depends on; not a Plaid category itself.
 _DEFAULT_TYPES = [
-    ("Food",          "#e8a87c", "Restaurant",    0),
-    ("Transport",     "#82b4e0", "Commute",        1),
-    ("Housing",       "#c49ee8", "Home",           2),
-    ("Entertainment", "#f0c040", "Movie",          3),
-    ("Health",        "#80cbc4", "LocalHospital",  4),
-    ("Other",         "#a0a0a0", "Category",       5),
+    ("Food & Drink",             "#e8a87c", "Restaurant",     0),
+    ("Transportation",           "#82b4e0", "Commute",        1),
+    ("Rent & Utilities",         "#c49ee8", "Home",           2),
+    ("Entertainment",            "#f0c040", "Movie",          3),
+    ("Medical",                  "#80cbc4", "LocalHospital",  4),
+    ("Other",                    "#a0a0a0", "Category",       5),
+    ("Travel",                   "#90caf9", "Flight",         6),
+    ("Home Improvement",         "#ff8a65", "Build",          7),
+    ("Shopping",                 "#a5d6a7", "ShoppingCart",   8),
+    ("Personal Care",            "#f48fb1", "FitnessCenter",  9),
+    ("Government & Non-Profit",  "#ce93d8", "Landmark",      10),
 ]
 
 
