@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Upload, BarChart2, Sparkles, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from 'glasscn-ui'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import { ICON_REGISTRY } from '../../expenseTypes.js'
 import { useC } from '../../colors'
@@ -96,7 +96,7 @@ export default function BudgetGoals() {
       setAiRecs(res.data)
       setAiRecsOpen(true)
     } catch (e) {
-      setAiError(e.response?.data?.detail || 'AI suggestions unavailable. Please try again.')
+      setAiError(getErrorMessage(e, 'AI suggestions unavailable. Please try again.'))
     } finally {
       setAiLoading(false)
     }

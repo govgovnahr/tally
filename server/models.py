@@ -4,7 +4,9 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-def _valid_date(v: str) -> str:
+def _valid_date(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
     try:
         _date.fromisoformat(v)
     except (ValueError, TypeError):

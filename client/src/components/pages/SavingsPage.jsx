@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { qk } from '../../queryKeys.js'
 import NetSavingsChart from '../charts/NetSavingsChart.jsx'
 import { useC, palette, TYPE_PALETTE } from '../../colors'
@@ -407,7 +407,7 @@ function ContributionDialog({ open, onClose, goal }) {
       setSuccess(true)
       setTimeout(() => setSuccess(false), 2500)
       invalidateSavings()
-    } catch (err) { setError(err.response?.data?.detail ?? 'Something went wrong') }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setSaving(false) }
   }
 
@@ -541,7 +541,7 @@ function GoalDialog({ open, onClose, onSaved, existing, hasMonthlyGoal, portfoli
         await api.post('/savings-goals', body)
       }
       onSaved()
-    } catch (err) { setError(err.response?.data?.detail ?? 'Something went wrong') }
+    } catch (err) { setError(getErrorMessage(err)) }
     finally { setSaving(false) }
   }
 

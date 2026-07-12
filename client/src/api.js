@@ -24,4 +24,20 @@ api.interceptors.response.use(
   }
 )
 
+// FastAPI's own validation errors (422) send `detail` as an array of
+// {loc, msg, ...} objects, not a string — unlike our hand-raised
+// HTTPException(detail="...") calls. Rendering that array directly as a
+// React child throws and takes down the whole app via the top-level
+// ErrorBoundary, so every call site needs to go through this instead of
+// reading err.response?.data?.detail directly.
+export function getErrorMessage(err, fallback = 'Something went wrong.') {
+  const detail = err?.response?.data?.detail
+  if (!detail) return fallback
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail.map(d => (typeof d === 'string' ? d : d?.msg)).filter(Boolean).join('; ') || fallback
+  }
+  return fallback
+}
+
 export default api

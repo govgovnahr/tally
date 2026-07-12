@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { qk } from '../../queryKeys.js'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import { useTutorial } from '../../TutorialContext.jsx'
@@ -68,7 +68,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
       }))
       setNlText('')
     } catch (err) {
-      setNlError(err.response?.data?.detail || 'Could not parse. Try again.')
+      setNlError(getErrorMessage(err, 'Could not parse. Try again.'))
     } finally {
       setNlLoading(false)
     }
@@ -139,7 +139,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
       onAdded?.(res.data)
       onClose()
     } catch (err) {
-      setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} expense.`)
+      setError(getErrorMessage(err, `Failed to ${isEditing ? 'update' : 'add'} expense.`))
     } finally {
       setLoading(false)
     }

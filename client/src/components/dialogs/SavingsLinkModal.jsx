@@ -5,7 +5,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { useC } from '../../colors'
 import { ErrorMsg } from '../ui/AlertBox.jsx'
 
@@ -89,7 +89,7 @@ export default function SavingsLinkModal({ open, expenses, onClose, onDone }) {
       }
       onDone()
     } catch (err) {
-      setError(err.response?.data?.detail ?? 'Something went wrong')
+      setError(getErrorMessage(err))
     } finally {
       setSaving(false)
     }

@@ -3,7 +3,7 @@ import { Camera, Loader2, Upload, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useC } from '../../colors'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 
 export default function ReceiptScanDialog({ onAdd, onClose }) {
   const C = useC()
@@ -46,7 +46,7 @@ export default function ReceiptScanDialog({ onAdd, onClose }) {
       })
       setResult(data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Could not read receipt. Please try again.')
+      setError(getErrorMessage(e, 'Could not read receipt. Please try again.'))
     } finally {
       setScanning(false)
     }

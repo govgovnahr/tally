@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { useC, TYPE_PALETTE } from '../../colors'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import AlertBox from '../ui/AlertBox.jsx'
@@ -32,7 +32,7 @@ export default function MacrocategoryManager() {
     try {
       await api.post('/macrocategories', { name, color: newColor, budget_limit: newBudget ? parseFloat(newBudget) : null })
       setNewName(''); setNewBudget(''); setError(''); reloadMacros()
-    } catch (err) { setError(err.response?.data?.detail || 'Failed to save.') }
+    } catch (err) { setError(getErrorMessage(err, 'Failed to save.')) }
   }
 
   async function handleSaveEdit() {
@@ -41,7 +41,7 @@ export default function MacrocategoryManager() {
     try {
       await api.put(`/macrocategories/${editTarget.id}`, { name, color: editColor, budget_limit: editBudget ? parseFloat(editBudget) : null })
       setEditTarget(null); setError(''); reloadMacros()
-    } catch (err) { setError(err.response?.data?.detail || 'Failed to save.') }
+    } catch (err) { setError(getErrorMessage(err, 'Failed to save.')) }
   }
 
   async function handleDelete(id) {

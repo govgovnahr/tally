@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import SavingsLinkModal from './SavingsLinkModal.jsx'
 import AlertBox from '../ui/AlertBox.jsx'
 import NativeSelect from '../inputs/NativeSelect.jsx'
@@ -87,7 +87,7 @@ export default function ImportDialog({ onClose, onImported }) {
       setMapping(autoMap(h, fields))
       setStep(1)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to read file.')
+      setError(getErrorMessage(e, 'Failed to read file.'))
     } finally {
       setLoading(false)
     }
@@ -129,7 +129,7 @@ export default function ImportDialog({ onClose, onImported }) {
       setActiveFilter('fallback')
       setStep(2)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to analyze file.')
+      setError(getErrorMessage(e, 'Failed to analyze file.'))
     } finally {
       setSuggestLoading(false)
     }
@@ -155,7 +155,7 @@ export default function ImportDialog({ onClose, onImported }) {
       setStep(3)
       if (res.data.savings_expenses?.length > 0) setSavingsModalOpen(true)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Import failed.')
+      setError(getErrorMessage(e, 'Import failed.'))
     } finally {
       setLoading(false)
     }

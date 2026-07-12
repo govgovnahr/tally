@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { useC, TYPE_PALETTE } from '../../colors'
 import { ICON_REGISTRY, ICON_OPTIONS } from '../../expenseTypes.js'
 import AlertBox from '../ui/AlertBox.jsx'
@@ -28,7 +28,7 @@ export default function CategoryFormDialog({ open, onClose, onSaved, existing })
       else await api.post('/expense-types', { name: name.trim(), color, icon })
       onSaved(); onClose()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save category.')
+      setError(getErrorMessage(err, 'Failed to save category.'))
     } finally {
       setLoading(false)
     }

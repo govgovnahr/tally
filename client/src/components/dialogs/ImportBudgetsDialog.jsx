@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import AlertBox from '../ui/AlertBox.jsx'
 import NativeSelect from '../inputs/NativeSelect.jsx'
 import { currentMonth } from '../../lib/budgetMonths.js'
@@ -73,7 +73,7 @@ export default function ImportBudgetsDialog({ onClose, onImported }) {
       setMapping(autoMap(h))
       setStep(1)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to read file.')
+      setError(getErrorMessage(e, 'Failed to read file.'))
     } finally {
       setLoading(false)
     }
@@ -114,7 +114,7 @@ export default function ImportBudgetsDialog({ onClose, onImported }) {
       setResults(res.data)
       setStep(2)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Import failed.')
+      setError(getErrorMessage(e, 'Import failed.'))
     } finally {
       setLoading(false)
     }

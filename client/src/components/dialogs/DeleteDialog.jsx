@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { useC } from '../../colors'
 import AlertBox from '../ui/AlertBox.jsx'
 
@@ -19,7 +19,7 @@ export default function DeleteDialog({ open, onClose, onDeleted, type, otherType
       await api.delete(`/expense-types/${type.id}`, { params })
       onDeleted(); onClose()
     } catch (err) {
-      const detail = err.response?.data?.detail || ''
+      const detail = getErrorMessage(err, '')
       if (err.response?.status === 409) { setNeedsReassign(true); setError(detail) }
       else setError(detail || 'Failed to delete category.')
     } finally {

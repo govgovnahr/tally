@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import { useExpenseTypes } from '../../ExpenseTypesContext.jsx'
 import PolishedCheckbox from '../inputs/PolishedCheckbox.jsx'
 import FieldGroup from '../ui/FieldGroup.jsx'
@@ -59,7 +59,7 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
       onAdded?.(res.data)
       onClose()
     } catch (err) {
-      setError(err.response?.data?.detail || `Failed to ${isEditing ? 'update' : 'add'} income.`)
+      setError(getErrorMessage(err, `Failed to ${isEditing ? 'update' : 'add'} income.`))
     } finally {
       setLoading(false)
     }

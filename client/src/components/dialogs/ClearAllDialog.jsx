@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog.jsx'
 import { useC } from '../../colors'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 
 const CLEAR_ITEMS = [
   { key: 'expenses',      label: 'Expenses',      description: 'All expense transactions' },
@@ -60,7 +60,7 @@ export default function ClearAllDialog() {
       setClearConfirmText('')
       queryClient.invalidateQueries()
     } catch (err) {
-      setClearError(err.response?.data?.detail || 'Failed to clear data. Please try again.')
+      setClearError(getErrorMessage(err, 'Failed to clear data. Please try again.'))
     } finally {
       setClearLoading(false)
     }
@@ -75,7 +75,7 @@ export default function ClearAllDialog() {
       setClearTarget(null)
       setSpecificConfirmText('')
     } catch (err) {
-      setSpecificError(err.response?.data?.detail || 'Failed to clear data.')
+      setSpecificError(getErrorMessage(err, 'Failed to clear data.'))
     } finally {
       setSpecificLoading(false)
     }

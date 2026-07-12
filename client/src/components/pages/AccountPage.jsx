@@ -4,7 +4,7 @@ import { LogOut, KeyRound, User, Upload, Bot, Calendar } from 'lucide-react'
 import ClearAllDialog from '../dialogs/ClearAllDialog.jsx'
 import { supabase } from '../../supabase.js'
 import { useC } from '../../colors'
-import api from '../../api.js'
+import api, { getErrorMessage } from '../../api.js'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../ui/dialog.jsx'
@@ -63,7 +63,7 @@ export default function AccountPage({ user, onLogout }) {
       queryClient.invalidateQueries()
       setTimeout(() => setCycleSaved(false), 2500)
     } catch (err) {
-      setCycleError(err.response?.data?.detail ?? 'Failed to save')
+      setCycleError(getErrorMessage(err, 'Failed to save'))
     } finally {
       setCycleSaving(false)
     }
@@ -102,7 +102,7 @@ export default function AccountPage({ user, onLogout }) {
       const { data } = await api.post('/import/legacy-db', form)
       setImportResult(data.imported)
     } catch (err) {
-      setImportError(err.response?.data?.detail || 'Import failed.')
+      setImportError(getErrorMessage(err, 'Import failed.'))
     } finally {
       setImportLoading(false)
     }
