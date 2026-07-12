@@ -1,6 +1,3 @@
-from conftest import TEST_USER
-
-
 def test_create_expense(client):
     r = client.post("/expenses", json={
         "name": "Test Coffee",
@@ -48,7 +45,7 @@ def test_amount_must_be_positive(client):
         "name": "Bad", "amount": -10, "type": "Food",
         "date": "2026-05-01", "is_recurring": False,
     })
-    assert r.status_code == 400
+    assert r.status_code == 422  # rejected by Pydantic's Field(gt=0) before the handler runs
 
 
 def test_invalid_type_rejected(client):

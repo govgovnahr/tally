@@ -9,6 +9,7 @@ from auth import get_current_user
 router = APIRouter()
 
 _ALLOWED_SORT = {"name", "date", "amount"}
+_INCOME_COLS = "id, name, amount, date, created_at, is_recurring, credit_type"
 
 
 @router.get("/incomes")
@@ -38,7 +39,7 @@ def get_incomes(
     total = cursor.fetchone()["count"]
     offset = (page - 1) * page_size
     cursor.execute(
-        f"SELECT * FROM incomes {where} ORDER BY {col} {direction}, created_at DESC LIMIT %s OFFSET %s",
+        f"SELECT {_INCOME_COLS} FROM incomes {where} ORDER BY {col} {direction}, created_at DESC LIMIT %s OFFSET %s",
         params + [page_size, offset],
     )
     rows = cursor.fetchall()

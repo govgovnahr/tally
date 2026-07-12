@@ -7,6 +7,11 @@ export default defineConfig({
   resolve: {
     alias: { '@': new URL('./src', import.meta.url).pathname },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    globals: true,
+  },
   build: {
     rollupOptions: {
       output: {

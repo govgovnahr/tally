@@ -1,7 +1,15 @@
-def test_pacing_returns_list(client):
+def test_pacing_requires_month(client):
     r = client.get("/analysis/pacing")
+    assert r.status_code == 422
+
+
+def test_pacing_returns_shape(client):
+    r = client.get("/analysis/pacing?month=2026-05")
     assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    data = r.json()
+    assert data["month"] == "2026-05"
+    assert "categories" in data
+    assert isinstance(data["categories"], list)
 
 
 def test_month_over_month_shape(client):
@@ -11,9 +19,10 @@ def test_month_over_month_shape(client):
     assert isinstance(data, list)
     for entry in data:
         assert "month" in entry
-        assert "income" in entry
-        assert "expenses" in entry
+        assert "total_income" in entry
+        assert "total_spent" in entry
         assert "net" in entry
+        assert "mom_change_pct" in entry
 
 
 def test_outliers_returns_list(client):

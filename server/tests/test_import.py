@@ -44,7 +44,7 @@ def test_full_import_inserts_expenses(client):
     )
     assert r.status_code == 200
     data = r.json()
-    assert data["imported"] == 3
+    assert data["imported"] == 4  # 3 expense rows + 1 income row ("Paycheck"), "imported" counts both
     assert data["skipped"] == 0
 
 

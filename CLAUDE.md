@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Full-stack single-page budgeting app. No test suite. See [ARCH.md](./ARCH.md) for architecture, [API.md](./API.md) for endpoints. See [DEMO.md](./DEMO.md) for setting up a demo/test account and seeding it with data — useful for local QA without touching real account data.
+Full-stack single-page budgeting app. See [ARCH.md](./ARCH.md) for architecture, [API.md](./API.md) for endpoints. See [DEMO.md](./DEMO.md) for setting up a demo/test account and seeding it with data — useful for local QA without touching real account data.
 
 ## Running
 
@@ -21,6 +21,23 @@ cd client && npm install && npm run dev
 React build → `client/dist/` → `server/static/` → PyInstaller → `server/dist/BudgetTracker/`. CI/CD via `.github/workflows/build.yml` on push to `master` (macOS + Windows).
 
 **PyInstaller:** All routers need `--hidden-import`; `openpyxl` needs `--collect-all openpyxl`; `sys.frozen` switches uvicorn to prod + opens browser.
+
+## Testing
+
+**Policy: any file you touch gets tests before the commit.** Backend router change → add/update its `server/tests/test_*.py`. Frontend component/lib change → add/update its colocated `*.test.jsx`/`*.test.js`. This is how the suite stays truthful — a stale test is worse than no test, since it teaches the wrong lesson about what the app does.
+
+```bash
+# Backend — from server/, needs DATABASE_URL (see server/.env)
+set -a && source ../.env && set +a && python3 -m pytest -q
+
+# Frontend — from client/
+npm test          # single run
+npm run test:watch
+```
+
+- **Backend** (`server/tests/`, pytest + `TestClient`): hits the **real shared Supabase DB** (there is no staging environment — see [[project_shared_database]]), scoped to a fixed fake `TEST_USER` UUID. Session-scoped `client` fixture in `conftest.py` seeds the 6 default expense types and deletes every `TEST_USER`-owned row across all tables on teardown. Because the fixture is session-scoped, tests in later files can see rows created by earlier files (alphabetical collection order) — don't assert on cross-portfolio aggregates (e.g. `avg_monthly_net`-derived fields) as if the goal/expense under test were the only data that exists.
+- **Frontend** (`client/src/**/*.test.{js,jsx}`, Vitest + `@testing-library/react` + jsdom): colocated with the source file, not a separate `__tests__` tree. `ColorsContext` (`colors.jsx`) has a default value, so components using `useC()` render without a provider wrapper in tests.
+- **Not CI-wired.** Running the backend suite touches the shared prod-adjacent DB, so it stays a manual, local step rather than an automatic one on every push.
 
 ## Gotchas
 
