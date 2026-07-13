@@ -36,15 +36,11 @@ def create_macrocategory(body: NewMacrocategory, user_id: str = Depends(get_curr
     return dict(row)
 
 
-@router.get("/macrocategories/summary")
-def get_macrocategory_summary(
-    month: Optional[str] = Query(None), period_start: Optional[str] = Query(None), period_end: Optional[str] = Query(None),
-    user_id: str = Depends(get_current_user),
-):
-    conn = get_connection()
+def macro_summary(conn, user_id, month=None, period_start=None, period_end=None):
+    """Per-macrocategory spend summary. Extracted for /dashboard reuse. Caller
+    owns the connection."""
     macros = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM macrocategories WHERE user_id = %s", (user_id,)).fetchall()}
     if not macros:
-        conn.close()
         return []
 
     if period_start and period_end:
@@ -73,7 +69,6 @@ def get_macrocategory_summary(
             WHERE e.user_id = %s AND et.user_id = %s AND et.macrocategory_id IS NOT NULL
             GROUP BY et.macrocategory_id
         """, (user_id, user_id)).fetchall()
-    conn.close()
 
     spending = {r["macrocategory_id"]: {"total": r["total"], "count": r["count"]} for r in rows}
     return [
@@ -84,6 +79,17 @@ def get_macrocategory_summary(
         }
         for mid in macros
     ]
+
+
+@router.get("/macrocategories/summary")
+def get_macrocategory_summary(
+    month: Optional[str] = Query(None), period_start: Optional[str] = Query(None), period_end: Optional[str] = Query(None),
+    user_id: str = Depends(get_current_user),
+):
+    conn = get_connection()
+    result = macro_summary(conn, user_id, month, period_start, period_end)
+    conn.close()
+    return result
 
 
 @router.put("/macrocategories/{macro_id}")

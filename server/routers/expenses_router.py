@@ -64,15 +64,6 @@ def get_expenses(
 
 @router.post("/expenses")
 def add_expense(new_expense: NewExpense, user_id: str = Depends(get_current_user)):
-    conn = get_connection()
-    valid = _valid_type_names(conn, user_id)
-    if new_expense.type not in valid:
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Invalid expense type. Must be one of: {valid}")
-    if new_expense.amount <= 0:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
-
     expense = Expense(
         id=str(uuid.uuid4()),
         name=new_expense.name.strip(),
@@ -83,11 +74,22 @@ def add_expense(new_expense: NewExpense, user_id: str = Depends(get_current_user
         is_recurring=new_expense.is_recurring,
     )
 
+    conn = get_connection()
     cursor = conn.cursor()
+    # Guarded insert: the WHERE EXISTS validates the type in the same round trip
+    # as the write. rowcount 0 (no RETURNING row) means the type was invalid —
+    # the only reason this can fail to insert — so it's unambiguously a 400.
     cursor.execute(
-        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-        (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at, expense.is_recurring, user_id),
+        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) "
+        "SELECT %s,%s,%s,%s,%s,%s,%s,%s "
+        "WHERE EXISTS (SELECT 1 FROM expense_types WHERE user_id = %s AND name = %s) "
+        "RETURNING id",
+        (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at, expense.is_recurring, user_id,
+         user_id, expense.type),
     )
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Invalid expense type")
     conn.commit()
     conn.close()
 
@@ -126,12 +128,9 @@ def get_months(user_id: str = Depends(get_current_user)):
     return sorted(labels)
 
 
-@router.get("/expenses/summary")
-def get_summary(
-    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
-    user_id: str = Depends(get_current_user),
-):
-    conn = get_connection()
+def summary_rows(conn, user_id, month=None, period_start=None, period_end=None):
+    """Per-type spend summary. Extracted so the /dashboard aggregate can reuse it
+    without a second HTTP round trip. Caller owns the connection."""
     cursor = conn.cursor()
     if period_start and period_end:
         cursor.execute(
@@ -149,8 +148,18 @@ def get_summary(
             (user_id,),
         )
     rows = cursor.fetchall()
-    conn.close()
     return [{"type": row["type"], "total": round(row["total"], 2), "count": row["count"]} for row in rows]
+
+
+@router.get("/expenses/summary")
+def get_summary(
+    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
+    user_id: str = Depends(get_current_user),
+):
+    conn = get_connection()
+    result = summary_rows(conn, user_id, month, period_start, period_end)
+    conn.close()
+    return result
 
 
 @router.get("/expenses/monthly-totals")
@@ -195,15 +204,15 @@ def update_expense(expense_id: str, updated: NewExpense, user_id: str = Depends(
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM expenses WHERE id = %s AND user_id = %s", (expense_id, user_id))
-    if not cursor.fetchone():
-        conn.close()
-        raise HTTPException(status_code=404, detail="Expense not found")
-
+    # Type already validated above (keeps 400-vs-404 distinct); RETURNING folds
+    # the existence check into the UPDATE — no row back means id/user_id missed → 404.
     cursor.execute(
-        "UPDATE expenses SET name=%s, amount=%s, type=%s, date=%s, is_recurring=%s WHERE id=%s AND user_id=%s",
+        "UPDATE expenses SET name=%s, amount=%s, type=%s, date=%s, is_recurring=%s WHERE id=%s AND user_id=%s RETURNING id",
         (updated.name.strip(), round(updated.amount, 2), updated.type, updated.date, updated.is_recurring, expense_id, user_id),
     )
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Expense not found")
     conn.commit()
     conn.close()
 
@@ -239,11 +248,10 @@ def clear_transactions(
 def delete_expense(expense_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM expenses WHERE id = %s AND user_id = %s", (expense_id, user_id))
-    if not cursor.fetchone():
+    cursor.execute("DELETE FROM expenses WHERE id = %s AND user_id = %s RETURNING id", (expense_id, user_id))
+    if cursor.fetchone() is None:
         conn.close()
         raise HTTPException(status_code=404, detail="Expense not found")
-    cursor.execute("DELETE FROM expenses WHERE id = %s AND user_id = %s", (expense_id, user_id))
     conn.commit()
     conn.close()
     return {"id": expense_id}

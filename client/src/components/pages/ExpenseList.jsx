@@ -22,6 +22,7 @@ import { useTutorial } from '../../TutorialContext.jsx'
 import { Card } from 'glasscn-ui'
 import SourceChip from '../ui/SourceChip.jsx'
 import IconButton from '../ui/IconButton.jsx'
+import SparkleBurst from '../ui/SparkleBurst.jsx'
 import { formatDate } from '../../lib/format.js'
 
 function formatMonthLabel(m) {
@@ -49,7 +50,7 @@ function SortBtn({ col, sortBy, sortDir, onSort, children, className = '' }) {
   )
 }
 
-export default function ExpenseList({ month, periodStart, periodEnd, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed }) {
+export default function ExpenseList({ month, periodStart, periodEnd, activeType: propActiveType, onTypeChange, activeMacro, onMacroChange, initialType, initialHighlightId, initialMonth, onInitialTypeConsumed, externalHighlightId }) {
   const C = useC()
   const { suggestAdvancedTour } = useTutorial()
   const queryClient = useQueryClient()
@@ -59,6 +60,14 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
   const activeType = propActiveType ?? internalType
   const handleTypeChange = onTypeChange ?? setInternalType
   const [highlightId, setHighlightId] = useState(initialHighlightId ?? null)
+
+  // Rows added from outside this component (the Dashboard's quick-add button,
+  // SummaryBar's forms) surface here so the same highlight+sparkle treatment
+  // applies no matter which of the app's several "add income/expense" entry
+  // points was used.
+  useEffect(() => {
+    if (externalHighlightId != null) setHighlightId(externalHighlightId)
+  }, [externalHighlightId])
   const [internalMonth] = useState(initialMonth ?? null)
   const effectiveMonth = month ?? internalMonth
 
@@ -202,6 +211,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['incomes'] })
     queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }
 
   async function handleDeleteExpense(id) {
@@ -372,7 +382,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
       {!isEmpty && (
         <div className="sm:hidden">
           {rows.map(row => {
-            const isHighlighted = !isIncome && highlightId === row.id
+            const isHighlighted = highlightId === row.id
             return (
             <div
               key={row.id}
@@ -392,6 +402,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-shrink">
                   <span className="text-sm font-semibold truncate" style={{ color: C.warmText }}>{row.name}</span>
+                  <SparkleBurst show={isHighlighted} />
                   {row.is_recurring === 1 && <Repeat size={12} style={{ color: C.muted, flexShrink: 0 }} />}
                   {!isIncome && outlierIds.has(row.id) && (
                     <button type="button" title="Unusual expense — click to dismiss flag"
@@ -452,13 +463,25 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
             </TableHeader>
             <TableBody>
               {isIncome
-                ? incomes.map(inc => (
-                  <TableRow key={inc.id} style={{ borderColor: C.hoverStrong, viewTransitionName: `row-inc-${inc.id}` }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = `${C.income}14`}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                ? incomes.map(inc => {
+                  const isHighlighted = highlightId === inc.id
+                  return (
+                  <TableRow key={inc.id}
+                    data-expense-id={inc.id}
+                    style={{
+                      borderColor: C.hoverStrong,
+                      viewTransitionName: `row-inc-${inc.id}`,
+                      backgroundColor: isHighlighted ? `${C.primary}18` : 'transparent',
+                      outline: isHighlighted ? `2px solid ${C.primary}55` : 'none',
+                      outlineOffset: '-2px',
+                      transition: 'background-color 0.5s, outline 0.5s',
+                    }}
+                    onMouseEnter={e => { if (!isHighlighted) e.currentTarget.style.backgroundColor = `${C.income}14` }}
+                    onMouseLeave={e => { if (!isHighlighted) e.currentTarget.style.backgroundColor = 'transparent' }}>
                     <TableCell className="max-w-0 w-full" style={{ color: C.warmText }}>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{inc.name}</span>
+                        <SparkleBurst show={isHighlighted} />
                         {inc.is_recurring === 1 && <Repeat size={13} className="flex-shrink-0" style={{ color: C.muted, opacity: 0.7 }} title="Recurring monthly income" />}
                       </div>
                     </TableCell>
@@ -474,7 +497,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                )})
                 : expenses.map(e => {
                   const isHighlighted = highlightId === e.id
                   return (
@@ -494,6 +517,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
                     <TableCell className="max-w-0 w-full" style={{ color: C.warmText }}>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{e.name}</span>
+                        <SparkleBurst show={isHighlighted} />
                         {e.is_recurring === 1 && <Repeat size={13} className="flex-shrink-0" style={{ color: C.muted, opacity: 0.7 }} title="Recurring monthly expense" />}
                         {outlierIds.has(e.id) && (
                           <button type="button" title="Unusual expense — click to dismiss flag"
@@ -551,7 +575,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
       )}
 
       {/* Forms & dialogs */}
-      {showExpenseForm && <AddExpenseForm prefill={receiptPrefill} onClose={() => { setShowExpenseForm(false); setReceiptPrefill(null) }} onAdded={invalidateAll} />}
+      {showExpenseForm && <AddExpenseForm prefill={receiptPrefill} onClose={() => { setShowExpenseForm(false); setReceiptPrefill(null) }} onAdded={data => { invalidateAll(); setHighlightId(data.id) }} />}
       {editingExpense && <AddExpenseForm expense={editingExpense} onClose={() => setEditingExpense(null)} onAdded={invalidateAll} />}
       {showReceiptScan && (
         <ReceiptScanDialog
@@ -559,7 +583,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
           onClose={() => setShowReceiptScan(false)}
         />
       )}
-      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={invalidateAll} />}
+      {showIncomeForm && <AddIncomeForm onClose={() => setShowIncomeForm(false)} onAdded={data => { invalidateAll(); setHighlightId(data.id) }} />}
       {editingIncome && <AddIncomeForm income={editingIncome} onClose={() => setEditingIncome(null)} onAdded={invalidateAll} />}
       {showImport && (
         <ImportDialog

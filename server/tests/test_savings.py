@@ -58,6 +58,31 @@ def test_contribution_creates_linked_expense(client):
     assert "Linked Goal" in names
 
 
+def test_two_contributions_reuse_one_savings_type(client):
+    # The 2nd contribution exercises _get_or_create_savings_type's ON CONFLICT
+    # DO NOTHING path — it must not error and must not create a duplicate type.
+    goal_r = client.post("/savings-goals", json={
+        "goal_type": "one_time", "name": "Twice Goal", "target": 800.0, "color": "#80cbc4",
+    })
+    goal_id = goal_r.json()["id"]
+
+    r1 = client.post(f"/savings-goals/{goal_id}/contributions", json={"amount": 25.0, "date": "2026-05-01"})
+    r2 = client.post(f"/savings-goals/{goal_id}/contributions", json={"amount": 30.0, "date": "2026-05-02"})
+    assert r1.status_code == 201
+    assert r2.status_code == 201
+
+    types_r = client.get("/expense-types")
+    savings_types = [t for t in types_r.json() if t["name"] == "Savings"]
+    assert len(savings_types) == 1
+
+
+def test_contribution_on_missing_goal_404(client):
+    r = client.post("/savings-goals/does-not-exist/contributions", json={
+        "amount": 10.0, "date": "2026-05-01",
+    })
+    assert r.status_code == 404
+
+
 def test_duplicate_monthly_goal_rejected(client):
     client.post("/savings-goals", json={
         "goal_type": "monthly", "name": "Monthly A",

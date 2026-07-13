@@ -258,15 +258,21 @@ def get_net_chart(months: int = 6, user_id: str = Depends(get_current_user)):
     return result
 
 
-@router.get("/savings-goals")
-def get_savings_goals(user_id: str = Depends(get_current_user)):
-    conn = get_connection()
+def compute_savings_goals(conn, user_id):
+    """All goals with computed fields + priority cascade. Extracted for /dashboard
+    reuse. Caller owns the connection."""
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM savings_goals WHERE user_id = %s ORDER BY created_at ASC", (user_id,))
     rows = [dict(r) for r in cursor.fetchall()]
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = [_add_computed(r, conn, portfolio_avg) for r in rows]
-    result = _apply_priority_cascade(result, portfolio_avg)
+    return _apply_priority_cascade(result, portfolio_avg)
+
+
+@router.get("/savings-goals")
+def get_savings_goals(user_id: str = Depends(get_current_user)):
+    conn = get_connection()
+    result = compute_savings_goals(conn, user_id)
     conn.close()
     return result
 
@@ -315,13 +321,13 @@ def create_savings_goal(body: NewSavingsGoal, user_id: str = Depends(get_current
     goal_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
     cursor.execute(
-        "INSERT INTO savings_goals (id, goal_type, name, target, deadline, created_at, color, allocation_pct, priority, months_target, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO savings_goals (id, goal_type, name, target, deadline, created_at, color, allocation_pct, priority, months_target, user_id) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (goal_id, body.goal_type, body.name.strip(), target, body.deadline, created_at, body.color, body.allocation_pct, body.priority, body.months_target, user_id),
     )
+    row = dict(cursor.fetchone())
     conn.commit()
 
-    cursor.execute("SELECT * FROM savings_goals WHERE id = %s", (goal_id,))
-    row = dict(cursor.fetchone())
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = _add_computed(row, conn, portfolio_avg)
     conn.close()
@@ -367,13 +373,12 @@ def update_savings_goal(goal_id: str, body: UpdateSavingsGoal, user_id: str = De
             raise HTTPException(status_code=409, detail=f"Priority {body.priority} is already assigned to another active goal")
 
     cursor.execute(
-        "UPDATE savings_goals SET name=%s, target=%s, deadline=%s, color=%s, allocation_pct=%s, priority=%s, paused=%s, months_target=%s WHERE id=%s AND user_id=%s",
+        "UPDATE savings_goals SET name=%s, target=%s, deadline=%s, color=%s, allocation_pct=%s, priority=%s, paused=%s, months_target=%s WHERE id=%s AND user_id=%s RETURNING *",
         (body.name.strip(), target, body.deadline, body.color, body.allocation_pct, body.priority, 1 if body.paused else 0, body.months_target, goal_id, user_id),
     )
+    updated = dict(cursor.fetchone())
     conn.commit()
 
-    cursor.execute("SELECT * FROM savings_goals WHERE id = %s", (goal_id,))
-    updated = dict(cursor.fetchone())
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = _add_computed(updated, conn, portfolio_avg)
     conn.close()
@@ -384,16 +389,19 @@ def update_savings_goal(goal_id: str, body: UpdateSavingsGoal, user_id: str = De
 def toggle_pause(goal_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM savings_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
+    # Flip and read back in one statement. CASE (not 1-paused) reproduces the old
+    # `0 if row["paused"] else 1` truthiness and avoids NULL arithmetic.
+    cursor.execute(
+        "UPDATE savings_goals SET paused = CASE WHEN paused = 1 THEN 0 ELSE 1 END "
+        "WHERE id = %s AND user_id = %s RETURNING *",
+        (goal_id, user_id),
+    )
     row = cursor.fetchone()
-    if not row:
+    if row is None:
         conn.close()
         raise HTTPException(status_code=404, detail="Savings goal not found")
-    new_paused = 0 if row["paused"] else 1
-    cursor.execute("UPDATE savings_goals SET paused=%s WHERE id=%s AND user_id=%s", (new_paused, goal_id, user_id))
     conn.commit()
-    cursor.execute("SELECT * FROM savings_goals WHERE id = %s", (goal_id,))
-    updated = dict(cursor.fetchone())
+    updated = dict(row)
     portfolio_avg = _portfolio_avg_net(conn, user_id)
     result = _add_computed(updated, conn, portfolio_avg)
     conn.close()
@@ -401,11 +409,11 @@ def toggle_pause(goal_id: str, user_id: str = Depends(get_current_user)):
 
 
 def _get_or_create_savings_type(cursor, user_id: str) -> str:
-    cursor.execute("SELECT name FROM expense_types WHERE name = 'Savings' AND user_id = %s", (user_id,))
-    if cursor.fetchone():
-        return "Savings"
+    # ON CONFLICT collapses the old check-then-insert into one statement; the
+    # unique index on (user_id, name) makes a duplicate a no-op.
     cursor.execute(
-        "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (user_id, name) DO NOTHING",
         (str(uuid.uuid4()), "Savings", "#8fb996", "Savings", 99, 1, user_id),
     )
     return "Savings"
@@ -445,12 +453,12 @@ def add_contribution(goal_id: str, body: NewContribution, user_id: str = Depends
 
     contrib_id = str(uuid.uuid4())
     cursor.execute(
-        "INSERT INTO savings_contributions (id, goal_id, amount, date, note, created_at, expense_id, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO savings_contributions (id, goal_id, amount, date, note, created_at, expense_id, user_id) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
         (contrib_id, goal_id, round(body.amount, 2), body.date, body.note, created_at, expense_id, user_id),
     )
-    conn.commit()
-    cursor.execute("SELECT * FROM savings_contributions WHERE id = %s", (contrib_id,))
     result = dict(cursor.fetchone())
+    conn.commit()
     conn.close()
     return result
 

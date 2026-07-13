@@ -61,64 +61,33 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
   const [activeType, setActiveType] = useState('All')
   const [activeMacro, setActiveMacro] = useState(null)
   const [showIncomeForm, setShowIncomeForm] = useState(false)
+  // Fed to ExpenseList so it can highlight+sparkle a row added from *any* of
+  // this page's several add-income entry points (this button, SummaryBar's
+  // own forms), not just ExpenseList's own internal add form.
+  const [justAddedId, setJustAddedId] = useState(null)
 
-  const { data: periodBounds } = useQuery({
-    queryKey: qk.periodBounds(selectedMonth),
-    queryFn: () => api.get('/settings/period-bounds', { params: { month: selectedMonth } }).then(r => r.data),
-    staleTime: 5 * 60_000,
-  })
-
-  const { data: outliersData = [] } = useQuery({
-    queryKey: qk.analysisOutliers(12),
-    queryFn: () => api.get('/analysis/outliers', { params: { months: 12 } }).then(r => r.data),
-    staleTime: 3 * 60_000,
-  })
-  const outliers = periodBounds
-    ? outliersData.filter(e => e.date >= periodBounds.period_start && e.date < periodBounds.period_end)
-    : []
-
-  const { data: goals = [] } = useQuery({
-    queryKey: qk.savingsGoals(),
-    queryFn: () => api.get('/savings-goals').then(r => r.data),
-    staleTime: 3 * 60_000,
-  })
-
-  const { data: summary = [] } = useQuery({
-    queryKey: qk.expensesSummary(periodBounds?.period_start, periodBounds?.period_end),
-    queryFn: () => api.get('/expenses/summary', { params: { period_start: periodBounds.period_start, period_end: periodBounds.period_end } }).then(r => r.data),
+  // One aggregate request replaces the eight the dashboard used to fire (and the
+  // period-bounds waterfall that gated half of them). Every derived variable below
+  // keeps its original name, so nothing downstream (SummaryBar, ExpenseList,
+  // SpendingDonut, the KPI math) needs to change.
+  const { data: dash } = useQuery({
+    queryKey: qk.dashboard(selectedMonth),
+    queryFn: () => api.get('/dashboard', { params: { month: selectedMonth } }).then(r => r.data),
     staleTime: 60_000,
-    enabled: !!periodBounds,
   })
 
-  const { data: budgetsEffective = [] } = useQuery({
-    queryKey: qk.budgetsEffective(selectedMonth),
-    queryFn: () => api.get('/budgets/effective', { params: { month: selectedMonth } }).then(r => r.data),
-    staleTime: 5 * 60_000,
-  })
+  const periodBounds = dash?.period
+  const outliers = dash?.outliers ?? []
+  const goals = dash?.savings_goals ?? []
+  const summary = dash?.expenses_summary ?? []
+  const budgetsEffective = dash?.budgets_effective ?? []
   const budgets = Object.fromEntries(budgetsEffective.map(b => [b.type, b.monthly_limit]))
-
-  const { data: incomeSummary } = useQuery({
-    queryKey: qk.incomesSummary(periodBounds?.period_start, periodBounds?.period_end),
-    queryFn: () => api.get('/incomes/summary', { params: { period_start: periodBounds.period_start, period_end: periodBounds.period_end } }).then(r => r.data),
-    staleTime: 60_000,
-    enabled: !!periodBounds,
-  })
+  const incomeSummary = dash?.incomes_summary
   const totalIncome = incomeSummary?.total ?? 0
-
-  const { data: pacingData } = useQuery({
-    queryKey: qk.analysisPacing(selectedMonth, 3),
-    queryFn: () => api.get('/analysis/pacing', { params: { month: selectedMonth, lookback_months: 3 } }).then(r => r.data),
-    staleTime: 3 * 60_000,
-  })
+  const pacingData = dash?.pacing
   const pacingCats = pacingData?.categories ?? []
   const isCurrentMonth = pacingData?.is_current_month ?? true
-
-  const { data: macroSummary = [] } = useQuery({
-    queryKey: qk.macrocategoriesSummary(periodBounds?.period_start, periodBounds?.period_end),
-    queryFn: () => api.get('/macrocategories/summary', { params: { period_start: periodBounds.period_start, period_end: periodBounds.period_end } }).then(r => r.data),
-    staleTime: 60_000,
-    enabled: !!periodBounds,
-  })
+  const macroSummary = dash?.macrocategories_summary ?? []
 
   const totalSpent = summary.reduce((s, x) => s + x.total, 0)
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0)
@@ -317,6 +286,7 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
         onTypeChange={handleTypeChange}
         activeMacro={activeMacro}
         onMacroChange={handleMacroChange}
+        onIncomeAdded={setJustAddedId}
         hideHeader
         defaultCollapsed
       />
@@ -339,12 +309,13 @@ export default function DashboardPage({ selectedMonth, onMonthChange, onNavigate
         onTypeChange={handleTypeChange}
         activeMacro={activeMacro}
         onMacroChange={handleMacroChange}
+        externalHighlightId={justAddedId}
       />
 
       {showIncomeForm && (
         <AddIncomeForm
           onClose={() => setShowIncomeForm(false)}
-          onAdded={() => setShowIncomeForm(false)}
+          onAdded={data => { setShowIncomeForm(false); setJustAddedId(data.id) }}
         />
       )}
     </div>

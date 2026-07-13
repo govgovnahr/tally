@@ -6,9 +6,19 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient
+import server
 from server import app
 from auth import get_current_user
 from database import get_connection
+
+# server.py's global fixed-window rate limiter (100 writes/min, 300 GETs/min)
+# is keyed per-IP/user for real traffic. Every TestClient request in this
+# suite shares one fake key, so a fast full run (connection pooling removed
+# the per-request latency that used to spread requests across minutes) can
+# burst past those caps well within normal test activity. Not a limit real
+# users would hit; raise it for the test session only.
+server._WRITE_LIMIT = 100_000
+server._GET_LIMIT = 100_000
 
 TEST_USER = "test-user-00000000-0000-0000-0000-000000000099"
 

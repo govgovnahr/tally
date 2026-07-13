@@ -28,7 +28,7 @@ function TwoToneBar({ pct, solidColor, ghostStart, ghostWidth, trackColor }) {
   )
 }
 
-export default function SummaryBar({ summary = [], budgets = {}, totalIncome = 0, macroSummary = [], pacingCats = [], isCurrentMonth = true, activeType, onTypeChange, activeMacro, onMacroChange, hideHeader = false, defaultCollapsed = false }) {
+export default function SummaryBar({ summary = [], budgets = {}, totalIncome = 0, macroSummary = [], pacingCats = [], isCurrentMonth = true, activeType, onTypeChange, activeMacro, onMacroChange, hideHeader = false, defaultCollapsed = false, onIncomeAdded }) {
   const C = useC()
   const { typeMap } = useExpenseTypes()
   const [showIncomeForm, setShowIncomeForm] = useState(false)
@@ -319,14 +319,14 @@ export default function SummaryBar({ summary = [], budgets = {}, totalIncome = 0
       {showIncomeForm && (
         <AddIncomeForm
           onClose={() => setShowIncomeForm(false)}
-          onAdded={() => { setShowIncomeForm(false); fetchData() }}
+          onAdded={data => { setShowIncomeForm(false); onIncomeAdded?.(data.id) }}
         />
       )}
       {editingIncome && (
         <AddIncomeForm
           income={editingIncome}
           onClose={() => setEditingIncome(null)}
-          onAdded={() => { setEditingIncome(null); fetchData() }}
+          onAdded={() => setEditingIncome(null)}
         />
       )}
     </div>

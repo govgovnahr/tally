@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import axios from 'axios'
 import { useQueryClient } from '@tanstack/react-query'
 import { useC } from '../../colors'
 import {
@@ -29,6 +30,13 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
   const [creditType, setCreditType] = useState(income?.credit_type ?? '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const abortRef = useRef(null)
+
+  // If the user closes the dialog while the request is still in flight (e.g. it
+  // seems to be hanging), don't let a late response silently land in the
+  // background — that's what turned a "failed" first attempt into a real
+  // duplicate income when the user retried from elsewhere in the app.
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
@@ -43,6 +51,8 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
     if (!form.date) return setError('Date is required.')
 
     setLoading(true)
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
       const payload = {
         name: form.name.trim(),
@@ -52,16 +62,18 @@ export default function AddIncomeForm({ onClose, onAdded, income }) {
         credit_type: creditEnabled && creditType ? creditType : null,
       }
       const res = isEditing
-        ? await api.put(`/incomes/${income.id}`, payload)
-        : await api.post('/incomes', payload)
+        ? await api.put(`/incomes/${income.id}`, payload, { signal: controller.signal })
+        : await api.post('/incomes', payload, { signal: controller.signal })
       queryClient.invalidateQueries({ queryKey: ['incomes'] })
       queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       onAdded?.(res.data)
       onClose()
     } catch (err) {
+      if (axios.isCancel(err)) return // dialog was closed; the component is unmounting
       setError(getErrorMessage(err, `Failed to ${isEditing ? 'update' : 'add'} income.`))
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }
 

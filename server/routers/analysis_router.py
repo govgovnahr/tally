@@ -35,14 +35,10 @@ def _effective_budgets_map(conn, month: str, user_id: str) -> dict:
     return {**defaults, **overrides}
 
 
-@router.get("/analysis/pacing")
-def get_pacing(
-    month: str = Query(...), lookback_months: int = Query(3),
-    user_id: str = Depends(get_current_user),
-):
+def compute_pacing_payload(conn, settings, month, lookback_months, user_id):
+    """Budget-pacing payload for one month. Extracted so /dashboard can reuse it
+    with a shared connection and a settings dict already fetched. Caller owns conn."""
     today = date.today()
-    conn = get_connection()
-    settings = get_user_settings(conn, user_id)
     cycle_start_day = settings["cycle_start_day"]
     cur_label = settings["current_period"]["period_label"]
 
@@ -50,7 +46,6 @@ def get_pacing(
     days_in_month = (date.fromisoformat(period_end) - date.fromisoformat(period_start)).days
 
     if month > cur_label:
-        conn.close()
         return {
             "month": month,
             "days_elapsed": 0,
@@ -64,7 +59,6 @@ def get_pacing(
 
     pacing_rows = compute_budget_pacing(conn, month, lookback_months=lookback_months, user_id=user_id, cycle_start_day=cycle_start_day)
     budgets = _effective_budgets_map(conn, month, user_id)
-    conn.close()
 
     is_current = month == cur_label
     days_elapsed = (today - date.fromisoformat(period_start)).days + 1 if is_current else days_in_month
@@ -111,6 +105,18 @@ def get_pacing(
         "period_label": month,
         "categories": categories,
     }
+
+
+@router.get("/analysis/pacing")
+def get_pacing(
+    month: str = Query(...), lookback_months: int = Query(3),
+    user_id: str = Depends(get_current_user),
+):
+    conn = get_connection()
+    settings = get_user_settings(conn, user_id)
+    result = compute_pacing_payload(conn, settings, month, lookback_months, user_id)
+    conn.close()
+    return result
 
 
 @router.get("/analysis/category-stats")
@@ -201,10 +207,10 @@ def get_category_stats(
     return result
 
 
-@router.get("/analysis/outliers")
-def get_outliers(months: int = Query(3), user_id: str = Depends(get_current_user)):
+def compute_outliers(conn, user_id, months):
+    """Z-score spend outliers over the last N months. Extracted for /dashboard
+    reuse. Caller owns the connection."""
     month_list = _months_range(months)
-    conn = get_connection()
     placeholders = ",".join(["%s"] * len(month_list))
 
     expenses = conn.execute(
@@ -212,7 +218,6 @@ def get_outliers(months: int = Query(3), user_id: str = Depends(get_current_user
         f"WHERE user_id = %s AND LEFT(date, 7) IN ({placeholders}) ORDER BY date DESC",
         [user_id] + month_list,
     ).fetchall()
-    conn.close()
 
     by_type: dict[str, list[float]] = {}
     for e in expenses:
@@ -247,6 +252,14 @@ def get_outliers(months: int = Query(3), user_id: str = Depends(get_current_user
 
     outliers.sort(key=lambda x: x["z_score"], reverse=True)
     return outliers[:15]
+
+
+@router.get("/analysis/outliers")
+def get_outliers(months: int = Query(3), user_id: str = Depends(get_current_user)):
+    conn = get_connection()
+    result = compute_outliers(conn, user_id, months)
+    conn.close()
+    return result
 
 
 @router.get("/analysis/avg-monthly-expenses")

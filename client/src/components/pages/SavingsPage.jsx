@@ -395,6 +395,7 @@ function ContributionDialog({ open, onClose, goal }) {
     queryClient.invalidateQueries({ queryKey: ['savings-goals'] })
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }
 
   async function handleAdd() {
@@ -753,6 +754,7 @@ export default function SavingsPage() {
     queryClient.invalidateQueries({ queryKey: ['savings-goals'] })
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }
 
   const monthlyGoal = goals.find(g => g.goal_type === 'monthly') ?? null

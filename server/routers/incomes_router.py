@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from database import get_connection, seed_income_recurring_forward, month_start
@@ -10,6 +10,7 @@ router = APIRouter()
 
 _ALLOWED_SORT = {"name", "date", "amount"}
 _INCOME_COLS = "id, name, amount, date, created_at, is_recurring, credit_type"
+_DUPLICATE_WINDOW_SECONDS = 5
 
 
 @router.get("/incomes")
@@ -47,12 +48,9 @@ def get_incomes(
     return {"incomes": [vars(Income(**dict(r))) for r in rows], "total": total, "page": page, "page_size": page_size}
 
 
-@router.get("/incomes/summary")
-def get_income_summary(
-    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
-    user_id: str = Depends(get_current_user),
-):
-    conn = get_connection()
+def income_summary_total(conn, user_id, month=None, period_start=None, period_end=None):
+    """Total non-credit income for the window. Extracted for /dashboard reuse.
+    Caller owns the connection."""
     cursor = conn.cursor()
     if period_start and period_end:
         cursor.execute(
@@ -71,9 +69,18 @@ def get_income_summary(
             "SELECT COALESCE(SUM(amount), 0) as total FROM incomes WHERE user_id = %s AND credit_type IS NULL",
             (user_id,),
         )
-    total = cursor.fetchone()["total"]
+    return round(cursor.fetchone()["total"], 2)
+
+
+@router.get("/incomes/summary")
+def get_income_summary(
+    month: Optional[str] = None, period_start: Optional[str] = None, period_end: Optional[str] = None,
+    user_id: str = Depends(get_current_user),
+):
+    conn = get_connection()
+    total = income_summary_total(conn, user_id, month, period_start, period_end)
     conn.close()
-    return {"total": round(total, 2)}
+    return {"total": total}
 
 
 @router.get("/incomes/monthly-totals")
@@ -95,22 +102,39 @@ def get_income_monthly_totals(months: int = 6, user_id: str = Depends(get_curren
 def add_income(new_income: NewIncome, user_id: str = Depends(get_current_user)):
     if new_income.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    name = new_income.name.strip()
+    amount = round(new_income.amount, 2)
+
     income = Income(
         id=str(uuid.uuid4()),
-        name=new_income.name.strip(),
-        amount=round(new_income.amount, 2),
+        name=name,
+        amount=amount,
         date=new_income.date,
         created_at=datetime.now().isoformat(),
         is_recurring=new_income.is_recurring,
         credit_type=new_income.credit_type,
         user_id=user_id,
     )
+
     conn = get_connection()
     cursor = conn.cursor()
+
+    # Guarded insert folds the double-submit dedup into the write: WHERE NOT EXISTS
+    # catches a slow first request the user assumed failed and retried moments later
+    # from a different entry point. Keyed on name+amount (not date) since a hand-
+    # retyped date can differ between attempts. No RETURNING row → it was a duplicate.
+    cutoff = (datetime.now() - timedelta(seconds=_DUPLICATE_WINDOW_SECONDS)).isoformat()
     cursor.execute(
-        "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, credit_type, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-        (income.id, income.name, income.amount, income.date, income.created_at, income.is_recurring, income.credit_type, user_id),
+        "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, credit_type, user_id) "
+        "SELECT %s,%s,%s,%s,%s,%s,%s,%s "
+        "WHERE NOT EXISTS (SELECT 1 FROM incomes WHERE user_id = %s AND name = %s AND amount = %s AND created_at > %s) "
+        "RETURNING id",
+        (income.id, income.name, income.amount, income.date, income.created_at, income.is_recurring, income.credit_type, user_id,
+         user_id, name, amount, cutoff),
     )
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=409, detail="This looks like a duplicate of an income you just added.")
     conn.commit()
     conn.close()
     if income.is_recurring:
@@ -124,14 +148,13 @@ def update_income(income_id: str, updated: NewIncome, user_id: str = Depends(get
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM incomes WHERE id = %s AND user_id = %s", (income_id, user_id))
-    if not cursor.fetchone():
-        conn.close()
-        raise HTTPException(status_code=404, detail="Income not found")
     cursor.execute(
-        "UPDATE incomes SET name=%s, amount=%s, date=%s, is_recurring=%s, credit_type=%s WHERE id=%s AND user_id=%s",
+        "UPDATE incomes SET name=%s, amount=%s, date=%s, is_recurring=%s, credit_type=%s WHERE id=%s AND user_id=%s RETURNING id",
         (updated.name.strip(), round(updated.amount, 2), updated.date, updated.is_recurring, updated.credit_type, income_id, user_id),
     )
+    if cursor.fetchone() is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Income not found")
     conn.commit()
     conn.close()
     if updated.is_recurring:
@@ -144,11 +167,10 @@ def update_income(income_id: str, updated: NewIncome, user_id: str = Depends(get
 def delete_income(income_id: str, user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM incomes WHERE id = %s AND user_id = %s", (income_id, user_id))
-    if not cursor.fetchone():
+    cursor.execute("DELETE FROM incomes WHERE id = %s AND user_id = %s RETURNING id", (income_id, user_id))
+    if cursor.fetchone() is None:
         conn.close()
         raise HTTPException(status_code=404, detail="Income not found")
-    cursor.execute("DELETE FROM incomes WHERE id = %s AND user_id = %s", (income_id, user_id))
     conn.commit()
     conn.close()
     return {"id": income_id}

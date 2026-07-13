@@ -132,6 +132,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
       queryClient.invalidateQueries({ queryKey: ['incomes'] })
       queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       if (!isEditing && form.type === 'Savings') {
         setSavingsExpense(res.data)
         return

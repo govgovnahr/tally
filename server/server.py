@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from limiter import limiter, get_user_id_key
-from database import get_connection, init_db, apply_recurring_expenses, apply_recurring_incomes
+from database import get_connection, init_db, apply_recurring_expenses, apply_recurring_incomes, close_pool
 from routers.auth_router import router as auth_router
 from routers.ai_router import router as ai_router
 from routers.expenses_router import router as expenses_router
@@ -32,6 +32,7 @@ from routers.macrocategories_router import router as macrocategories_router
 from routers.savings_goals_router import router as savings_goals_router
 from routers.analysis_router import router as analysis_router
 from routers.settings_router import router as settings_router
+from routers.dashboard_router import router as dashboard_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -167,6 +168,7 @@ app.include_router(macrocategories_router)
 app.include_router(savings_goals_router)
 app.include_router(analysis_router)
 app.include_router(settings_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/health")
@@ -206,6 +208,11 @@ def startup():
     apply_recurring_incomes()
     if os.environ.get("OPENAI_API_KEY"):
         threading.Thread(target=_run_embedding_backfill, daemon=True).start()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    close_pool()
 
 
 def _is_bundled():

@@ -19,7 +19,7 @@ Base: `http://localhost:3001`
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/incomes` | `?month= ?page= ?page_size= ?search= ?sort_by=date\|name\|amount ?sort_dir=asc\|desc` → `{ incomes, total, page, page_size }` |
-| POST | `/incomes` | `{ name, amount, date, is_recurring }` |
+| POST | `/incomes` | `{ name, amount, date, is_recurring }` → 409 if the same `user_id`+`name`+`amount` was inserted within the last 5s (duplicate-submit guard, ignores `date`) |
 | PUT | `/incomes/{id}` | |
 | DELETE | `/incomes/{id}` | |
 | GET | `/incomes/summary` | `?month=YYYY-MM` → `{ total }` |

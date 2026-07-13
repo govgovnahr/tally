@@ -12,6 +12,7 @@ export const qk = {
   expensesMonths: () => ['expenses', 'months'],
   periodBounds: (month) => ['period-bounds', month],
   periodBoundsBulk: (months) => ['period-bounds-bulk', months],
+  dashboard: (month) => ['dashboard', month],
   incomes: (params) => ['incomes', params],
   incomesSummary: (periodStart, periodEnd) => ['incomes', 'summary', periodStart, periodEnd],
   incomesMonthlyTotals: (months) => ['incomes', 'monthly-totals', months],

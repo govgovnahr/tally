@@ -84,6 +84,7 @@ export default function BudgetGoals() {
       setSaved(true)
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
       queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     }
     catch { setSaveError('Failed to save. Please try again.') }
     finally { setSaving(false) }
@@ -113,12 +114,14 @@ export default function BudgetGoals() {
     queryClient.invalidateQueries({ queryKey: ['budgets'] })
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }
   async function handleTypeDeleted() {
     await reloadTypes()
     queryClient.invalidateQueries({ queryKey: ['budgets'] })
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }
 
   function renderRow(t) {
@@ -280,6 +283,7 @@ export default function BudgetGoals() {
             .catch(() => {})
           queryClient.invalidateQueries({ queryKey: ['budgets'] })
           queryClient.invalidateQueries({ queryKey: ['analysis'] })
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         }} />
       </div>
       <div data-tour="monthly-overrides">
@@ -292,6 +296,7 @@ export default function BudgetGoals() {
             .catch(() => {})
           queryClient.invalidateQueries({ queryKey: ['budgets'] })
           queryClient.invalidateQueries({ queryKey: ['analysis'] })
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         }} />
       </div>
       <MacrocategoryManager />
@@ -312,6 +317,7 @@ export default function BudgetGoals() {
             queryClient.invalidateQueries({ queryKey: ['budgets'] })
             queryClient.invalidateQueries({ queryKey: ['expenses'] })
             queryClient.invalidateQueries({ queryKey: ['analysis'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] })
           }}
         />
       )}

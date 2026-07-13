@@ -1,6 +1,9 @@
 import math
 import psycopg2
 import psycopg2.extras
+import psycopg2.extensions
+import psycopg2.pool
+import threading
 import uuid
 import os
 import calendar
@@ -30,9 +33,9 @@ _DEFAULT_TYPES = [
 ]
 
 
-def _make_raw_conn():
-    return psycopg2.connect(
-        os.environ["DATABASE_URL"],
+def _connect_kwargs():
+    return dict(
+        dsn=os.environ["DATABASE_URL"],
         cursor_factory=psycopg2.extras.RealDictCursor,
         connect_timeout=10,
         keepalives=1,
@@ -40,6 +43,52 @@ def _make_raw_conn():
         keepalives_interval=5,
         keepalives_count=3,
     )
+
+
+def _make_raw_conn():
+    return psycopg2.connect(**_connect_kwargs())
+
+
+# Every request opened (and fully tore down) its own TCP+TLS+Postgres-auth
+# connection before this pool existed — a fixed per-request tax regardless of
+# how close the caller is to the DB. Pooling amortizes that handshake cost
+# across requests instead of paying it every time. Sized modestly: Supabase's
+# transaction pooler (Supavisor) is meant for many short-lived clients, but
+# there's no reason for a single Render instance to hold more than a handful
+# of connections open at once under normal load.
+_POOL_MIN = 2
+_POOL_MAX = 20
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                _pool = psycopg2.pool.ThreadedConnectionPool(_POOL_MIN, _POOL_MAX, **_connect_kwargs())
+    return _pool
+
+
+def _release(conn):
+    pool = _get_pool()
+    try:
+        if conn.closed:
+            pool.putconn(conn, close=True)
+            return
+        # A handler that raised/returned without an explicit commit() or
+        # rollback() would otherwise hand back a connection mid-transaction
+        # (or aborted) — the next borrower's first query would silently run
+        # inside stale state, or fail outright. Always leave it idle.
+        if conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+            conn.rollback()
+        pool.putconn(conn)
+    except Exception:
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            pass
 
 
 class _ReconnectingCursor:
@@ -58,10 +107,10 @@ class _ReconnectingCursor:
                 if attempt == 1:
                     raise
                 try:
-                    self._connection._conn.close()
+                    _get_pool().putconn(self._connection._conn, close=True)
                 except Exception:
                     pass
-                self._connection._conn = _make_raw_conn()
+                self._connection._conn = _get_pool().getconn()
                 self._cur = self._connection._conn.cursor()
 
     def fetchall(self):
@@ -96,7 +145,10 @@ class _Connection:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        if self._conn is None:
+            return
+        _release(self._conn)
+        self._conn = None
 
     def __enter__(self):
         return self
@@ -106,11 +158,18 @@ class _Connection:
             self._conn.rollback()
         else:
             self._conn.commit()
-        self._conn.close()
+        self.close()
 
 
 def get_connection():
-    return _Connection(_make_raw_conn())
+    return _Connection(_get_pool().getconn())
+
+
+def close_pool():
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        _pool = None
 
 
 def init_db():
@@ -335,21 +394,34 @@ def _month_str(year, month):
 
 
 def seed_recurring_forward(name: str, amount: float, type_: str, source_month: str, user_id: str):
+    # Seed the next two months in ONE idempotent statement: a 2-row VALUES list
+    # filtered by WHERE NOT EXISTS (dedup key name+type+YYYY-MM), replacing the
+    # old per-month SELECT-then-INSERT loop. `mo` is the target YYYY-MM used only
+    # for the dedup; `date` is the YYYY-MM-01 actually stored. Casts on the first
+    # VALUES row stop Postgres inferring `unknown` for the text/param columns.
     conn = get_connection()
     cursor = conn.cursor()
     src_y, src_m = map(int, source_month.split('-'))
+    rows = []
     for delta in range(1, 3):
         target_str, ty, tm = _month_str(src_y, src_m + delta)
         target_date = f"{ty}-{tm:02d}-01"
-        cursor.execute(
-            "SELECT 1 FROM expenses WHERE name = %s AND type = %s AND LEFT(date, 7) = %s AND user_id = %s",
-            (name, type_, target_str, user_id),
+        rows.append((str(uuid.uuid4()), name, amount, type_, target_date, target_str, datetime.now().isoformat(), user_id))
+    cursor.execute(
+        """
+        INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id)
+        SELECT v.id, v.name, v.amount, v.type, v.date, v.created_at, 1, v.user_id
+        FROM (VALUES
+            (%s::text, %s::text, %s::double precision, %s::text, %s::text, %s::text, %s::text, %s::text),
+            (%s, %s, %s, %s, %s, %s, %s, %s)
+        ) AS v(id, name, amount, type, date, mo, created_at, user_id)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM expenses e
+            WHERE e.user_id = v.user_id AND e.name = v.name AND e.type = v.type AND LEFT(e.date, 7) = v.mo
         )
-        if not cursor.fetchone():
-            cursor.execute(
-                "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (str(uuid.uuid4()), name, amount, type_, target_date, datetime.now().isoformat(), 1, user_id),
-            )
+        """,
+        rows[0] + rows[1],
+    )
     conn.commit()
     conn.close()
 
@@ -391,21 +463,32 @@ def apply_recurring_expenses():
 
 
 def seed_income_recurring_forward(name: str, amount: float, source_month: str, user_id: str, credit_type: str = None):
+    # Same one-statement idempotent seed as seed_recurring_forward, minus `type`,
+    # carrying credit_type (cast ::text so a NULL doesn't break VALUES inference).
+    # Dedup key is name+YYYY-MM only (incomes have no type).
     conn = get_connection()
     cursor = conn.cursor()
     src_y, src_m = map(int, source_month.split('-'))
+    rows = []
     for delta in range(1, 3):
         target_str, ty, tm = _month_str(src_y, src_m + delta)
         target_date = f"{ty}-{tm:02d}-01"
-        cursor.execute(
-            "SELECT 1 FROM incomes WHERE name = %s AND LEFT(date, 7) = %s AND user_id = %s",
-            (name, target_str, user_id),
+        rows.append((str(uuid.uuid4()), name, amount, target_date, target_str, datetime.now().isoformat(), credit_type, user_id))
+    cursor.execute(
+        """
+        INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, credit_type, user_id)
+        SELECT v.id, v.name, v.amount, v.date, v.created_at, 1, v.credit_type, v.user_id
+        FROM (VALUES
+            (%s::text, %s::text, %s::double precision, %s::text, %s::text, %s::text, %s::text, %s::text),
+            (%s, %s, %s, %s, %s, %s, %s, %s)
+        ) AS v(id, name, amount, date, mo, created_at, credit_type, user_id)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM incomes i
+            WHERE i.user_id = v.user_id AND i.name = v.name AND LEFT(i.date, 7) = v.mo
         )
-        if not cursor.fetchone():
-            cursor.execute(
-                "INSERT INTO incomes (id, name, amount, date, created_at, is_recurring, user_id, credit_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (str(uuid.uuid4()), name, amount, target_date, datetime.now().isoformat(), 1, user_id, credit_type),
-            )
+        """,
+        rows[0] + rows[1],
+    )
     conn.commit()
     conn.close()
 

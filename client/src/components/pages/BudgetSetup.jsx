@@ -180,6 +180,7 @@ function BudgetLimitsStep({ onComplete, onSkip }) {
     try {
       await api.post('/budgets', budgets)
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       onComplete()
     } catch {
       setError('Failed to save budgets. Please try again.')
@@ -256,6 +257,7 @@ export default function BudgetSetup({ onComplete }) {
       // ignore — best effort
     }
     queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     onComplete()
   }
 
