@@ -298,6 +298,8 @@ def init_db():
     for sql in [
         "ALTER TABLE user_settings ADD COLUMN cycle_start_day INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE user_settings ADD COLUMN seen_category_migration_notice BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE expenses ADD COLUMN subcategory TEXT",
+        "ALTER TABLE import_rules ADD COLUMN subcategory TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -310,6 +312,7 @@ def init_db():
     for sql in [
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)",
         "CREATE INDEX IF NOT EXISTS idx_expenses_user_type ON expenses(user_id, type)",
+        "CREATE INDEX IF NOT EXISTS idx_expenses_user_subcategory ON expenses(user_id, subcategory)",
         "CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)",
         "CREATE INDEX IF NOT EXISTS idx_savings_goals_user ON savings_goals(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_contributions_goal ON savings_contributions(goal_id)",

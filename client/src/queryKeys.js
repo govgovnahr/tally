@@ -10,6 +10,7 @@ export const qk = {
   expensesSummary: (periodStart, periodEnd) => ['expenses', 'summary', periodStart, periodEnd],
   expensesMonthlyByType: (months) => ['expenses', 'monthly-by-type', months],
   expensesMonths: () => ['expenses', 'months'],
+  expensesSubcategories: () => ['expenses', 'subcategories'],
   periodBounds: (month) => ['period-bounds', month],
   periodBoundsBulk: (months) => ['period-bounds-bulk', months],
   dashboard: (month) => ['dashboard', month],

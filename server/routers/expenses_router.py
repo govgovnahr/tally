@@ -9,7 +9,7 @@ from auth import get_current_user
 
 router = APIRouter()
 
-_EXPENSE_COLS = "id, name, amount, type, date, created_at, is_recurring"
+_EXPENSE_COLS = "id, name, amount, type, date, created_at, is_recurring, subcategory"
 _ALLOWED_SORT = {"name", "date", "amount"}
 
 
@@ -22,6 +22,7 @@ def _valid_type_names(conn, user_id: str):
 @router.get("/expenses")
 def get_expenses(
     type: Optional[str] = None, month: Optional[str] = None, macrocategory_id: Optional[str] = None,
+    subcategory: Optional[str] = None,
     period_start: Optional[str] = None, period_end: Optional[str] = None,
     page: int = 1, page_size: int = 50, search: Optional[str] = None,
     sort_by: str = "date", sort_dir: str = "desc",
@@ -36,6 +37,9 @@ def get_expenses(
     if type:
         conditions.append("type = %s")
         params.append(type)
+    if subcategory:
+        conditions.append("subcategory = %s")
+        params.append(subcategory)
     if macrocategory_id:
         conditions.append("type IN (SELECT name FROM expense_types WHERE macrocategory_id = %s AND user_id = %s)")
         params.extend([macrocategory_id, user_id])
@@ -72,6 +76,7 @@ def add_expense(new_expense: NewExpense, user_id: str = Depends(get_current_user
         date=new_expense.date,
         created_at=datetime.now().isoformat(),
         is_recurring=new_expense.is_recurring,
+        subcategory=new_expense.subcategory,
     )
 
     conn = get_connection()
@@ -80,12 +85,12 @@ def add_expense(new_expense: NewExpense, user_id: str = Depends(get_current_user
     # as the write. rowcount 0 (no RETURNING row) means the type was invalid —
     # the only reason this can fail to insert — so it's unambiguously a 400.
     cursor.execute(
-        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id) "
-        "SELECT %s,%s,%s,%s,%s,%s,%s,%s "
+        "INSERT INTO expenses (id, name, amount, type, date, created_at, is_recurring, user_id, subcategory) "
+        "SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s "
         "WHERE EXISTS (SELECT 1 FROM expense_types WHERE user_id = %s AND name = %s) "
         "RETURNING id",
         (expense.id, expense.name, expense.amount, expense.type, expense.date, expense.created_at, expense.is_recurring, user_id,
-         user_id, expense.type),
+         expense.subcategory, user_id, expense.type),
     )
     if cursor.fetchone() is None:
         conn.close()
@@ -126,6 +131,21 @@ def get_months(user_id: str = Depends(get_current_user)):
         labels.add(cycle_period_for_date(first_day, cycle_start_day)[2])
         labels.add(cycle_period_for_date(last_day, cycle_start_day)[2])
     return sorted(labels)
+
+
+@router.get("/expenses/subcategories")
+def get_subcategories(user_id: str = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT DISTINCT subcategory FROM expenses "
+        "WHERE user_id = %s AND subcategory IS NOT NULL AND subcategory != '' "
+        "ORDER BY subcategory",
+        (user_id,),
+    )
+    result = [row["subcategory"] for row in cursor.fetchall()]
+    conn.close()
+    return result
 
 
 def summary_rows(conn, user_id, month=None, period_start=None, period_end=None):
@@ -207,8 +227,8 @@ def update_expense(expense_id: str, updated: NewExpense, user_id: str = Depends(
     # Type already validated above (keeps 400-vs-404 distinct); RETURNING folds
     # the existence check into the UPDATE — no row back means id/user_id missed → 404.
     cursor.execute(
-        "UPDATE expenses SET name=%s, amount=%s, type=%s, date=%s, is_recurring=%s WHERE id=%s AND user_id=%s RETURNING id",
-        (updated.name.strip(), round(updated.amount, 2), updated.type, updated.date, updated.is_recurring, expense_id, user_id),
+        "UPDATE expenses SET name=%s, amount=%s, type=%s, date=%s, is_recurring=%s, subcategory=%s WHERE id=%s AND user_id=%s RETURNING id",
+        (updated.name.strip(), round(updated.amount, 2), updated.type, updated.date, updated.is_recurring, updated.subcategory, expense_id, user_id),
     )
     if cursor.fetchone() is None:
         conn.close()
@@ -220,7 +240,8 @@ def update_expense(expense_id: str, updated: NewExpense, user_id: str = Depends(
         seed_recurring_forward(updated.name.strip(), round(updated.amount, 2), updated.type, updated.date[:7], user_id)
 
     return {"id": expense_id, "name": updated.name.strip(), "amount": round(updated.amount, 2),
-            "type": updated.type, "date": updated.date, "is_recurring": updated.is_recurring}
+            "type": updated.type, "date": updated.date, "is_recurring": updated.is_recurring,
+            "subcategory": updated.subcategory}
 
 
 @router.delete("/transactions")

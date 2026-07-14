@@ -30,6 +30,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
     amount: expense?.amount ?? prefill?.amount ?? '',
     type: expense?.type ?? (prefill?.type && typeNames.includes(prefill.type) ? prefill.type : typeNames[0] ?? ''),
     date: expense?.date ?? prefill?.date ?? today(),
+    subcategory: expense?.subcategory ?? prefill?.subcategory ?? '',
   })
   const [isRecurring, setIsRecurring] = useState(expense?.is_recurring === 1)
   const [rememberRule, setRememberRule] = useState(false)
@@ -48,6 +49,12 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
     staleTime: 5 * 60_000,
   })
   const aiEnabled = settings?.ai_enabled ?? false
+
+  const { data: subcategorySuggestions = [] } = useQuery({
+    queryKey: qk.expensesSubcategories(),
+    queryFn: () => api.get('/expenses/subcategories').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
 
   async function handleNlParse() {
     if (!nlText.trim()) return
@@ -122,12 +129,17 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
         type: form.type,
         date: form.date,
         is_recurring: isRecurring ? 1 : 0,
+        subcategory: form.subcategory.trim() ? form.subcategory.trim() : null,
       }
       const res = isEditing
         ? await api.put(`/expenses/${expense.id}`, payload)
         : await api.post('/expenses', payload)
       if (rememberRule && rulePattern.trim()) {
-        await api.post('/import-rules', { pattern: rulePattern.trim(), expense_type: form.type })
+        await api.post('/import-rules', {
+          pattern: rulePattern.trim(),
+          expense_type: form.type,
+          subcategory: payload.subcategory,
+        })
       }
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
       queryClient.invalidateQueries({ queryKey: ['incomes'] })
@@ -230,6 +242,18 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
               {typeNames.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </FieldGroup>
+          <FieldGroup label="Subcategory (optional)">
+            <Input
+              name="subcategory"
+              list="subcategory-suggestions"
+              placeholder="e.g. Coffee Shops"
+              value={form.subcategory}
+              onChange={handleChange}
+            />
+            <datalist id="subcategory-suggestions">
+              {subcategorySuggestions.map(s => <option key={s} value={s} />)}
+            </datalist>
+          </FieldGroup>
           <FieldGroup label="Date">
             <Input
               name="date"
@@ -262,6 +286,7 @@ export default function AddExpenseForm({ onClose, onAdded, expense, prefill }) {
                   />
                   <p className="text-xs" style={{ color: C.muted }}>
                     Transactions with "{rulePattern}" will be set to: {form.type}
+                    {form.subcategory.trim() ? ` / ${form.subcategory.trim()}` : ''}
                   </p>
                 </FieldGroup>
               )}

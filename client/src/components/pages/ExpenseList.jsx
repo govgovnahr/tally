@@ -90,6 +90,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
 
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
+  const [activeSubcategory, setActiveSubcategory] = useState('')
   const [sortBy, setSortBy] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
   const [total, setTotal] = useState(0)
@@ -159,7 +160,7 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
     }
   }
 
-  useEffect(() => { setPage(1) }, [activeType, activeMacro, effectiveMonth, periodStart, periodEnd, search, sortBy, sortDir])
+  useEffect(() => { setPage(1) }, [activeType, activeMacro, activeSubcategory, effectiveMonth, periodStart, periodEnd, search, sortBy, sortDir])
 
   const periodParams = periodStart && periodEnd ? { period_start: periodStart, period_end: periodEnd }
     : effectiveMonth ? { month: effectiveMonth } : {}
@@ -173,9 +174,16 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
   const expenseParams = activeType !== 'Income' ? {
     page, page_size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
     ...(activeMacro ? { macrocategory_id: activeMacro } : activeType !== 'All' ? { type: activeType } : {}),
+    ...(activeSubcategory ? { subcategory: activeSubcategory } : {}),
     ...periodParams,
     ...(search ? { search } : {}),
   } : null
+
+  const { data: subcategoryOptions = [] } = useQuery({
+    queryKey: qk.expensesSubcategories(),
+    queryFn: () => api.get('/expenses/subcategories').then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
 
   const { data: incomesResult, isPlaceholderData: incomesPlaceholder } = useQuery({
     queryKey: qk.incomes(incomeParams),
@@ -347,8 +355,8 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
       </div>
 
       {/* Search */}
-      <div className="px-3 py-2" style={{ borderBottom: `1px solid ${C.hoverStrong}` }}>
-        <div className="relative">
+      <div className="px-3 py-2 flex gap-2" style={{ borderBottom: `1px solid ${C.hoverStrong}` }}>
+        <div className="relative flex-1">
           <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: C.dimText }} />
           <Input
             placeholder="Search by name…"
@@ -367,6 +375,17 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
             </button>
           )}
         </div>
+        {!isIncome && subcategoryOptions.length > 0 && (
+          <select
+            value={activeSubcategory}
+            onChange={e => setActiveSubcategory(e.target.value)}
+            className="h-8 rounded-lg border px-2 text-sm bg-transparent flex-shrink-0"
+            style={{ borderColor: C.borderLight, color: C.warmText, maxWidth: 140 }}
+          >
+            <option value="">All subcategories</option>
+            {subcategoryOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Empty state */}
@@ -418,24 +437,29 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
                   ${row.amount.toFixed(2)}
                 </span>
               </div>
-              <div className="flex items-center justify-between mt-1">
-                {isIncome ? (
-                  <SourceChip creditType={row.credit_type} />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={ev => { ev.stopPropagation(); handleTypeChange(row.type) }}
-                    className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent font-[inherit] transition-opacity duration-150 hover:opacity-70"
-                    style={{
-                      color: C.adaptColor(typeMap[row.type]?.color || C.dimText),
-                      borderColor: C.adaptColor(typeMap[row.type]?.color || C.dimText),
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {row.type}
-                  </button>
-                )}
-                <span className="text-xs" style={{ color: C.muted }}>{formatDate(row.date)}</span>
+              <div className="flex items-center justify-between mt-1 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isIncome ? (
+                    <SourceChip creditType={row.credit_type} />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={ev => { ev.stopPropagation(); handleTypeChange(row.type) }}
+                      className="text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap bg-transparent font-[inherit] transition-opacity duration-150 hover:opacity-70 flex-shrink-0"
+                      style={{
+                        color: C.adaptColor(typeMap[row.type]?.color || C.dimText),
+                        borderColor: C.adaptColor(typeMap[row.type]?.color || C.dimText),
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {row.type}
+                    </button>
+                  )}
+                  {!isIncome && row.subcategory && (
+                    <span className="text-[11px] truncate" style={{ color: C.dimText }}>{row.subcategory}</span>
+                  )}
+                </div>
+                <span className="text-xs flex-shrink-0" style={{ color: C.muted }}>{formatDate(row.date)}</span>
               </div>
             </div>
           )})}
@@ -528,6 +552,9 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
                           </button>
                         )}
                       </div>
+                      {e.subcategory && (
+                        <div className="text-[11px] truncate" style={{ color: C.dimText }}>{e.subcategory}</div>
+                      )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <button
@@ -643,6 +670,12 @@ export default function ExpenseList({ month, periodStart, periodEnd, activeType:
                 {detailIsIncome ? 'Income' : detailItem?.type}
               </button>
             </div>
+            {!detailIsIncome && detailItem?.subcategory && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Subcategory</span>
+                <span className="text-sm">{detailItem.subcategory}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Date</span>
               <span className="text-sm">{detailItem?.date ? formatDate(detailItem.date) : ''}</span>

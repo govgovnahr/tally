@@ -95,6 +95,93 @@ def test_update_expense_invalid_type_400(client):
     assert r.status_code == 400
 
 
+def test_create_expense_with_subcategory(client):
+    r = client.post("/expenses", json={
+        "name": "Latte", "amount": 5.5, "type": "Food",
+        "date": "2026-05-01", "is_recurring": False, "subcategory": "Coffee Shops",
+    })
+    assert r.status_code == 200
+    assert r.json()["subcategory"] == "Coffee Shops"
+
+
+def test_create_expense_without_subcategory_is_null(client):
+    r = client.post("/expenses", json={
+        "name": "No Subcat", "amount": 5.0, "type": "Food",
+        "date": "2026-05-01", "is_recurring": False,
+    })
+    assert r.status_code == 200
+    assert r.json().get("subcategory") is None
+
+
+def test_blank_subcategory_normalized_to_null(client):
+    r = client.post("/expenses", json={
+        "name": "Blank Subcat", "amount": 5.0, "type": "Food",
+        "date": "2026-05-01", "is_recurring": False, "subcategory": "   ",
+    })
+    assert r.status_code == 200
+    assert r.json()["subcategory"] is None
+
+
+def test_filter_by_subcategory(client):
+    client.post("/expenses", json={
+        "name": "Espresso", "amount": 3.0, "type": "Food",
+        "date": "2026-05-03", "is_recurring": False, "subcategory": "Coffee Shops",
+    })
+    client.post("/expenses", json={
+        "name": "Cereal", "amount": 6.0, "type": "Food",
+        "date": "2026-05-03", "is_recurring": False, "subcategory": "Groceries",
+    })
+    r = client.get("/expenses?subcategory=Coffee+Shops")
+    assert r.status_code == 200
+    names = [e["name"] for e in r.json()["expenses"]]
+    assert "Espresso" in names
+    assert "Cereal" not in names
+
+
+def test_update_expense_sets_subcategory(client):
+    create_r = client.post("/expenses", json={
+        "name": "Update Subcat", "amount": 8.0, "type": "Other",
+        "date": "2026-05-01", "is_recurring": False,
+    })
+    expense_id = create_r.json()["id"]
+    put_r = client.put(f"/expenses/{expense_id}", json={
+        "name": "Update Subcat", "amount": 8.0, "type": "Other",
+        "date": "2026-05-01", "is_recurring": False, "subcategory": "Utilities",
+    })
+    assert put_r.status_code == 200
+    assert put_r.json()["subcategory"] == "Utilities"
+
+    list_r = client.get("/expenses?search=Update+Subcat")
+    updated = next(e for e in list_r.json()["expenses"] if e["id"] == expense_id)
+    assert updated["subcategory"] == "Utilities"
+
+
+def test_get_subcategories_returns_distinct_sorted(client):
+    client.post("/expenses", json={
+        "name": "Sub A1", "amount": 1.0, "type": "Food",
+        "date": "2026-05-04", "is_recurring": False, "subcategory": "Zeta Subcat",
+    })
+    client.post("/expenses", json={
+        "name": "Sub A2", "amount": 1.0, "type": "Food",
+        "date": "2026-05-04", "is_recurring": False, "subcategory": "Zeta Subcat",
+    })
+    client.post("/expenses", json={
+        "name": "Sub A3", "amount": 1.0, "type": "Food",
+        "date": "2026-05-04", "is_recurring": False, "subcategory": "Alpha Subcat",
+    })
+    client.post("/expenses", json={
+        "name": "Sub A4", "amount": 1.0, "type": "Food",
+        "date": "2026-05-04", "is_recurring": False,
+    })
+    r = client.get("/expenses/subcategories")
+    assert r.status_code == 200
+    result = r.json()
+    assert result.count("Zeta Subcat") == 1
+    assert "Alpha Subcat" in result
+    assert result.index("Alpha Subcat") < result.index("Zeta Subcat")
+    assert None not in result and "" not in result
+
+
 def test_recurring_expense_seeds_two_months_idempotently(client):
     payload = {
         "name": "Rent Probe", "amount": 1500.0, "type": "Other",

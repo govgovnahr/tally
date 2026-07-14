@@ -48,3 +48,37 @@ def test_delete_import_rule(client):
 def test_delete_missing_rule_404(client):
     r = client.delete("/import-rules/does-not-exist")
     assert r.status_code == 404
+
+
+def test_create_rule_with_subcategory_retroactively_updates_matches(client):
+    client.post("/expenses", json={
+        "name": "Blue Bottle Coffee", "amount": 6.0, "type": "Other",
+        "date": "2026-05-01", "is_recurring": False,
+    })
+
+    r = client.post("/import-rules", json={
+        "pattern": "blue bottle", "expense_type": "Food", "subcategory": "Coffee Shops",
+    })
+    assert r.status_code == 201
+    assert r.json()["subcategory"] == "Coffee Shops"
+    assert r.json()["updated_count"] >= 1
+
+    expenses_r = client.get("/expenses?subcategory=Coffee+Shops")
+    names = [e["name"] for e in expenses_r.json()["expenses"]]
+    assert "Blue Bottle Coffee" in names
+
+
+def test_rule_without_subcategory_does_not_null_out_existing_subcategory(client):
+    create_r = client.post("/expenses", json={
+        "name": "Trader Joes Run", "amount": 40.0, "type": "Other",
+        "date": "2026-05-01", "is_recurring": False, "subcategory": "Groceries",
+    })
+    expense_id = create_r.json()["id"]
+
+    r = client.post("/import-rules", json={"pattern": "trader joes", "expense_type": "Food"})
+    assert r.status_code == 201
+    assert r.json()["subcategory"] is None
+
+    updated = next(e for e in client.get("/expenses?search=Trader+Joes").json()["expenses"] if e["id"] == expense_id)
+    assert updated["type"] == "Food"
+    assert updated["subcategory"] == "Groceries"

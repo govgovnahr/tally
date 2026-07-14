@@ -27,6 +27,13 @@ def _valid_cycle_day(v: Optional[int]) -> Optional[int]:
     return v
 
 
+def _normalize_subcategory(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
+    v = v.strip()
+    return v or None
+
+
 @dataclass
 class Expense:
     id: str
@@ -36,6 +43,7 @@ class Expense:
     date: str
     created_at: str
     is_recurring: int = 0
+    subcategory: Optional[str] = None
 
 
 @dataclass
@@ -49,8 +57,10 @@ class NewExpense(BaseModel):
     type: str = Field(min_length=1, max_length=100)
     date: str
     is_recurring: int = Field(0, ge=0, le=1)
+    subcategory: Optional[str] = Field(None, max_length=100)
 
     _vdate = field_validator("date")(_valid_date)
+    _vsubcat = field_validator("subcategory")(_normalize_subcategory)
 
 
 @dataclass
