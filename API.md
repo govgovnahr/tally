@@ -2,6 +2,11 @@
 
 Base: `http://localhost:3001`
 
+## Dashboard
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/dashboard` | `?month=YYYY-MM &lookback_months=3 &outlier_months=12` → `{ month, period:{period_start,period_end,period_label}, expenses_summary[], incomes_summary:{total}, macrocategories_summary[], budgets_effective[], pacing:{...}, outliers[], savings_goals[] }`. Aggregates the sections below (same shapes as their standalone endpoints) into one request, computed on one pooled connection with `period_start`/`period_end` resolved server-side from the user's billing cycle. `outliers` is filtered to the requested month's period window. Used by `DashboardPage.jsx` in place of 8 separate GETs. |
+
 ## Expenses
 | Method | Path | Notes |
 |--------|------|-------|

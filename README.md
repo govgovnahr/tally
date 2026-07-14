@@ -41,7 +41,7 @@ cd client && npm install && npm run dev
 
 ## Tests
 
-Integration tests run against a real Postgres connection — no mocks. Set `DATABASE_URL` before running.
+**Backend** — integration tests run against a real Postgres connection, no mocks. Set `DATABASE_URL` before running.
 
 ```bash
 cd server
@@ -50,6 +50,13 @@ pytest
 ```
 
 Tests use a dedicated test user ID and clean up all inserted data after the session.
+
+**Frontend** — Vitest + React Testing Library, colocated with the source files.
+
+```bash
+cd client
+npm test
+```
 
 ---
 
