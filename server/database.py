@@ -6,11 +6,23 @@ import psycopg2.pool
 import threading
 import uuid
 import os
+import json
 import calendar
+import contextvars
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+# Set by server.py's _bind_db_identity ASGI middleware for the duration of a
+# request (must be middleware, not a FastAPI dependency — see
+# auth.resolve_identity_for_db's docstring for why). get_connection() reads
+# this to bind the checked-out connection to the requesting user's Postgres
+# identity so RLS policies actually apply. Left unset (None) for
+# system/startup code — init_db(), backfill_all_users(), seed_demo.py — which
+# legitimately runs outside any one user's request and should keep using the
+# app's own bypass-RLS role.
+current_user_id: contextvars.ContextVar = contextvars.ContextVar("current_user_id", default=None)
 
 
 # Aligned with Plaid's personal_finance_category.primary taxonomy (see
@@ -162,7 +174,20 @@ class _Connection:
 
 
 def get_connection():
-    return _Connection(_get_pool().getconn())
+    conn = _Connection(_get_pool().getconn())
+    user_id = current_user_id.get()
+    if user_id is not None:
+        # Both statements are transaction-local (SET LOCAL / set_config's third
+        # arg) — they auto-revert at COMMIT or ROLLBACK, and _release() below
+        # always rolls back a non-idle connection before it returns to the pool,
+        # so a later request reusing this same pooled connection under a
+        # different user can never inherit this one's identity.
+        conn.execute("SET LOCAL ROLE authenticated")
+        conn.execute(
+            "SELECT set_config('request.jwt.claims', %s, true)",
+            (json.dumps({"sub": user_id}),),
+        )
+    return conn
 
 
 def close_pool():
@@ -322,6 +347,39 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_budgets_user ON budgets(user_id)",
     ]:
         cursor.execute(sql)
+
+    # Row Level Security: a DB-level backstop under every hand-written user_id
+    # filter in the routers/agent tools. Supabase auto-grants anon/authenticated
+    # full DML on new public tables, and Postgres enforces nothing by default —
+    # without this, anyone holding the (publicly-shipped) anon key could read/write
+    # any user's rows directly via Supabase's REST API, bypassing this app entirely.
+    # The app's own connection (role `postgres`, BYPASSRLS) is unaffected either way;
+    # real enforcement for the app's own queries also requires the SET LOCAL ROLE
+    # switch in get_connection() below — which needs its own GRANT here, since a
+    # GRANT is a precondition Postgres checks before RLS is ever consulted, not
+    # something RLS policies substitute for. `anon` deliberately gets nothing:
+    # every legitimate access path (this app, or any future direct PostgREST use)
+    # authenticates first and only ever needs the `authenticated` role.
+    #
+    # Compares against request.jwt.claims->>'sub' directly rather than calling
+    # Supabase's auth.uid(), which casts that same value to ::uuid — DEV_MODE's
+    # and the test suite's fixed fake user ids (e.g. "dev-user-00000000-...",
+    # "test-user-00000000-...") aren't valid UUID strings, and auth.uid() would
+    # hard-error on them instead of just not matching.
+    _rls_tables = [
+        "expenses", "incomes", "expense_types", "macrocategories", "budgets",
+        "monthly_budgets", "import_rules", "savings_goals", "savings_contributions",
+        "user_settings", "transaction_embeddings",
+    ]
+    for table in _rls_tables:
+        cursor.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        cursor.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO authenticated")
+        cursor.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table}")
+        cursor.execute(
+            f"CREATE POLICY tenant_isolation ON {table} FOR ALL "
+            f"USING (user_id = (current_setting('request.jwt.claims', true)::json ->> 'sub')) "
+            f"WITH CHECK (user_id = (current_setting('request.jwt.claims', true)::json ->> 'sub'))"
+        )
 
     # Embeddings table for AI semantic search.
     # Wrapped in try/except because this requires the pgvector extension in Supabase.

@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient
 import server
+import auth
 from server import app
 from auth import get_current_user
 from database import get_connection
@@ -49,6 +50,15 @@ _CLEANUP_TABLES = [
 def client():
     app.dependency_overrides[get_current_user] = lambda: TEST_USER
 
+    # _bind_db_identity (server.py) reads auth.resolve_identity_for_db directly
+    # as a plain function call in ASGI middleware, not through FastAPI's
+    # dependency-injection system — app.dependency_overrides above has no
+    # effect on it. Patch it separately so this suite's requests actually run
+    # under Postgres's `authenticated` role / RLS, the same as a real signed-in
+    # user, instead of silently staying on the app's bypass-RLS role.
+    _real_resolve_identity_for_db = auth.resolve_identity_for_db
+    auth.resolve_identity_for_db = lambda request: TEST_USER
+
     conn = get_connection()
     for name, color, icon, sort_order in _SEED_TYPES:
         conn.execute(
@@ -72,3 +82,4 @@ def client():
     conn.close()
 
     app.dependency_overrides.clear()
+    auth.resolve_identity_for_db = _real_resolve_identity_for_db
