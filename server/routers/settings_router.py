@@ -1,7 +1,7 @@
 import logging
 import threading
 from fastapi import APIRouter, Depends, HTTPException, Query
-from database import get_connection, get_user_settings, save_user_settings, cycle_bounds
+from database import get_connection, get_user_settings, save_user_settings, cycle_bounds, current_user_id
 from models import SettingsUpdate
 from auth import get_current_user
 
@@ -74,6 +74,15 @@ def delete_ai_data(user_id: str = Depends(get_current_user)):
 
 
 def _backfill_user(user_id: str):
+    # Runs in a plain background thread (threading.Thread, not an asyncio/
+    # anyio task), which does NOT inherit the caller's contextvars.Context —
+    # current_user_id would otherwise be unset here, so this thread's
+    # get_connection() calls would run on the bypass-RLS role instead of
+    # being scoped to `authenticated` for this user. backfill_embeddings
+    # already takes user_id explicitly, so writes were always correctly
+    # scoped even without this — this just restores the RLS backstop for
+    # this one write path, consistent with every request-driven one.
+    current_user_id.set(user_id)
     try:
         from embeddings import backfill_embeddings
         conn = get_connection()

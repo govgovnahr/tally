@@ -95,32 +95,32 @@ def resolve_identity_for_db(request) -> str:
     middleware to select which Postgres identity a request's queries run
     under (see database.py's current_user_id / get_connection()).
 
-    Deliberately NOT the same code path as get_current_user, and not merely a
-    wrapper around it: FastAPI dispatches every sync dependency (including
-    get_current_user) to the threadpool via its own separate
-    contextvars.copy_context() snapshot, independent of the route handler's
-    own dispatch — a contextvar mutated inside a dependency's body never
-    becomes visible inside the endpoint body (or get_connection(), called
-    from deep inside it). Only code running in the ASGI middleware layer,
-    before call_next() triggers those downstream dispatches, shares a context
-    with the endpoint — so identity binding has to happen there instead.
+    Calls get_current_user() as a plain function — not as a FastAPI-resolved
+    dependency — so both entry points share one implementation of the
+    DEV_MODE/Bearer-header checks instead of two independently-maintained
+    copies. This is safe specifically because it's a direct Python call
+    already running inside the middleware's own execution, not a Depends()
+    invocation: FastAPI dispatches sync dependencies (including
+    get_current_user, when used as Depends(get_current_user) on a route) to
+    the threadpool via their own separate contextvars.copy_context()
+    snapshot, so a contextvar set during that dependency-resolution call
+    never becomes visible in the route handler's own dispatch — that's the
+    isolation problem this middleware exists to route around in the first
+    place. Calling get_current_user() directly here sidesteps that entirely;
+    there's no dependency dispatch involved, just an ordinary function call.
 
     Auth enforcement itself is untouched and still entirely get_current_user's
-    job. This returns None (never raises) for any request it can't resolve;
-    such requests simply keep running on the app's own bypass-RLS connection
-    role, same as before this existed, until/unless get_current_user
-    separately rejects them with a 401.
+    job, invoked separately (and for real) as each protected route's
+    dependency. This returns None (never raises) for any request it can't
+    resolve; such requests simply keep running on the app's own bypass-RLS
+    connection role until/unless get_current_user separately rejects them
+    with a 401.
 
     Tests monkeypatch this name directly (tests/conftest.py) rather than via
     app.dependency_overrides, which only affects FastAPI's own dependency
     resolution and has no effect on this middleware-time call.
     """
-    if DEV_MODE:
-        return DEV_USER_ID
-    authorization = request.headers.get("authorization")
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
     try:
-        return _verify_bearer_token(authorization)
+        return get_current_user(request.headers.get("authorization"))
     except HTTPException:
         return None
