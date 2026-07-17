@@ -33,12 +33,20 @@ const NAV_ITEMS = [
   { value: 'chat',         label: 'Ask Tally', Icon: MessageCircle },
 ]
 
+// 'account' isn't a nav tab but is reachable via the header icon, so it's a valid persisted page too.
+const VALID_PAGES = [...NAV_ITEMS.map(item => item.value), 'account']
+
+function initialPage() {
+  const saved = localStorage.getItem('tally_page')
+  return VALID_PAGES.includes(saved) ? saved : 'home'
+}
+
 function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
   const queryClient = useQueryClient()
   const { loading: typesLoading } = useExpenseTypes()
   const { registerNavigate, trackPage, start: startTour, suggestOnboardingTour } = useTutorial()
-  const [page, setPage] = useState('home')
+  const [page, setPage] = useState(initialPage)
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [outlierMonth, setOutlierMonth] = useState(null)
@@ -78,6 +86,9 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
   // Give the tutorial context access to navigation and track current page
   useEffect(() => { registerNavigate(pg => setPage(pg)) }, [])
   useEffect(() => { trackPage(page) }, [page])
+
+  // Persist the active page so a reload lands back where the user was, not on Overview.
+  useEffect(() => { localStorage.setItem('tally_page', page) }, [page])
 
   // Auto-start onboarding tour for brand new users
   useEffect(() => {
