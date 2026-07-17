@@ -6,11 +6,38 @@ import psycopg2.pool
 import threading
 import uuid
 import os
+import json
 import calendar
+import contextvars
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+# Set by server.py's _bind_db_identity ASGI middleware for the duration of a
+# request (must be middleware, not a FastAPI dependency — see
+# auth.resolve_identity_for_db's docstring for why). get_connection() reads
+# this to bind the checked-out connection to the requesting user's Postgres
+# identity so RLS policies actually apply. Left unset (None) for
+# system/startup code — init_db(), backfill_all_users(), seed_demo.py — which
+# legitimately runs outside any one user's request and should keep using the
+# app's own bypass-RLS role.
+current_user_id: contextvars.ContextVar = contextvars.ContextVar("current_user_id", default=None)
+
+# Every table with a user_id column — the single source of truth for "which
+# tables hold one user's data." Used to RLS-enable every one of them (below)
+# and by tests/conftest.py's session teardown, which needs to wipe all of
+# them for full test-to-test isolation. Deliberately NOT used by
+# auth_router.py's clear_all_data endpoint, which is a curated *subset*
+# (transactional data only, not account preferences like user_settings) —
+# that's a real, deliberate scope difference, not drift to unify away. Keep
+# this list in sync with init_db()'s CREATE TABLE statements when adding a
+# new user-scoped table.
+_USER_OWNED_TABLES = [
+    "expenses", "incomes", "expense_types", "macrocategories", "budgets",
+    "monthly_budgets", "import_rules", "savings_goals", "savings_contributions",
+    "user_settings", "transaction_embeddings",
+]
 
 
 # Aligned with Plaid's personal_finance_category.primary taxonomy (see
@@ -112,6 +139,11 @@ class _ReconnectingCursor:
                     pass
                 self._connection._conn = _get_pool().getconn()
                 self._cur = self._connection._conn.cursor()
+                # The swapped-in connection is a fresh checkout with no RLS
+                # identity bound — without this, the rest of the request would
+                # silently fall back to the pool's bypass-RLS role after a
+                # transient drop mid-request, with no error raised.
+                _bind_rls_identity(self._connection)
 
     def fetchall(self):
         return self._cur.fetchall()
@@ -140,9 +172,17 @@ class _Connection:
 
     def commit(self):
         self._conn.commit()
+        # SET LOCAL / set_config(..., true) are scoped to the transaction that
+        # was just closed by this commit — Postgres reverts both immediately,
+        # regardless of whether the caller keeps using this same connection
+        # for further queries. Re-bind so a handler that commits mid-function
+        # (common: insert + commit, then a couple of read-back queries before
+        # close()) doesn't silently lose RLS scoping for its own remaining work.
+        _bind_rls_identity(self)
 
     def rollback(self):
         self._conn.rollback()
+        _bind_rls_identity(self)
 
     def close(self):
         if self._conn is None:
@@ -161,8 +201,41 @@ class _Connection:
         self.close()
 
 
+def _bind_rls_identity(conn):
+    """
+    Runs SET LOCAL ROLE authenticated + set_config('request.jwt.claims', ...)
+    on `conn` if current_user_id is bound for this request — a no-op
+    otherwise. Both statements are transaction-local and Postgres silently
+    reverts them at the end of the current transaction (COMMIT or ROLLBACK),
+    so this needs to run at every point a fresh transaction may start under a
+    bound identity: initial checkout (get_connection), after a mid-request
+    reconnect swaps in a new raw connection (_ReconnectingCursor's retry
+    path), and after commit()/rollback() if the caller keeps using the same
+    connection (_Connection.commit/rollback above).
+    """
+    user_id = current_user_id.get()
+    if user_id is None:
+        return
+    conn.execute("SET LOCAL ROLE authenticated")
+    conn.execute(
+        "SELECT set_config('request.jwt.claims', %s, true)",
+        (json.dumps({"sub": user_id}),),
+    )
+
+
 def get_connection():
-    return _Connection(_get_pool().getconn())
+    raw = _get_pool().getconn()
+    conn = _Connection(raw)
+    try:
+        _bind_rls_identity(conn)
+    except Exception:
+        # Binding failed (e.g. the connecting role isn't a member of
+        # `authenticated`) before the caller ever received a usable
+        # connection — release it back to the pool's accounting explicitly,
+        # since the caller has no reference to call close() on.
+        _release(raw)
+        raise
+    return conn
 
 
 def close_pool():
@@ -323,10 +396,55 @@ def init_db():
     ]:
         cursor.execute(sql)
 
+    # Row Level Security: a DB-level backstop under every hand-written user_id
+    # filter in the routers/agent tools. Supabase auto-grants anon/authenticated
+    # full DML on new public tables, and Postgres enforces nothing by default —
+    # without this, anyone holding the (publicly-shipped) anon key could read/write
+    # any user's rows directly via Supabase's REST API, bypassing this app entirely.
+    # The app's own connection (role `postgres`, BYPASSRLS) is unaffected either way;
+    # real enforcement for the app's own queries also requires the SET LOCAL ROLE
+    # switch in get_connection() below — which needs its own GRANT here, since a
+    # GRANT is a precondition Postgres checks before RLS is ever consulted, not
+    # something RLS policies substitute for. `anon` deliberately gets nothing:
+    # every legitimate access path (this app, or any future direct PostgREST use)
+    # authenticates first and only ever needs the `authenticated` role.
+    #
+    # app_current_user_id() — deliberately NOT Supabase's own auth.uid() — is
+    # what every policy below compares user_id against. auth.uid() casts the
+    # same claim to ::uuid internally, which would hard-error under DEV_MODE
+    # and the test suite's fixed fake ids ("dev-user-00000000-...",
+    # "test-user-00000000-...", deliberately not UUID-shaped). Centralized in
+    # one named, discoverable function specifically so a future policy can't
+    # accidentally reach for auth.uid() out of habit and end up inconsistent
+    # with the rest of this schema.
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION app_current_user_id() RETURNS text
+        LANGUAGE sql STABLE
+        AS $$ SELECT current_setting('request.jwt.claims', true)::json ->> 'sub' $$
+    """)
+
+    def _enable_rls(table):
+        cursor.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        cursor.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO authenticated")
+        cursor.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table}")
+        cursor.execute(
+            f"CREATE POLICY tenant_isolation ON {table} FOR ALL "
+            f"USING (user_id = app_current_user_id()) "
+            f"WITH CHECK (user_id = app_current_user_id())"
+        )
+
+    for table in _USER_OWNED_TABLES:
+        if table == "transaction_embeddings":
+            continue  # handled below, inside the pgvector try/except — see comment there
+        _enable_rls(table)
+
     # Embeddings table for AI semantic search.
     # Wrapped in try/except because this requires the pgvector extension in Supabase.
     # If it hasn't been enabled yet (CREATE EXTENSION IF NOT EXISTS vector), we warn and
-    # continue — the rest of the app works fine without it.
+    # continue — the rest of the app works fine without it. RLS is enabled here too,
+    # inside the same try/except: the table (and therefore ALTER TABLE ... ENABLE ROW
+    # LEVEL SECURITY against it) may not exist yet on a fresh project, so it can't run
+    # in the unconditional loop above without breaking init_db() on that first boot.
     try:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transaction_embeddings (
@@ -344,6 +462,7 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_embeddings_user "
             "ON transaction_embeddings (user_id, source_type)"
         )
+        _enable_rls("transaction_embeddings")
     except Exception as emb_err:
         import logging
         logging.getLogger("budget_app").warning(

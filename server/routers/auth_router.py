@@ -61,6 +61,13 @@ def clear_category(category: str, user_id: str = Depends(get_current_user)):
 def clear_all_data(user_id: str = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
+    # Transactional/derived data only — deliberately excludes user_settings
+    # (account preferences like cycle_start_day/ai_enabled aren't "data" a
+    # user clearing their expenses would expect to lose) and is therefore a
+    # curated subset of database.py's _USER_OWNED_TABLES, not that full list.
+    # transaction_embeddings IS included: it's derived 1:1 from expenses/
+    # incomes/goals, so leaving it out orphans embeddings for data that no
+    # longer exists.
     for table in [
         "savings_contributions",
         "savings_goals",
@@ -71,6 +78,7 @@ def clear_all_data(user_id: str = Depends(get_current_user)):
         "import_rules",
         "expense_types",
         "macrocategories",
+        "transaction_embeddings",
     ]:
         cursor.execute(f"DELETE FROM {table} WHERE user_id = %s", (user_id,))
     _seed_default_types(cursor, user_id)

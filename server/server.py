@@ -19,7 +19,8 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from limiter import limiter, get_user_id_key
-from database import get_connection, init_db, apply_recurring_expenses, apply_recurring_incomes, close_pool
+from database import get_connection, init_db, apply_recurring_expenses, apply_recurring_incomes, close_pool, current_user_id
+import auth
 from routers.auth_router import router as auth_router
 from routers.ai_router import router as ai_router
 from routers.expenses_router import router as expenses_router
@@ -62,6 +63,28 @@ async def _cache_hashed_assets(request: Request, call_next):
     if request.url.path.startswith("/assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
+
+@app.middleware("http")
+async def _bind_db_identity(request: Request, call_next):
+    """
+    Binds the requesting user's identity into database.current_user_id for
+    the duration of this request, so get_connection() can switch the pooled
+    connection to Postgres's `authenticated` role and RLS policies actually
+    apply — see auth.resolve_identity_for_db and database.get_connection().
+    Must wrap call_next (not run after it): the route's dependencies and the
+    endpoint itself are each dispatched to the threadpool via their own
+    contextvars.copy_context() snapshot, so the binding has to already be in
+    place in this middleware's own context before call_next() triggers those
+    dispatches, or none of them will see it.
+    """
+    user_id = auth.resolve_identity_for_db(request)
+    token = current_user_id.set(user_id) if user_id is not None else None
+    try:
+        return await call_next(request)
+    finally:
+        if token is not None:
+            current_user_id.reset(token)
 
 
 _ip_fail_times: dict = defaultdict(list)
