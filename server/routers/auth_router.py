@@ -9,6 +9,15 @@ logger = logging.getLogger("budget_app.auth")
 
 
 def _seed_default_types(cursor, user_id: str):
+    # GET /me runs on every login (and Supabase token refresh), but seeding is
+    # only meaningful once — after the first call, the user already has these
+    # rows (or has since deleted/renamed some, which ON CONFLICT DO NOTHING
+    # respects either way). Skip the 11 INSERT attempts entirely once any
+    # expense_types row exists for this user, instead of re-issuing them as
+    # a no-op every time.
+    cursor.execute("SELECT 1 FROM expense_types WHERE user_id = %s LIMIT 1", (user_id,))
+    if cursor.fetchone():
+        return
     for name, color, icon, sort_order in _DEFAULT_TYPES:
         cursor.execute(
             "INSERT INTO expense_types (id, name, color, icon, sort_order, is_default, user_id) "
