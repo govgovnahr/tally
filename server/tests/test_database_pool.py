@@ -38,3 +38,28 @@ def test_close_is_idempotent():
     conn = database.get_connection()
     conn.close()
     conn.close()  # must not raise or double-release the same connection to the pool
+
+
+def test_stale_cursor_survives_a_connection_swap_from_a_sibling_cursor():
+    conn = database.get_connection()
+    try:
+        # Mirrors init_db()'s shape: a long-lived cursor reused across several
+        # statements, on a _Connection that other code (conn.execute() shorthand
+        # calls, e.g. from _bind_rls_identity) may also issue queries on directly.
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+
+        # Simulate what _ReconnectingCursor.execute()'s retry path does when a
+        # *different* cursor sharing this same _Connection hits a transient
+        # OperationalError mid-execute: it closes the old raw connection and
+        # swaps in a new one, out from under any cursor built earlier.
+        old_raw = conn._conn
+        conn._conn = database._get_pool().getconn()
+        old_raw.close()
+
+        # Before the fix, this raised psycopg2.InterfaceError: cursor already
+        # closed — `cursor` still held a psycopg2 cursor bound to old_raw.
+        row = cursor.execute("SELECT 2 AS two").fetchone()
+        assert row["two"] == 2
+    finally:
+        conn.close()
