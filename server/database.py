@@ -126,6 +126,16 @@ class _ReconnectingCursor:
         self._cur = connection._conn.cursor()
 
     def execute(self, sql, params=()):
+        # Another _ReconnectingCursor sharing this same _Connection (e.g. a
+        # conn.execute() shorthand call from _bind_rls_identity, or this
+        # cursor's own prior retry below) may have swapped self._connection._conn
+        # out for a fresh physical connection after a transient drop. self._cur
+        # would then still be bound to the old, now-closed connection — using it
+        # raises psycopg2.InterfaceError ("cursor already closed"), not
+        # OperationalError, so the retry below would never catch it. Detect that
+        # staleness and grab a live cursor before executing.
+        if self._cur.connection is not self._connection._conn:
+            self._cur = self._connection._conn.cursor()
         for attempt in range(2):
             try:
                 self._cur.execute(sql, params)
