@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogOut, KeyRound, User, Upload, Bot, Calendar } from 'lucide-react'
+import { LogOut, KeyRound, User, Upload, Bot, Calendar, ShieldCheck } from 'lucide-react'
 import ClearAllDialog from '../dialogs/ClearAllDialog.jsx'
+import MfaSetupDialog from '../dialogs/MfaSetupDialog.jsx'
 import { supabase } from '../../supabase.js'
 import { useC } from '../../colors'
 import api, { getErrorMessage } from '../../api.js'
@@ -30,6 +31,40 @@ export default function AccountPage({ user, onLogout }) {
   const [cycleError, setCycleError] = useState(null)
   const [cycleSaved, setCycleSaved] = useState(false)
   const cycleDayTouched = useRef(false)
+
+  // Two-factor auth (TOTP) — not enforced anywhere yet (no step-up gate exists
+  // in this app today), but available for any user to turn on voluntarily.
+  // Step-up gating in front of a specific sensitive action (e.g. Plaid Link)
+  // is a separate, later piece of work that reads this same enrolled-factor
+  // state via supabase.auth.mfa.
+  const [mfaFactors, setMfaFactors] = useState([])
+  const [mfaLoading, setMfaLoading] = useState(true)
+  const [mfaSetupOpen, setMfaSetupOpen] = useState(false)
+  const [mfaUnenrollTarget, setMfaUnenrollTarget] = useState(null)
+  const [mfaMsg, setMfaMsg] = useState(null)
+
+  const refreshMfaFactors = () => {
+    setMfaLoading(true)
+    supabase.auth.mfa.listFactors()
+      .then(({ data }) => setMfaFactors(data?.totp ?? []))
+      .finally(() => setMfaLoading(false))
+  }
+
+  useEffect(() => { refreshMfaFactors() }, [])
+
+  const handleMfaEnrolled = () => {
+    setMfaSetupOpen(false)
+    refreshMfaFactors()
+    setMfaMsg('Two-factor authentication enabled.')
+  }
+
+  const handleMfaUnenroll = async () => {
+    const factorId = mfaUnenrollTarget
+    setMfaUnenrollTarget(null)
+    await supabase.auth.mfa.unenroll({ factorId })
+    refreshMfaFactors()
+    setMfaMsg('Two-factor authentication disabled.')
+  }
 
   useEffect(() => {
     api.get('/settings').then(r => {
@@ -269,6 +304,94 @@ export default function AccountPage({ user, onLogout }) {
           </form>
         )}
       </div>
+
+      {/* Two-Factor Authentication */}
+      <div style={section}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ShieldCheck size={16} color={C.muted} />
+            <div>
+              <p style={{ margin: 0, fontWeight: 600, fontSize: 14, color: C.text }}>Two-factor authentication</p>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: C.muted }}>
+                {mfaLoading
+                  ? 'Checking status…'
+                  : mfaFactors.length > 0
+                    ? 'Enabled — your account requires a verification code to enroll or reconnect a linked bank.'
+                    : 'Adds a verification code step for sensitive actions like linking a bank account.'}
+              </p>
+            </div>
+          </div>
+          {!mfaLoading && (
+            mfaFactors.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setMfaUnenrollTarget(mfaFactors[0].id)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(229,115,115,0.4)',
+                  background: 'rgba(229,115,115,0.08)', color: '#e57373', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Disable
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMfaSetupOpen(true)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Enable
+              </button>
+            )
+          )}
+        </div>
+        {mfaMsg && <p style={{ margin: '10px 0 0', fontSize: 12, color: C.muted }}>{mfaMsg}</p>}
+      </div>
+
+      <MfaSetupDialog
+        open={mfaSetupOpen}
+        onOpenChange={setMfaSetupOpen}
+        onEnrolled={handleMfaEnrolled}
+      />
+
+      <Dialog open={!!mfaUnenrollTarget} onOpenChange={v => { if (!v) setMfaUnenrollTarget(null) }}>
+        <DialogContent style={{ maxWidth: 380 }}>
+          <DialogHeader>
+            <DialogTitle>Disable two-factor authentication?</DialogTitle>
+          </DialogHeader>
+          <p style={{ margin: 0, fontSize: 14, color: C.muted }}>
+            You'll no longer be asked for a verification code for sensitive actions on this account.
+          </p>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setMfaUnenrollTarget(null)}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
+                background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleMfaUnenroll}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Disable
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Legacy DB Import */}
       <div style={section}>
