@@ -20,7 +20,7 @@ services:
       - key: SECURE_COOKIES
         value: "true"
       - key: ALLOWED_ORIGINS
-        value: "https://tally.wunderblu.com,https://budget-app-vw07.onrender.com"
+        value: "https://tally.wunderblu.com,https://budget-app-qv32.onrender.com"
       - key: REGISTRATION_OPEN
         value: "true"
       - key: APP_URL
