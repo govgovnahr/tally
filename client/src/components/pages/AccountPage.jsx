@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, KeyRound, User, Upload, Bot, Calendar, Building2, RefreshCw, Unlink } from 'lucide-react'
 import ClearAllDialog from '../dialogs/ClearAllDialog.jsx'
 import PlaidLinkButton from '../dialogs/PlaidLinkButton.jsx'
+import PlaidOAuthResume from '../dialogs/PlaidOAuthResume.jsx'
 import PlaidReviewDialog from '../dialogs/PlaidReviewDialog.jsx'
 import { supabase } from '../../supabase.js'
 import { useC } from '../../colors'
@@ -50,6 +51,15 @@ export default function AccountPage({ user, onLogout }) {
   const [plaidUnlinkTarget, setPlaidUnlinkTarget] = useState(null)
   const [plaidReviewItemId, setPlaidReviewItemId] = useState(null)
   const [plaidMsg, setPlaidMsg] = useState(null)
+  // OAuth institutions (Chase, BofA, ...) send the browser away to the bank's own
+  // login page and back — App.jsx's initialPage() forces the app onto this page
+  // when that redirect lands, so PlaidOAuthResume can pick up where Link left off
+  // instead of the normal "Connect a bank account" button. State (not just a
+  // one-time URL check) so finishing/exiting/erroring out of the resume flow can
+  // switch back to the normal button without a further reload.
+  const [resumingPlaidOAuth, setResumingPlaidOAuth] = useState(
+    () => new URLSearchParams(window.location.search).has('oauth_state_id')
+  )
 
   const refreshPlaidItems = useCallback(() => {
     setPlaidLoading(true)
@@ -493,7 +503,11 @@ export default function AccountPage({ user, onLogout }) {
           </div>
         )}
 
-        <PlaidLinkButton onLinked={handlePlaidLinked} />
+        {resumingPlaidOAuth ? (
+          <PlaidOAuthResume onLinked={handlePlaidLinked} onDone={() => setResumingPlaidOAuth(false)} />
+        ) : (
+          <PlaidLinkButton onLinked={handlePlaidLinked} />
+        )}
         {plaidMsg && <p style={{ margin: '10px 0 0', fontSize: 12, color: C.muted }}>{plaidMsg}</p>}
       </div>
 

@@ -23,6 +23,15 @@ function currentMonth() {
   return new Date().toISOString().slice(0, 7)
 }
 
+function initialPage() {
+  // Plaid's OAuth institutions (Chase, BofA, ...) redirect back to this app's
+  // root with ?oauth_state_id=... after the bank's own login page — force
+  // straight onto Account, where PlaidOAuthResume.jsx picks up Link where it
+  // left off, instead of landing on Overview and losing the redirect's context.
+  if (new URLSearchParams(window.location.search).has('oauth_state_id')) return 'account'
+  return 'home'
+}
+
 const NAV_ITEMS = [
   { value: 'home',         label: 'Overview',  Icon: Home },
   { value: 'analysis',     label: 'Analysis',  Icon: BarChart2 },
@@ -36,7 +45,7 @@ function AppContent({ mode, onToggleMode, onLogout, user }) {
   const C = useC()
   const { loading: typesLoading } = useExpenseTypes()
   const { registerNavigate, trackPage, start: startTour, suggestOnboardingTour } = useTutorial()
-  const [page, setPage] = useState('home')
+  const [page, setPage] = useState(initialPage)
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
   const [outlierMonth, setOutlierMonth] = useState(null)

@@ -38,6 +38,23 @@ def _webhook_url() -> str | None:
     return f"{app_url}/plaid/webhook" if app_url else None
 
 
+def _oauth_redirect_uri() -> str | None:
+    # OAuth institutions (Chase, BofA, Wells Fargo, ...) send the browser away
+    # to the bank's own login page, then back to this exact URL — which must be
+    # pre-registered in the Plaid Dashboard's "Allowed redirect URIs" and match
+    # byte-for-byte, so it can't be pointed at a path that doesn't exist. This
+    # app is a single-page app with no server-side router — server.py's
+    # StaticFiles(html=True) mount only resolves index.html for the exact root
+    # path, not arbitrary sub-paths — so the app's own root is the one URL
+    # guaranteed to resolve. The frontend detects the oauth_state_id query param
+    # that Plaid appends and resumes Link from there (see PlaidOAuthResume.jsx).
+    # None locally/desktop build (no public URL for Plaid to redirect to) —
+    # non-OAuth institutions (including every Sandbox test institution used so
+    # far) are unaffected either way.
+    app_url = os.environ.get("APP_URL")
+    return f"{app_url}/" if app_url else None
+
+
 # Restricts which accounts Link even offers to checking only, for now — savings
 # and credit card are deliberately excluded too until per-account tracking
 # exists (a checking-only pool avoids mixing account types together under the
@@ -60,6 +77,7 @@ _ACCOUNT_FILTERS = LinkTokenAccountFilters(
 def create_link_token(user_id: str = Depends(get_current_user)):
     client = get_client()
     webhook = _webhook_url()
+    redirect_uri = _oauth_redirect_uri()
     kwargs = dict(
         products=[Products("transactions")],
         client_name="Tally",
@@ -70,6 +88,8 @@ def create_link_token(user_id: str = Depends(get_current_user)):
     )
     if webhook:
         kwargs["webhook"] = webhook
+    if redirect_uri:
+        kwargs["redirect_uri"] = redirect_uri
     request = LinkTokenCreateRequest(**kwargs)
     response = client.link_token_create(request)
     return {"link_token": response.link_token}
