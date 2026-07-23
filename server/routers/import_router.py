@@ -548,6 +548,11 @@ async def import_records(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid mapping JSON")
 
+    try:
+        overrides = json.loads(confirmed_types) if confirmed_types else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid confirmed_types JSON")
+
     content = await file.read()
     _check_file_size(content)
     raw_rows = _get_raw_rows(content, file.filename, sheet_name)
@@ -567,7 +572,6 @@ async def import_records(
     from database import get_user_settings
     user_ai_settings = get_user_settings(conn, user_id)
     ai_categorize_fn = _get_ai_categorizer() if user_ai_settings["ai_enabled"] else None
-    overrides = json.loads(confirmed_types) if confirmed_types else {}
 
     for i, row in enumerate(data_rows, start=header_row + 2):
         try:
@@ -684,6 +688,8 @@ async def import_legacy_db(
         tmp_path = tmp.name
 
     stats = {}
+    conn = None
+    old_db = None
     try:
         old_db = _sqlite3.connect(tmp_path)
         old_db.row_factory = _sqlite3.Row
@@ -865,10 +871,15 @@ async def import_legacy_db(
             stats["savings_contributions"] = 0
 
         conn.commit()
-        conn.close()
-        old_db.close()
-
     finally:
+        # conn.commit() itself, or anything above it (old_db failing to even
+        # open, get_connection() failing, ...), could raise after conn was
+        # already acquired — this must run regardless, or that connection
+        # leaks out of the pool for the rest of the process's lifetime.
+        if conn is not None:
+            conn.close()
+        if old_db is not None:
+            old_db.close()
         os.unlink(tmp_path)
 
     return {"imported": stats}
