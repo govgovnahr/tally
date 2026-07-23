@@ -94,3 +94,38 @@ def test_months_available_releases_its_connection(client):
         assert conn._conn.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_IDLE
     finally:
         conn.close()
+
+
+def test_health_endpoint_closes_connection_even_if_the_query_fails(client, monkeypatch):
+    # Regression test: health()'s except block only ran if get_connection()
+    # itself failed — if the connection was obtained fine but conn.execute()
+    # raised (a real DB problem, exactly the case this endpoint exists to
+    # detect), conn.close() was skipped and leaked. Ironic for a health check
+    # to leak connections precisely when the DB is unhealthy.
+    import database
+    import server as server_module
+
+    real_get_connection = database.get_connection
+    closed = {"value": False}
+
+    def spy_get_connection():
+        conn = real_get_connection()
+        real_close = conn.close
+
+        def failing_execute(*args, **kwargs):
+            raise RuntimeError("simulated query failure")
+
+        def spy_close():
+            closed["value"] = True
+            return real_close()
+
+        conn.execute = failing_execute
+        conn.close = spy_close
+        return conn
+
+    monkeypatch.setattr(server_module, "get_connection", spy_get_connection)
+
+    r = client.get("/health")
+    assert r.status_code == 503
+    assert r.json()["db"] == "error"
+    assert closed["value"] is True

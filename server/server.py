@@ -196,14 +196,20 @@ app.include_router(dashboard_router)
 
 @app.get("/health")
 def health():
+    conn = None
     try:
         conn = get_connection()
         conn.execute("SELECT 1")
-        conn.close()
         db = "ok"
     except Exception:
         logger.exception("Health check: DB unreachable")
         db = "error"
+    finally:
+        # Closing only after a successful execute() left this leaking a
+        # connection every time the DB itself was the thing that was
+        # unhealthy — exactly the case this endpoint exists to catch.
+        if conn is not None:
+            conn.close()
     status = "ok" if db == "ok" else "degraded"
     code = 200 if status == "ok" else 503
     return JSONResponse({"status": status, "db": db}, status_code=code)
@@ -215,13 +221,16 @@ def _run_embedding_backfill():
     Backfilling can take minutes on large datasets — blocking startup would cause
     health-check timeouts on Render's free tier.
     """
+    conn = None
     try:
         from embeddings import backfill_all_users
         conn = get_connection()
         backfill_all_users(conn)
-        conn.close()
     except Exception:
         logger.exception("Embedding backfill failed at startup")
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 @app.on_event("startup")
