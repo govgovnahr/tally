@@ -277,6 +277,7 @@ def get_months_available(user_id: str = Depends(get_current_user)):
         "SELECT MIN(substr(date,1,7)) as earliest FROM expenses WHERE user_id = %s",
         (user_id,)
     ).fetchone()
+    conn.close()
     if not row or not row["earliest"]:
         return {"months": 6}
     ey, em = map(int, row["earliest"].split("-"))
